@@ -1,0 +1,14 @@
+# 长时间 AI 调用时保持连接稳定（完整流程约 3–10 分钟）
+
+[server]
+port = 8502
+maxUploadSize = 50
+fileWatcherType = "none"
+enableStaticServing = true
+
+[runner]
+fastReruns = false
+magicEnabled = false
+
+[browser]
+gatherUsageStats = false

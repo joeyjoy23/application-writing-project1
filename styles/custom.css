@@ -1,0 +1,42 @@
+/* 高考英语应用文 AI 分析系统 — Streamlit 自定义样式 */
+
+.main .block-container {
+    padding-top: 2rem;
+    max-width: 1100px;
+}
+
+h1 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.stage-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.stage-1 { background: #e3f2fd; color: #1565c0; }
+.stage-2 { background: #f3e5f5; color: #6a1b9a; }
+.stage-3 { background: #fff3e0; color: #e65100; }
+.stage-4 { background: #e8f5e9; color: #2e7d32; }
+
+.summary-box {
+    background: #f8f9fa;
+    border-left: 4px solid #1e88e5;
+    padding: 1rem 1.25rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1rem 0;
+}
+
+.json-preview {
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 0.8rem;
+}
+
+div[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #fafafa 0%, #f0f4f8 100%);
+}
