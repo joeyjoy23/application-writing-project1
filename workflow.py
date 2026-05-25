@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+
+from llm.client import RunCancelled
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 ProgressFn = Callable[[str], None] | None
 StreamFn = Callable[[str, int, str], None] | None
+CancelFn = Callable[[], bool] | None
 
 from llm.client import LLMClient
 from utils.config import get_project_root
@@ -84,6 +87,7 @@ class GaokaoWritingWorkflow:
         question: str,
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
+        should_cancel: CancelFn = None,
     ) -> Stage1Result:
         user = (
             f"【应用文原题】\n\n{question.strip()}\n\n"
@@ -102,6 +106,7 @@ class GaokaoWritingWorkflow:
             user=user,
             max_tokens=3072,
             on_stream=_stream,
+            should_cancel=should_cancel,
         )
         structured, summary = parse_stage1_output(raw)
         return Stage1Result(raw=raw, structured_json=structured, human_summary=summary)
@@ -112,11 +117,12 @@ class GaokaoWritingWorkflow:
         stage1_json: dict[str, Any],
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
+        should_cancel: CancelFn = None,
     ) -> Stage2Result:
         user = (
             f"【原题】\n\n{question.strip()}\n\n"
             f"【Stage1 JSON】\n\n```json\n{json.dumps(stage1_json, ensure_ascii=False, indent=2)}\n```\n\n"
-            "请按 stage2 任务说明完成 PEEL 与多版范文（不含句型包与词汇锦囊）。"
+            "请按 stage2 任务说明完成 PEEL 写作策略卡与多版范文（不含句型包与词汇锦囊）。"
         )
         stage_prompt = load_prompt("stage2_prompt.md")
 
@@ -131,6 +137,7 @@ class GaokaoWritingWorkflow:
             user=user,
             max_tokens=6144,
             on_stream=_stream,
+            should_cancel=should_cancel,
         )
         return Stage2Result(raw=raw)
 
@@ -140,6 +147,7 @@ class GaokaoWritingWorkflow:
         stage1_json: dict[str, Any],
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
+        should_cancel: CancelFn = None,
     ) -> Stage3Result:
         user = (
             f"【原题】\n\n{question.strip()}\n\n"
@@ -159,6 +167,7 @@ class GaokaoWritingWorkflow:
             user=user,
             max_tokens=4096,
             on_stream=_stream,
+            should_cancel=should_cancel,
         )
         return Stage3Result(raw=raw)
 
@@ -169,6 +178,7 @@ class GaokaoWritingWorkflow:
         stage3_output: str,
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
+        should_cancel: CancelFn = None,
     ) -> Stage4Result:
         s2 = _trim_text(stage2_output, MAX_CHARS_FOR_STAGE4 // 2, "Stage2")
         s3 = _trim_text(stage3_output, MAX_CHARS_FOR_STAGE4 // 2, "Stage3")
@@ -191,6 +201,7 @@ class GaokaoWritingWorkflow:
             user=user,
             max_tokens=4096,
             on_stream=_stream,
+            should_cancel=should_cancel,
         )
         return Stage4Result(raw=raw)
 

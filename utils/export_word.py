@@ -17,8 +17,8 @@ FONT_SONG = "宋体"
 FONT_HEITI_EN = "SimHei"
 FONT_SONG_EN = "SimSun"
 FONT_ENGLISH = "Times New Roman"
-SIZE_ENGLISH_PT = 9  # 小五号
-COLOR_ENGLISH = RGBColor(0, 51, 153)
+SIZE_ENGLISH_PT = 12  # 小四号
+COLOR_ENGLISH = RGBColor(0, 0, 0)  # 黑色
 
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 _ENGLISH_RUN_RE = re.compile(
@@ -276,7 +276,7 @@ def _add_heading(doc: Document, text: str, level: int) -> None:
     _set_run_font(run, FONT_HEITI, sizes.get(level, 12), bold=True)
 
 
-def _add_body(doc: Document, text: str) -> None:
+def _add_body(doc: Document, text: str, *, first_line_indent: bool = False) -> None:
     clean = _strip_inline_md(text)
     if not clean.strip():
         return
@@ -287,7 +287,7 @@ def _add_body(doc: Document, text: str) -> None:
         p = doc.add_paragraph()
         p.paragraph_format.line_spacing = 1.25
         p.paragraph_format.space_after = Pt(6)
-        p.paragraph_format.first_line_indent = Pt(0)
+        p.paragraph_format.first_line_indent = Pt(24) if first_line_indent else Pt(0)
         _add_runs_to_paragraph(p, part)
 
 
@@ -330,7 +330,7 @@ def _add_table(doc: Document, rows: list[list[str]]) -> None:
     doc.add_paragraph()
 
 
-def _write_markdown(doc: Document, text: str) -> None:
+def _write_markdown(doc: Document, text: str, *, indent_paragraphs: bool = False) -> None:
     if not text or not text.strip():
         _add_body(doc, "（暂无内容）")
         return
@@ -339,7 +339,7 @@ def _write_markdown(doc: Document, text: str) -> None:
             level = int(block_type.replace("heading", "") or "2")
             _add_heading(doc, data, min(level, 4))
         elif block_type == "paragraph":
-            _add_body(doc, data)
+            _add_body(doc, data, first_line_indent=indent_paragraphs)
         elif block_type == "code":
             _add_code_block(doc, data)
         elif block_type == "list":
@@ -375,7 +375,7 @@ def export_workflow_to_word(
 
     if stage2_raw:
         _add_stage_heading(doc, STAGE_TITLES[2])
-        _write_markdown(doc, stage2_raw)
+        _write_markdown(doc, stage2_raw, indent_paragraphs=True)
 
     if stage3_raw:
         _add_stage_heading(doc, STAGE_TITLES[3])

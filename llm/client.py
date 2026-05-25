@@ -4,6 +4,10 @@ import time
 from collections.abc import Callable
 
 import httpx
+
+
+class RunCancelled(RuntimeError):
+    """用户切换模型/提供商或主动取消当前 API 请求。"""
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
 from utils.config import Settings, get_settings
@@ -65,6 +69,7 @@ class LLMClient:
         max_tokens: int | None = None,
         stream: bool = True,
         on_stream: Callable[[str, int, str], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> str:
         kwargs = dict(
             model=self.settings.model,
@@ -78,7 +83,7 @@ class LLMClient:
 
         try:
             if stream:
-                return self._chat_stream(kwargs, on_stream)
+                return self._chat_stream(kwargs, on_stream, should_cancel)
             response = self._client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content
             if not content:
@@ -97,16 +102,29 @@ class LLMClient:
         self,
         kwargs: dict,
         on_stream: Callable[[str, int, str], None] | None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> str:
         idle_limit = float(os.getenv("STREAM_IDLE_TIMEOUT_SECONDS", "120"))
+        first_chunk_limit = float(os.getenv("STREAM_FIRST_CHUNK_TIMEOUT_SECONDS", "90"))
+        report_every = int(os.getenv("STREAM_UI_UPDATE_CHARS", "40"))
         stream_resp = self._client.chat.completions.create(stream=True, **kwargs)
         parts: list[str] = []
         total = 0
         last_report = 0
         last_activity = time.monotonic()
+        started_at = last_activity
 
         for chunk in stream_resp:
+            if should_cancel and should_cancel():
+                raise RunCancelled("已切换模型或提供商，当前请求已停止。")
             now = time.monotonic()
+            if not parts and now - started_at > first_chunk_limit:
+                raise RuntimeError(
+                    f"已超过 {int(first_chunk_limit)} 秒未收到模型任何输出。"
+                    "请检查：① 网络与代理 ② API Key ③ 侧边栏换一个更快模型"
+                    "（如 qwen-plus、deepseek-v4-flash、deepseek-chat）。"
+                )
+
             if not chunk.choices:
                 if parts and now - last_activity > idle_limit:
                     break
@@ -128,7 +146,7 @@ class LLMClient:
             parts.append(delta)
             total += len(delta)
             last_activity = now
-            if on_stream and total - last_report >= 120:
+            if on_stream and (last_report == 0 or total - last_report >= report_every):
                 on_stream(delta, total, "".join(parts))
                 last_report = total
 

@@ -40,7 +40,7 @@ PROVIDER_DEFAULT_MODEL = {
     "deepseek": "deepseek-chat",
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
-    "dashscope": "qwen3.6-max-preview",
+    "dashscope": "qwen-plus",
 }
 
 # 图片识题用的视觉模型（与各厂商 OpenAI 兼容视觉接口对应）

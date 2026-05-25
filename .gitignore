@@ -1,0 +1,14 @@
+# 环境
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# 本地历史数据库
+history.db
