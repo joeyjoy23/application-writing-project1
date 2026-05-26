@@ -24,7 +24,9 @@ from utils.config import (
     PROVIDER_OPTIONS,
     build_settings,
     format_model_label,
+    normalize_deepseek_model_id,
     normalize_mimo_model_id,
+    normalize_zhipu_model_id,
 )
 from utils.config import resolve_api_key
 from workflow import WorkflowState
@@ -79,7 +81,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.05.26-fix-run"
+UI_BUILD_TAG = "2026.05.26-zhipu-ds4"
 
 
 def _render_admin_popover_body() -> None:
@@ -155,6 +157,12 @@ def render_sidebar() -> bool:
         st.divider()
         st.header("⚙️ API 设置")
 
+        st.checkbox(
+            "使用 LLM 结果缓存（同题同模型可跳过 API）",
+            help="命中缓存时直接载入该阶段结果；修改 prompts 目录后自动失效。",
+            key="use_llm_cache",
+        )
+
         if st.session_state.is_running:
             st.info(
                 "运行中可切换下方模型；**切换后将自动停止**当前请求，"
@@ -184,9 +192,13 @@ def render_sidebar() -> bool:
         )
 
         model_options = PROVIDER_MODELS.get(
-            st.session_state.provider, ["deepseek-chat"]
+            st.session_state.provider, ["deepseek-v4-pro"]
         )
         current = st.session_state.model
+        if st.session_state.provider == "deepseek":
+            current = normalize_deepseek_model_id(current)
+        if st.session_state.provider == "zhipu":
+            current = normalize_zhipu_model_id(current)
         if st.session_state.provider == "mimo":
             current = normalize_mimo_model_id(current)
         if current not in model_options:
@@ -206,6 +218,10 @@ def render_sidebar() -> bool:
                 if st.session_state.provider == "dashscope"
                 else "MiMo 请选 mimo-v2.5-pro（API 只认小写 ID）。"
                 if st.session_state.provider == "mimo"
+                else "DeepSeek 官方仅 deepseek-v4-pro（chat/reasoner 已弃用）。"
+                if st.session_state.provider == "deepseek"
+                else "智谱 Key 见 open.bigmodel.cn；识图自动用 glm-5v-turbo。"
+                if st.session_state.provider == "zhipu"
                 else "运行中切换会停止当前请求"
             ),
         )
@@ -216,6 +232,7 @@ def render_sidebar() -> bool:
             "gemini": "Gemini API Key",
             "dashscope": "阿里云百炼 API Key",
             "mimo": "小米 MiMo API Key",
+            "zhipu": "智谱 API Key",
         }.get(st.session_state.provider, "API Key")
 
         st.session_state.api_key = st.text_input(
@@ -239,6 +256,14 @@ def render_sidebar() -> bool:
                     if len(s.base_url) > 36
                     else f"接口: {s.base_url}"
                 )
+                usage = st.session_state.get("llm_run_usage")
+                if usage and isinstance(usage, dict):
+                    cached = int(usage.get("cached_tokens") or 0)
+                    st.caption(
+                        f"上次运行 token：输入 {usage.get('prompt_tokens', 0)} · "
+                        f"输出 {usage.get('completion_tokens', 0)}"
+                        + (f" · 缓存命中 {cached}" if cached else "")
+                    )
                 if st.session_state.provider == "dashscope":
                     st.caption(
                         "若长时间停在 Calling API：优先试 **qwen-plus** 或 **deepseek-v4-flash**；"
@@ -253,8 +278,9 @@ def render_sidebar() -> bool:
                 "openai": "OPENAI_API_KEY",
                 "gemini": "GEMINI_API_KEY",
                 "dashscope": "DASHSCOPE_API_KEY",
-                "mimo": "MIMO_API_KEY",
-            }.get(st.session_state.provider, "OPENAI_API_KEY")
+            "mimo": "MIMO_API_KEY",
+            "zhipu": "ZHIPU_API_KEY",
+        }.get(st.session_state.provider, "OPENAI_API_KEY")
             st.warning(f"请在上方输入 Key，或在 .env 配置 {env_name}")
             return False
 

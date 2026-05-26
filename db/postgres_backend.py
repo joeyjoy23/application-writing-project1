@@ -28,6 +28,18 @@ CREATE TABLE IF NOT EXISTS history (
 );
 CREATE INDEX IF NOT EXISTS idx_history_owner_created ON history (owner_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC);
+CREATE TABLE IF NOT EXISTS llm_cache (
+    cache_key TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    stage INTEGER NOT NULL,
+    prompt_rev TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_llm_cache_owner ON llm_cache (owner_id, updated_at DESC);
 """
 
 
@@ -245,3 +257,56 @@ def delete_record(record_id: int, *, owner_id: str, admin: bool) -> bool:
         if ok:
             logger.info("删除历史记录 #%d", record_id)
         return ok
+
+
+def get_llm_cache(cache_key: str, *, owner_id: str) -> str | None:
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT result_json FROM llm_cache WHERE cache_key = %s AND owner_id = %s",
+            (cache_key, owner_id),
+        ).fetchone()
+    return str(row["result_json"]) if row else None
+
+
+def upsert_llm_cache(
+    cache_key: str,
+    *,
+    owner_id: str,
+    provider: str,
+    model: str,
+    stage: int,
+    prompt_rev: str,
+    result_json: str,
+) -> None:
+    init_db()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO llm_cache (
+                cache_key, owner_id, provider, model_name, stage,
+                prompt_rev, result_json, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (cache_key) DO UPDATE SET
+                result_json = EXCLUDED.result_json,
+                updated_at = EXCLUDED.updated_at,
+                model_name = EXCLUDED.model_name,
+                provider = EXCLUDED.provider,
+                stage = EXCLUDED.stage,
+                prompt_rev = EXCLUDED.prompt_rev
+            """,
+            (
+                cache_key,
+                owner_id,
+                provider.lower(),
+                model.strip(),
+                stage,
+                prompt_rev,
+                result_json,
+                now,
+                now,
+            ),
+        )
+        conn.commit()

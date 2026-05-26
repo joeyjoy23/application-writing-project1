@@ -2,6 +2,8 @@
 
 多阶段 AI Workflow（非聊天机器人）：审题 → 范文 → 句型词汇 → 教学指南。
 
+**项目说明（功能、架构、使用方式）**见 [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)。
+
 ## 技术栈
 
 - Python
@@ -33,13 +35,19 @@ streamlit run app.py --server.port 8502
 
 浏览器访问：**http://localhost:8502**（默认端口已写在 `.streamlit/config.toml`，也可双击 `run.bat` 启动）。
 
-启动后在**左侧边栏**选择模型提供商（DeepSeek / OpenAI / Gemini / 百炼 / **小米 MiMo**）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 读取对应变量。MiMo 默认接口为 `https://token-plan-cn.xiaomimimo.com/v1`，模型 **`mimo-v2.5-pro`**（须小写，勿写 `MiMo-V2.5-Pro`）。
+启动后在**左侧边栏**选择模型提供商（DeepSeek / **智谱** / OpenAI / Gemini / 百炼 / **小米 MiMo**）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 或 Streamlit Secrets 读取。DeepSeek 官方仅 **`deepseek-v4-pro`**；智谱为 **`glm-5.1` / `glm-4.7` / `glm-5v-turbo`**（[open.bigmodel.cn](https://open.bigmodel.cn)）。
+
+**Streamlit Cloud 更新**：改代码后须 `git push` 到 GitHub，再在 Cloud 里 **Reboot**；侧边栏底部 `界面 2026.05.26-zhipu-ds4` 可核对是否已部署。
 
 支持**图片识题**：在「图片识题」页上传真题照片，识别后自动填入题目框，再运行 Stage 1–4。识图使用各平台视觉模型（如 gpt-4o-mini、gemini-2.0-flash、qwen-vl-max）。
 
 ### 云端历史（Neon，可选）
 
 部署到 Streamlit Cloud 后，在 Secrets 配置 `DATABASE_URL`（Neon PostgreSQL）与 `ADMIN_PASSWORD`，即可持久保存历史；普通用户仅见自己的记录，管理员在侧边栏解锁后可查看全部。详见 [docs/NEON_SETUP.md](docs/NEON_SETUP.md)。
+
+### LLM 缓存与降本
+
+侧边栏可开启「LLM 结果缓存」；全流程自动并行 Stage 2/3。厂商前缀缓存、环境变量与各平台 `usage` 字段说明见 [docs/LLM_CACHE.md](docs/LLM_CACHE.md)。
 
 ### 若卡在 Calling API 或 Connection error
 

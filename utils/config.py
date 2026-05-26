@@ -8,10 +8,18 @@ from dotenv import load_dotenv
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _ENV_PATH = _PROJECT_ROOT / ".env"
 
-PROVIDER_OPTIONS = ["deepseek", "openai", "gemini", "dashscope", "mimo"]
+PROVIDER_OPTIONS = [
+    "deepseek",
+    "zhipu",
+    "openai",
+    "gemini",
+    "dashscope",
+    "mimo",
+]
 
 PROVIDER_LABELS = {
     "deepseek": "DeepSeek",
+    "zhipu": "智谱 AI（官方）",
     "openai": "OpenAI",
     "gemini": "Google Gemini",
     "dashscope": "阿里云百炼",
@@ -20,6 +28,7 @@ PROVIDER_LABELS = {
 
 PROVIDER_API_KEY_ENV = {
     "deepseek": "DEEPSEEK_API_KEY",
+    "zhipu": "ZHIPU_API_KEY",
     "openai": "OPENAI_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "dashscope": "DASHSCOPE_API_KEY",
@@ -41,10 +50,15 @@ PROVIDER_BASE_URL = {
         "MIMO_BASE_URL",
         "https://token-plan-cn.xiaomimimo.com/v1",
     ),
+    "zhipu": (
+        "ZHIPU_BASE_URL",
+        "https://open.bigmodel.cn/api/paas/v4",
+    ),
 }
 
 PROVIDER_DEFAULT_MODEL = {
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-v4-pro",
+    "zhipu": "glm-5.1",
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-plus",
@@ -53,7 +67,8 @@ PROVIDER_DEFAULT_MODEL = {
 
 # 图片识题用的视觉模型（与各厂商 OpenAI 兼容视觉接口对应）
 PROVIDER_VISION_MODELS = {
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-v4-pro",
+    "zhipu": "glm-5v-turbo",
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-vl-max",
@@ -73,6 +88,73 @@ MIMO_MODEL_ALIASES: dict[str, str] = {
     "MiMo-V2.5": "mimo-v2.5",
     "MiMo-V2.5-Flash": "mimo-v2.5-flash",
 }
+
+
+# DeepSeek 官方 API（https://api.deepseek.com）模型 ID
+DEEPSEEK_MODEL_LABELS: dict[str, str] = {
+    "deepseek-v4-pro": "deepseek-v4-pro · DeepSeek 官方旗舰",
+}
+
+# 2026-07-24 起弃用 chat/reasoner；旧 .env 与缓存 session 自动映射到 v4-pro
+DEEPSEEK_MODEL_ALIASES: dict[str, str] = {
+    "deepseek-chat": "deepseek-v4-pro",
+    "deepseek-reasoner": "deepseek-v4-pro",
+}
+
+
+def normalize_deepseek_model_id(model: str) -> str:
+    """将侧边栏 / .env 中的模型名规范为 DeepSeek 官方 API ID。"""
+    m = (model or "").strip()
+    if not m:
+        return PROVIDER_DEFAULT_MODEL["deepseek"]
+    if m in DEEPSEEK_MODEL_LABELS:
+        return m
+    if m in DEEPSEEK_MODEL_ALIASES:
+        return DEEPSEEK_MODEL_ALIASES[m]
+    lower = m.lower()
+    for api_id in DEEPSEEK_MODEL_LABELS:
+        if api_id.lower() == lower:
+            return api_id
+    # 仅保留 v4-pro；含 deepseek-v4-flash 等其它官方 ID 也回落到 pro
+    if lower.startswith("deepseek-"):
+        return PROVIDER_DEFAULT_MODEL["deepseek"]
+    return PROVIDER_DEFAULT_MODEL["deepseek"]
+
+
+# 智谱开放平台 https://open.bigmodel.cn （OpenAI 兼容 v4）
+ZHIPU_MODEL_LABELS: dict[str, str] = {
+    "glm-5.1": "glm-5.1 · 旗舰",
+    "glm-4.7": "glm-4.7 · 高性价比",
+    "glm-5v-turbo": "glm-5v-turbo · 多模态（识图）",
+}
+
+ZHIPU_MODEL_ALIASES: dict[str, str] = {
+    "GLM-5.1": "glm-5.1",
+    "GLM-4.7": "glm-4.7",
+    "GLM-5V-Turbo": "glm-5v-turbo",
+    "glm-5v": "glm-5v-turbo",
+}
+
+
+def normalize_zhipu_model_id(model: str) -> str:
+    """规范为智谱 API 模型 ID。"""
+    m = (model or "").strip()
+    if not m:
+        return PROVIDER_DEFAULT_MODEL["zhipu"]
+    if m in ZHIPU_MODEL_LABELS:
+        return m
+    lower = m.lower()
+    for alias, api_id in ZHIPU_MODEL_ALIASES.items():
+        if alias.lower() == lower:
+            return api_id
+    if m in ZHIPU_MODEL_ALIASES:
+        return ZHIPU_MODEL_ALIASES[m]
+    for api_id in ZHIPU_MODEL_LABELS:
+        if api_id.lower() == lower:
+            return api_id
+    if lower.startswith("glm-"):
+        return PROVIDER_DEFAULT_MODEL["zhipu"]
+    return PROVIDER_DEFAULT_MODEL["zhipu"]
 
 
 def normalize_mimo_model_id(model: str) -> str:
@@ -104,13 +186,16 @@ def resolve_model_for_provider(provider: str, model: str) -> str:
     m = (model or "").strip()
     if p == "mimo":
         return normalize_mimo_model_id(m)
+    if p == "deepseek":
+        return normalize_deepseek_model_id(m)
+    if p == "zhipu":
+        return normalize_zhipu_model_id(m)
     return m or PROVIDER_DEFAULT_MODEL.get(p, "gpt-4o-mini")
 
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称）
 DASHSCOPE_MODEL_LABELS: dict[str, str] = {
     "qwen3.6-max-preview": "qwen3.6-max-preview · 千问旗舰（复杂推理）",
     "qwen-plus": "qwen-plus · 千问均衡（性能/成本）",
-    "glm-5.1": "GLM-5.1 · 智谱旗舰",
     "MiniMax-M2.7": "MiniMax-M2.7 · MiniMax 最新",
     "kimi-k2.6": "Kimi K2.6 · 月之暗面最新",
     "deepseek-v4-pro": "DeepSeek-V4-Pro · DeepSeek 旗舰",
@@ -119,7 +204,8 @@ DASHSCOPE_MODEL_LABELS: dict[str, str] = {
 }
 
 PROVIDER_MODELS: dict[str, list[str]] = {
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "deepseek": list(DEEPSEEK_MODEL_LABELS.keys()),
+    "zhipu": ["glm-5.1", "glm-4.7", "glm-5v-turbo"],
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     "gemini": ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"],
     "dashscope": list(DASHSCOPE_MODEL_LABELS.keys()),
@@ -133,6 +219,10 @@ def format_model_label(provider: str, model_id: str) -> str:
         return DASHSCOPE_MODEL_LABELS.get(model_id, model_id)
     if provider == "mimo":
         return MIMO_MODEL_LABELS.get(model_id, model_id)
+    if provider == "deepseek":
+        return DEEPSEEK_MODEL_LABELS.get(model_id, model_id)
+    if provider == "zhipu":
+        return ZHIPU_MODEL_LABELS.get(model_id, model_id)
     return model_id
 
 
@@ -209,7 +299,7 @@ def build_settings(
     model: str = "",
     temperature: float | None = None,
     max_tokens: int | None = None,
-    _settings_rev: str = "20260526-mimo-cloud-v4",
+    _settings_rev: str = "20260526-zhipu-ds4pro",
 ) -> Settings:
     """根据网页选择的提供商与 Key 构建 API 配置（可缓存，参数须为可序列化值）。"""
     p = provider.lower()
@@ -288,7 +378,7 @@ def sync_session_llm_selection() -> None:
             build_settings.clear()
         except Exception:
             pass
-        if prov == "mimo" and prev and prev != fixed:
+        if prev and prev != fixed and prov in ("mimo", "deepseek", "zhipu"):
             try:
                 st.toast(f"网页端已自动将模型改为 {fixed}", icon="ℹ️")
             except Exception:

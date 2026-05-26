@@ -156,10 +156,16 @@ def auto_save_history(
     provider: str | None = None,
     model: str | None = None,
     raw_input: str | None = None,
-) -> None:
-    """写入历史：同题同模型合并为一条；换模型则另存一条。"""
+    notify: bool = True,
+    notify_updates: bool = False,
+) -> int | None:
+    """
+    写入历史：同题同模型合并为一条；换模型则另存一条。
+    每完成一个 Stage 即可调用；后续续跑会更新同一条记录。
+    返回 record_id；内容未变时返回 None。
+    """
     if not state.stage1:
-        return
+        return None
     try:
         raw = (
             raw_input
@@ -175,7 +181,7 @@ def auto_save_history(
         )
         fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
         if st.session_state.get("_last_save_fingerprint") == fingerprint:
-            return
+            return None
         actual_model = model or st.session_state.model
         record_id, is_new = upsert_record(
             raw or state.question,
@@ -186,18 +192,22 @@ def auto_save_history(
             stages_mask=_workflow_stages_mask(state),
         )
         st.session_state._last_save_fingerprint = fingerprint
-        if is_new:
-            st.toast(
-                f"已保存到历史（#{record_id}，模型：{actual_model}）",
-                icon="💾",
-            )
-        else:
-            st.toast(
-                f"历史已更新（#{record_id}，同题同模型已合并）",
-                icon="💾",
-            )
+        if notify:
+            if is_new:
+                st.toast(
+                    f"已保存到历史（#{record_id}，模型：{actual_model}）",
+                    icon="💾",
+                )
+            elif notify_updates:
+                st.toast(
+                    f"历史已更新（#{record_id}，同题同模型已合并）",
+                    icon="💾",
+                )
+        return record_id
     except Exception as e:
-        st.toast(f"历史保存失败：{e}", icon="⚠️")
+        if notify:
+            st.toast(f"历史保存失败：{e}", icon="⚠️")
+        return None
 
 
 # ── 历史载入 ──
@@ -499,6 +509,10 @@ def render_history_list() -> None:
     st.subheader("📚 历史备课包")
     if using_postgres() and not admin:
         st.caption("云端保存；换浏览器或清缓存后仅能看到本机新记录")
+    st.caption(
+        "每完成一个 Stage 会自动写入历史（同题同模型合并为一条）；"
+        "失败或停止后也可在「历史」中载入续跑。"
+    )
     keyword = st.text_input(
         "搜索题目",
         value=st.session_state.history_search_keyword,

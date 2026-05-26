@@ -46,7 +46,7 @@ ADMIN_PASSWORD = "你的管理员密码"
 # 若希望网页默认用服务端 Key（可选）
 DEEPSEEK_API_KEY = "sk-..."
 LLM_PROVIDER = "deepseek"
-LLM_MODEL = "deepseek-chat"
+LLM_MODEL = "deepseek-v4-pro"
 ```
 
 保存后 **Reboot app**。

@@ -38,6 +38,8 @@ __all__ = [
     "history_scope",
     "using_postgres",
     "invalidate_history_cache",
+    "get_cached_stage_result",
+    "save_cached_stage_result",
 ]
 
 
@@ -145,3 +147,15 @@ def delete_record(record_id: int) -> bool:
     if ok:
         invalidate_history_cache()
     return ok
+
+
+def get_cached_stage_result(*args, **kwargs):
+    from db.llm_cache_api import get_cached_stage_result as _fn
+
+    return _fn(*args, **kwargs)
+
+
+def save_cached_stage_result(*args, **kwargs):
+    from db.llm_cache_api import save_cached_stage_result as _fn
+
+    return _fn(*args, **kwargs)

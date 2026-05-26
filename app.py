@@ -121,6 +121,8 @@ def init_session() -> None:
         "failed_stage": None,
         "guest_id": None,
         "is_history_admin": False,
+        "use_llm_cache": True,
+        "llm_run_usage": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:

@@ -12,7 +12,15 @@ import streamlit as st
 logger = logging.getLogger("app.run_manager")
 
 from llm.client import LLMClient, RunCancelled
+from llm.usage import ChatUsage
 from utils.config import build_settings, resolve_model_for_provider
+from ui.run_cache import (
+    merge_job_usage,
+    save_stage_cache,
+    should_parallel_stage23,
+    try_load_cached_stage,
+    try_load_parallel_cache,
+)
 from utils.status_log import (
     APP_START,
     CALLING_API,
@@ -248,6 +256,7 @@ def _execute_stage_api(
         )
         if cancel_event.is_set():
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        merge_job_usage(job, wf.last_usage)
         return result
     if stage_num == 2:
         if cancel_event.is_set():
@@ -261,6 +270,7 @@ def _execute_stage_api(
         )
         if cancel_event.is_set():
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        merge_job_usage(job, wf.last_usage)
         return result
     if stage_num == 3:
         if cancel_event.is_set():
@@ -274,6 +284,7 @@ def _execute_stage_api(
         )
         if cancel_event.is_set():
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        merge_job_usage(job, wf.last_usage)
         return result
     if stage_num == 4:
         if cancel_event.is_set():
@@ -288,6 +299,7 @@ def _execute_stage_api(
         )
         if cancel_event.is_set():
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        merge_job_usage(job, wf.last_usage)
         return result
     raise ValueError(f"invalid stage: {stage_num}")
 
@@ -389,10 +401,127 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
         job["thread_done"] = False
         job["thread_error"] = None
         job["thread_result"] = None
+        job["parallel_mode"] = False
+        job["parallel_results"] = None
         job["stream_total"] = 0
         job["stream_preview"] = ""
         job["stream_stage"] = stage_num
         job["thread"].start()
+
+
+def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None:
+    """Stage2 与 Stage3 并行（仅依赖 Stage1）。"""
+    cancel_event: threading.Event = job["cancel_event"]
+    _ensure_job_lock(job)
+
+    def worker() -> None:
+        lock = _ensure_job_lock(job)
+        results: dict[int, Any] = {}
+        errors: dict[int, tuple[str, str]] = {}
+
+        def run_one(stage_num: int) -> None:
+            if cancel_event.is_set():
+                errors[stage_num] = ("cancelled", "已切换模型或提供商，当前请求已停止。")
+                return
+            try:
+                cached = try_load_cached_stage(job, stage_num, state)
+                if cached is not None:
+                    results[stage_num] = cached
+                    return
+                results[stage_num] = _execute_stage_api(
+                    job, stage_num, state, cancel_event
+                )
+            except RunCancelled:
+                errors[stage_num] = (
+                    "cancelled",
+                    "已切换模型或提供商，当前请求已停止。",
+                )
+            except Exception as e:
+                logger.exception("并行 Stage %d 失败", stage_num)
+                errors[stage_num] = ("error", str(e))
+
+        t2 = threading.Thread(target=lambda: run_one(2), daemon=True)
+        t3 = threading.Thread(target=lambda: run_one(3), daemon=True)
+        t2.start()
+        t3.start()
+        timeout = _STAGE_TIMEOUT_SECONDS * 2
+        t2.join(timeout=timeout)
+        t3.join(timeout=timeout)
+        if t2.is_alive():
+            _stop_api_thread(t2, cancel_event)
+        if t3.is_alive():
+            _stop_api_thread(t3, cancel_event)
+
+        with lock:
+            if errors:
+                sn = min(errors.keys())
+                job["thread_error"] = errors[sn]
+            elif len(results) < 2:
+                job["thread_error"] = (
+                    "error",
+                    "Stage 2/3 并行未完成，请重试。",
+                )
+            else:
+                job["parallel_results"] = results
+            job["thread_done"] = True
+            job["parallel_mode"] = True
+
+    with _ensure_job_lock(job):
+        job["thread"] = threading.Thread(target=worker, daemon=True)
+        job["thread_done"] = False
+        job["thread_error"] = None
+        job["thread_result"] = None
+        job["parallel_results"] = None
+        job["parallel_mode"] = True
+        job["stream_total"] = 0
+        job["stream_preview"] = ""
+        job["stream_stage"] = 2
+        job["logs"].append("并行运行 Stage 2 与 Stage 3…")
+        job["thread"].start()
+
+
+def _begin_cached_or_api(
+    job: dict[str, Any],
+    state: WorkflowState,
+    ui: RunUI,
+    stage_num: int,
+) -> bool:
+    """
+    若命中缓存则写入 state 并进入 flush；若已启动线程返回 True；否则返回 False 由调用方启动线程。
+    """
+    if should_parallel_stage23(job):
+        hit = try_load_parallel_cache(job, state)
+        if hit:
+            _apply_stage_result(state, 2, hit[2])
+            _apply_stage_result(state, 3, hit[3])
+            st.session_state.workflow_state = state
+            job["pending_flushes"] = [2, 3]
+            job["_flush_queue_idx"] = 0
+            job["phase"] = "flush"
+            job["thread"] = None
+            ui.log("已从缓存加载 Stage 2 与 Stage 3（未调用 API）")
+            ui.persist_logs(job)
+            try:
+                st.toast("已从缓存加载 Stage 2 与 Stage 3", icon="ℹ️")
+            except Exception:
+                pass
+            return True
+        return False
+
+    cached = try_load_cached_stage(job, stage_num, state)
+    if cached is None:
+        return False
+    _apply_stage_result(state, stage_num, cached)
+    st.session_state.workflow_state = state
+    job["phase"] = "flush"
+    job["thread"] = None
+    ui.log(f"已从缓存加载 Stage {stage_num}（未调用 API）")
+    ui.persist_logs(job)
+    try:
+        st.toast(f"已从缓存加载 Stage {stage_num}", icon="ℹ️")
+    except Exception:
+        pass
+    return True
 
 
 def _prepare_stage_api_logs(ui: RunUI, stage_num: int) -> None:
@@ -416,6 +545,26 @@ def _apply_stage_result(state: WorkflowState, stage_num: int, result: Any) -> No
         state.stage3 = result
     elif stage_num == 4:
         state.stage4 = result
+
+
+def _persist_history_from_job(
+    job: dict[str, Any] | None,
+    state: WorkflowState,
+    *,
+    notify: bool = True,
+    notify_updates: bool = False,
+) -> None:
+    """将当前 workflow 写入历史（至少需已完成 Stage 1）。"""
+    if not job or not state.stage1:
+        return
+    _np_auto_save_history(
+        state,
+        provider=job.get("locked_provider"),
+        model=job.get("locked_model"),
+        raw_input=job.get("question"),
+        notify=notify,
+        notify_updates=notify_updates,
+    )
 
 
 def _pipeline_stages_for_mode(mode: str, *, skip_completed: bool = False, state: WorkflowState | None = None) -> list[int]:
@@ -508,7 +657,13 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "stream_stage": stages[0],
         "stream_total": 0,
         "stream_preview": "",
+        "usage_total": ChatUsage(),
+        "pending_flushes": None,
+        "_flush_queue_idx": 0,
+        "parallel_mode": False,
+        "parallel_results": None,
     }
+    st.session_state.llm_run_usage = None
     if mode == "full":
         if len(stages) < 4:
             st.session_state.run_job["logs"].append(
@@ -545,6 +700,7 @@ def _finish_job_cancelled(
     st.session_state.workflow_state = state
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = stage_num
+    _persist_history_from_job(job, state, notify=True)
     _np_sync_slots_from_state(state, slots)
     clear_run_job()
     st.warning(msg)
@@ -570,12 +726,7 @@ def _finish_job_success(
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = None
     logger.info("运行完成 mode=%s", mode)
-    _np_auto_save_history(
-        state,
-        provider=job.get("locked_provider"),
-        model=job.get("locked_model"),
-        raw_input=job.get("question"),
-    )
+    _persist_history_from_job(job, state, notify=False)
     clear_run_job()
     if state.errors:
         for err in state.errors:
@@ -606,9 +757,16 @@ def advance_run_job(
 
     if job["phase"] == "api":
         if job.get("thread") is None:
+            if _begin_cached_or_api(job, state, ui, stage_num):
+                time.sleep(0.2)
+                st.rerun()
+                return
             _prepare_stage_api_logs(ui, stage_num)
             ui.persist_logs(job)
-            _start_api_thread(job, stage_num, state)
+            if should_parallel_stage23(job):
+                _start_parallel_23_thread(job, state)
+            else:
+                _start_api_thread(job, stage_num, state)
             time.sleep(0.2)
             st.rerun()
 
@@ -651,6 +809,7 @@ def advance_run_job(
                 st.session_state.last_question = job["question"]
                 st.session_state.failed_stage = stage_num
                 ui.persist_logs(job)
+                _persist_history_from_job(job, state, notify=True)
                 st.warning(msg)
                 if job["stage_index"] + 1 < len(job["stages"]):
                     job["stage_index"] += 1
@@ -676,6 +835,7 @@ def advance_run_job(
                 st.session_state.workflow_state = state
                 st.session_state.last_question = job["question"]
                 st.session_state.failed_stage = stage_num
+                _persist_history_from_job(job, state, notify=True)
                 _np_sync_slots_from_state(state, slots)
                 clear_run_job()
                 st.error(msg)
@@ -683,8 +843,30 @@ def advance_run_job(
                 st.rerun()
                 return
 
+        if job.get("parallel_mode") and job.get("parallel_results"):
+            parallel = job["parallel_results"]
+            for sn in (2, 3):
+                if sn in parallel:
+                    _apply_stage_result(state, sn, parallel[sn])
+                    save_stage_cache(job, sn, state, parallel[sn])
+            st.session_state.workflow_state = state
+            job["pending_flushes"] = [2, 3]
+            job["_flush_queue_idx"] = 0
+            job["phase"] = "flush"
+            job["thread"] = None
+            job["parallel_results"] = None
+            job["parallel_mode"] = False
+            ui.clear_stream_preview()
+            ui.log(PARSING_RESPONSE)
+            ui.log("Stage 2 与 Stage 3 并行完成")
+            ui.persist_logs(job)
+            time.sleep(0.2)
+            st.rerun()
+            return
+
         if thread_result is not None:
             _apply_stage_result(state, stage_num, thread_result)
+            save_stage_cache(job, stage_num, state, thread_result)
             st.session_state.workflow_state = state
             job["phase"] = "flush"
             job["thread"] = None
@@ -697,10 +879,37 @@ def advance_run_job(
             return
 
     if job["phase"] == "flush":
+        pending = job.get("pending_flushes")
+        if pending:
+            flush_idx = int(job.get("_flush_queue_idx") or 0)
+            stage_num = pending[flush_idx]
+        else:
+            stage_num = job["stages"][job["stage_index"]]
+
         _flush_stage(state, stage_num, slots, ui)
         ui.persist_logs(job)
-        if job["stage_index"] + 1 < len(job["stages"]):
+        st.session_state.workflow_state = state
+        _persist_history_from_job(job, state, notify=True, notify_updates=False)
+        mask = sum(
+            1 for s in range(1, 5) if stage_has_content(state, s)
+        )
+        ui.log(f"已同步历史（已完成 {mask}/4 个阶段，同题同模型合并为一条）")
+
+        if pending:
+            flush_idx = int(job.get("_flush_queue_idx") or 0)
+            if flush_idx + 1 < len(pending):
+                job["_flush_queue_idx"] = flush_idx + 1
+                job["phase"] = "flush"
+                time.sleep(0.2)
+                st.rerun()
+                return
+            job["stage_index"] += len(pending)
+            job["pending_flushes"] = None
+            job["_flush_queue_idx"] = 0
+        else:
             job["stage_index"] += 1
+
+        if job["stage_index"] < len(job["stages"]):
             job["phase"] = "api"
             job["thread"] = None
             time.sleep(0.2)
