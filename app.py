@@ -115,6 +115,8 @@ def init_session() -> None:
         # 断点续传
         "last_question": "",
         "failed_stage": None,
+        "guest_id": None,
+        "is_history_admin": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:

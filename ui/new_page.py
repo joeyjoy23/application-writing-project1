@@ -13,10 +13,14 @@ import streamlit as st
 from db import (
     count_records,
     delete_record,
+    ensure_guest_id,
     format_stages_mask,
     get_all_records,
     get_record_by_id,
+    history_scope,
+    is_history_admin,
     upsert_record,
+    using_postgres,
 )
 from utils.config import PROVIDER_OPTIONS, resolve_api_key
 from utils.export_word import export_workflow_to_word
@@ -491,7 +495,16 @@ HISTORY_PAGE_SIZE = 20
 
 def render_history_list() -> None:
     """历史列表：搜索、表格、查看/删除、分页。"""
+    ensure_guest_id()
+    owner_id, admin = history_scope()
     st.subheader("📚 历史备课包")
+    if using_postgres():
+        if admin:
+            st.caption("🔓 管理员模式：显示全部用户的云端历史")
+        else:
+            st.caption("🔒 仅显示本浏览器下的你的历史（换设备需重新生成）")
+    elif admin:
+        st.caption("🔓 管理员模式：显示全部本地历史")
     keyword = st.text_input(
         "搜索题目",
         value=st.session_state.history_search_keyword,
@@ -505,14 +518,16 @@ def render_history_list() -> None:
     st.session_state.history_search_keyword = keyword
 
     page_size = int(st.session_state.get("history_page_size") or HISTORY_PAGE_SIZE)
-    total = count_records(keyword or "")
+    total = count_records(keyword or "", owner_id, admin)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = int(st.session_state.get("history_page") or 1)
     page = max(1, min(page, total_pages))
     st.session_state.history_page = page
 
     offset = (page - 1) * page_size
-    records = get_all_records(keyword or "", limit=page_size, offset=offset)
+    records = get_all_records(
+        keyword or "", owner_id, admin, limit=page_size, offset=offset
+    )
 
     if not records and total == 0:
         st.info("暂无历史记录，请在「新建」模式中生成备课包。")
@@ -603,6 +618,7 @@ def render_history_list() -> None:
 
 def render_history_detail(record_id: int) -> None:
     """历史详情：完整备课包 + 导出 Word + 载入续跑 + 返回列表。"""
+    ensure_guest_id()
     record = get_record_by_id(record_id)
     if not record:
         st.error("记录不存在或已被删除")
@@ -672,6 +688,7 @@ def render_history_detail(record_id: int) -> None:
 
 def render_history_page() -> None:
     """查看历史模式主界面。"""
+    ensure_guest_id()
     view_id = st.session_state.history_view_id
     if view_id is not None:
         render_history_detail(view_id)

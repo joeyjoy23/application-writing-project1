@@ -37,6 +37,10 @@ streamlit run app.py --server.port 8502
 
 支持**图片识题**：在「图片识题」页上传真题照片，识别后自动填入题目框，再运行 Stage 1–4。识图使用各平台视觉模型（如 gpt-4o-mini、gemini-2.0-flash、qwen-vl-max）。
 
+### 云端历史（Neon，可选）
+
+部署到 Streamlit Cloud 后，在 Secrets 配置 `DATABASE_URL`（Neon PostgreSQL）与 `ADMIN_PASSWORD`，即可持久保存历史；普通用户仅见自己的记录，管理员在侧边栏解锁后可查看全部。详见 [docs/NEON_SETUP.md](docs/NEON_SETUP.md)。
+
 ### 若卡在 Calling API 或 Connection error
 
 1. 看运行日志是否出现 **「正在接收… 已收到约 N 字」**——有数字在涨说明正常，只是模型慢。

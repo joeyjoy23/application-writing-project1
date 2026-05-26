@@ -7,7 +7,17 @@ from typing import Any
 
 import streamlit as st
 
-from db import count_records
+from db import (
+    admin_password_configured,
+    count_records,
+    ensure_guest_id,
+    history_scope,
+    invalidate_history_cache,
+    is_history_admin,
+    logout_admin,
+    try_admin_login,
+    using_postgres,
+)
 from utils.config import (
     PROVIDER_LABELS,
     PROVIDER_MODELS,
@@ -87,11 +97,40 @@ def render_sidebar() -> bool:
             index=mode_index,
             help="新建：输入题目并运行备课流程；历史：查看、搜索、导出已保存的备课包",
         )
+        ensure_guest_id()
+        owner_id, admin = history_scope()
         try:
-            total_hist = count_records()
-            st.caption(f"历史记录：共 {total_hist} 条")
+            total_hist = count_records("", owner_id, admin)
+            scope_hint = "（全部）" if admin else "（我的）"
+            cloud_hint = " · 云端" if using_postgres() else ""
+            st.caption(f"历史记录：共 {total_hist} 条{scope_hint}{cloud_hint}")
         except Exception:
             pass
+
+        with st.expander("🔐 历史管理员", expanded=False):
+            if not admin_password_configured():
+                st.caption("未配置 ADMIN_PASSWORD（Secrets / .env）")
+            elif is_history_admin():
+                st.success("已解锁：可查看全部历史")
+                if st.button("退出管理员", use_container_width=True, key="btn_admin_logout"):
+                    logout_admin()
+                    invalidate_history_cache()
+                    st.rerun()
+            else:
+                pwd = st.text_input(
+                    "管理员密码",
+                    type="password",
+                    key="admin_pwd_input",
+                    help="解锁后可查看所有用户的历史记录",
+                )
+                if st.button("解锁", use_container_width=True, key="btn_admin_login"):
+                    if try_admin_login(pwd):
+                        invalidate_history_cache()
+                        st.toast("已进入管理员模式", icon="🔓")
+                        st.rerun()
+                    else:
+                        st.error("密码错误或未配置")
+
         if st.session_state.app_mode == "历史":
             if st.button("刷新历史列表", use_container_width=True):
                 st.session_state.history_page = 1
