@@ -79,7 +79,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.05.26-gate2"
+UI_BUILD_TAG = "2026.05.26-mimo-cloud"
 
 
 def _render_admin_popover_body() -> None:
@@ -222,7 +222,7 @@ def render_sidebar() -> bool:
             key_label,
             value=st.session_state.api_key,
             type="password",
-            help="留空则尝试从 .env 读取对应环境变量",
+            help="网页端在此输入即可；留空则尝试 Streamlit Secrets 或 .env",
         )
 
         if api_key_configured():

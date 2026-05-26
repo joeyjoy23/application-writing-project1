@@ -150,6 +150,19 @@ def _load_env() -> None:
     load_dotenv(_ENV_PATH, encoding="utf-8")
 
 
+def _config_value(key: str, default: str = "") -> str:
+    """Streamlit Cloud Secrets 优先，其次 .env / 环境变量（网页与本地通用）。"""
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            val = str(st.secrets[key]).strip()
+            if val:
+                return val
+    except Exception:
+        pass
+    _load_env()
+    return (os.getenv(key) or default).strip()
+
+
 def _clean_env_value(value: str) -> str:
     """去掉首尾空白、引号、BOM，并截断行内 # 注释误粘贴。"""
     value = value.strip().strip('"').strip("'")
@@ -178,15 +191,14 @@ def _require_ascii(field_name: str, value: str) -> str:
 
 
 def resolve_api_key(provider: str, manual_key: str = "") -> str:
-    """侧边栏手动 Key 优先，否则读对应环境变量，最后回退 OPENAI_API_KEY。"""
+    """侧边栏手动 Key 优先，否则读 Secrets / .env。"""
     if manual_key.strip():
         return _require_ascii("API Key", manual_key)
-    _load_env()
     env_name = PROVIDER_API_KEY_ENV.get(provider.lower(), "OPENAI_API_KEY")
-    key = os.getenv(env_name, "")
+    key = _config_value(env_name, "")
     if key:
         return _require_ascii("API Key", key)
-    fallback = os.getenv("OPENAI_API_KEY", "")
+    fallback = _config_value("OPENAI_API_KEY", "")
     return _require_ascii("API Key", fallback) if fallback else ""
 
 
@@ -197,10 +209,9 @@ def build_settings(
     model: str = "",
     temperature: float | None = None,
     max_tokens: int | None = None,
-    _settings_rev: str = "20260526-mimo-model-v3",
+    _settings_rev: str = "20260526-mimo-cloud-v4",
 ) -> Settings:
     """根据网页选择的提供商与 Key 构建 API 配置（可缓存，参数须为可序列化值）。"""
-    _load_env()
     p = provider.lower()
     if p not in PROVIDER_OPTIONS:
         raise ValueError(f"不支持的提供商: {provider}")
@@ -216,13 +227,14 @@ def build_settings(
     url_env, url_default = PROVIDER_BASE_URL[p]
     base_url = _require_ascii(
         "API Base URL",
-        os.getenv(url_env, url_default),
+        _config_value(url_env, url_default),
     )
 
+    # 侧边栏 model 优先；网页用户常在侧边栏选模型，不用 .env
     raw_model = (
         model.strip()
-        or os.getenv("LLM_MODEL", "").strip()
-        or os.getenv("OPENAI_MODEL", "").strip()
+        or _config_value("LLM_MODEL", "")
+        or _config_value("OPENAI_MODEL", "")
         or PROVIDER_DEFAULT_MODEL[p]
     )
     resolved_model = _require_ascii(
@@ -244,10 +256,27 @@ def build_settings(
     )
 
 
+def sync_session_llm_selection() -> None:
+    """每次页面加载校正 provider/model（修复网页 session 缓存旧 MiMo 模型名）。"""
+    prov = _config_value("LLM_PROVIDER", st.session_state.get("provider", "deepseek"))
+    prov = prov.lower()
+    if prov not in PROVIDER_OPTIONS:
+        prov = st.session_state.get("provider", "deepseek")
+    st.session_state.provider = prov
+
+    raw_model = st.session_state.get("model") or _config_value("LLM_MODEL", "")
+    fixed = resolve_model_for_provider(prov, raw_model)
+    prev = st.session_state.get("model")
+    if fixed != prev:
+        st.session_state.model = fixed
+        build_settings.clear()
+        if prov == "mimo" and prev and prev != fixed:
+            st.toast(f"网页端已自动将模型改为 {fixed}", icon="ℹ️")
+
+
 def get_settings() -> Settings:
     """从环境变量构建配置（无 UI 时使用）。"""
-    _load_env()
-    provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    provider = _config_value("LLM_PROVIDER", "openai").lower()
     if provider not in PROVIDER_OPTIONS:
         provider = "openai"
     return build_settings(provider)

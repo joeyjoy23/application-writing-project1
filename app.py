@@ -122,13 +122,9 @@ def init_session() -> None:
         if key not in st.session_state:
             st.session_state[key] = val
 
-    from utils.config import PROVIDER_OPTIONS, resolve_model_for_provider
+    from utils.config import sync_session_llm_selection
 
-    prov = (st.session_state.provider or "deepseek").strip().lower()
-    if prov not in PROVIDER_OPTIONS:
-        prov = "deepseek"
-        st.session_state.provider = prov
-    st.session_state.model = resolve_model_for_provider(prov, st.session_state.model)
+    sync_session_llm_selection()
 
 
 # ── 主入口 ──
