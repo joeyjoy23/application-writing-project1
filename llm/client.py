@@ -39,8 +39,8 @@ def format_api_error(exc: BaseException) -> str:
         hint = ""
         if exc.status_code == 401:
             hint = " API Key 无效或未授权。"
-        elif exc.status_code == 404:
-            hint = " 模型名称可能不正确，请在侧边栏换一个百炼模型。"
+        elif exc.status_code in (400, 404):
+            hint = " 模型名称或参数可能不正确，请在侧边栏核对模型 ID（MiMo 须为 mimo-v2.5-pro 等小写 ID）。"
         elif exc.status_code == 429:
             hint = " 请求过于频繁，请稍后重试。"
         return f"API 返回错误 {exc.status_code}{hint}\n{body}"

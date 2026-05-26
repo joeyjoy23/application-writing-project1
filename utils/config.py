@@ -48,7 +48,7 @@ PROVIDER_DEFAULT_MODEL = {
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-plus",
-    "mimo": "MiMo-V2.5-Pro",
+    "mimo": "mimo-v2.5-pro",
 }
 
 # 图片识题用的视觉模型（与各厂商 OpenAI 兼容视觉接口对应）
@@ -57,12 +57,32 @@ PROVIDER_VISION_MODELS = {
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-vl-max",
-    "mimo": "MiMo-V2.5-Pro",
+    "mimo": "mimo-v2.5-pro",
 }
 
+# API 模型 ID 须小写连字符，见 https://platform.xiaomimimo.com/docs/zh-CN/tokenplan/quick-access
 MIMO_MODEL_LABELS: dict[str, str] = {
-    "MiMo-V2.5-Pro": "MiMo-V2.5-Pro · 小米 MiMo 旗舰",
+    "mimo-v2.5-pro": "mimo-v2.5-pro · MiMo 旗舰（Agent / 编程）",
+    "mimo-v2.5": "mimo-v2.5 · 全模态 Agent",
+    "mimo-v2.5-flash": "mimo-v2.5-flash · 轻量高速",
 }
+
+# 旧版误写的展示名 → 官方 API ID
+MIMO_MODEL_ALIASES: dict[str, str] = {
+    "MiMo-V2.5-Pro": "mimo-v2.5-pro",
+    "MiMo-V2.5": "mimo-v2.5",
+    "MiMo-V2.5-Flash": "mimo-v2.5-flash",
+}
+
+
+def normalize_mimo_model_id(model: str) -> str:
+    """将侧边栏 / .env 中的模型名规范为 MiMo API 接受的 ID。"""
+    m = (model or "").strip()
+    if not m:
+        return PROVIDER_DEFAULT_MODEL["mimo"]
+    if m in MIMO_MODEL_LABELS:
+        return m
+    return MIMO_MODEL_ALIASES.get(m, m)
 
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称）
 DASHSCOPE_MODEL_LABELS: dict[str, str] = {
@@ -183,6 +203,8 @@ def build_settings(
         or os.getenv("OPENAI_MODEL", "").strip()
         or PROVIDER_DEFAULT_MODEL[p],
     )
+    if p == "mimo":
+        resolved_model = normalize_mimo_model_id(resolved_model)
 
     return Settings(
         api_key=resolved_key,

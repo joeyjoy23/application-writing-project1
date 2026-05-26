@@ -24,6 +24,7 @@ from utils.config import (
     PROVIDER_OPTIONS,
     build_settings,
     format_model_label,
+    normalize_mimo_model_id,
 )
 from utils.config import resolve_api_key
 from workflow import WorkflowState
@@ -186,6 +187,9 @@ def render_sidebar() -> bool:
             st.session_state.provider, ["deepseek-chat"]
         )
         current = st.session_state.model
+        if st.session_state.provider == "mimo":
+            current = normalize_mimo_model_id(current)
+            st.session_state.model = current
         model_index = model_options.index(current) if current in model_options else 0
         st.selectbox(
             "模型",
