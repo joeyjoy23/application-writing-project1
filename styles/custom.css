@@ -157,18 +157,33 @@ div[data-testid="stSidebar"] {
   background: linear-gradient(180deg, #fafafa 0%, #f0f4f8 100%);
 }
 
-/* 历史条数旁的隐蔽入口「⋯」 */
+/* 历史条数旁的隐蔽入口「⋯」：无边框，仍可点击 */
+div[data-testid="stSidebar"] [data-testid="stPopover"] {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
 div[data-testid="stSidebar"] [data-testid="stPopover"] > button {
   min-height: 1.25rem;
   padding: 0.1rem 0.35rem;
   font-size: 0.85rem;
+  line-height: 1;
   opacity: 0.35;
-  border: none;
-  background: transparent;
-  color: var(--c-muted);
-  box-shadow: none;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  color: var(--c-muted) !important;
+  box-shadow: none !important;
+  cursor: pointer;
 }
-div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover,
+div[data-testid="stSidebar"] [data-testid="stPopover"] > button:focus,
+div[data-testid="stSidebar"] [data-testid="stPopover"] > button:focus-visible,
+div[data-testid="stSidebar"] [data-testid="stPopover"] > button:active {
   opacity: 0.85;
-  color: var(--c-primary);
+  color: var(--c-primary) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }

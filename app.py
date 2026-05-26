@@ -78,7 +78,7 @@ load_dotenv(ROOT / ".env", encoding="utf-8")
 
 
 @st.cache_data(show_spinner=False)
-def _read_css_text(css_path: str, _asset_rev: str = "20260526-admin-gate") -> str:
+def _read_css_text(css_path: str, _asset_rev: str = "20260526-gate-nobox") -> str:
     """读取 CSS 文件内容（可缓存；_asset_rev 用于样式更新后刷新缓存）。"""
     path = Path(css_path)
     if not path.is_file():
