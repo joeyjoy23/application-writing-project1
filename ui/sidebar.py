@@ -81,7 +81,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.05.26-stage-timeout"
+UI_BUILD_TAG = "2026.05.26-dashscope-models"
 
 
 def _render_admin_popover_body() -> None:
@@ -267,7 +267,7 @@ def render_sidebar() -> bool:
                 if st.session_state.provider == "dashscope":
                     st.caption(
                         "若长时间停在 Calling API：优先试 **qwen-plus** 或 **deepseek-v4-flash**；"
-                        "旗舰预览模型（如 qwen3.6-max-preview）首包可能很慢。"
+                        "旗舰模型（如 qwen3.7-max、qwen3.6-max-preview）首包可能很慢。"
                     )
             except ValueError as e:
                 st.error(str(e))

@@ -182,8 +182,10 @@ def resolve_model_for_provider(provider: str, model: str) -> str:
         return normalize_zhipu_model_id(m)
     return m or PROVIDER_DEFAULT_MODEL.get(p, "gpt-4o-mini")
 
-# 阿里云百炼侧边栏模型（API 模型 ID → 展示名称）
+# 阿里云百炼侧边栏模型（API 模型 ID → 展示名称；须与百炼 OpenAI 兼容接口 model 字段一致）
 DASHSCOPE_MODEL_LABELS: dict[str, str] = {
+    "qwen3.7-max": "qwen3.7-max · 千问旗舰 Qwen3.7-Max",
+    "glm-5": "glm-5 · 智谱 GLM-5（百炼）",
     "qwen3.6-max-preview": "qwen3.6-max-preview · 千问旗舰（复杂推理）",
     "qwen-plus": "qwen-plus · 千问均衡（性能/成本）",
     "MiniMax-M2.7": "MiniMax-M2.7 · MiniMax 最新",
