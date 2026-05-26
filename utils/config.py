@@ -258,6 +258,8 @@ def build_settings(
 
 def sync_session_llm_selection() -> None:
     """每次页面加载校正 provider/model（修复网页 session 缓存旧 MiMo 模型名）。"""
+    if not hasattr(st, "session_state"):
+        return
     prov = _config_value("LLM_PROVIDER", st.session_state.get("provider", "deepseek"))
     prov = prov.lower()
     if prov not in PROVIDER_OPTIONS:
@@ -269,9 +271,15 @@ def sync_session_llm_selection() -> None:
     prev = st.session_state.get("model")
     if fixed != prev:
         st.session_state.model = fixed
-        build_settings.clear()
+        try:
+            build_settings.clear()
+        except Exception:
+            pass
         if prov == "mimo" and prev and prev != fixed:
-            st.toast(f"网页端已自动将模型改为 {fixed}", icon="ℹ️")
+            try:
+                st.toast(f"网页端已自动将模型改为 {fixed}", icon="ℹ️")
+            except Exception:
+                pass
 
 
 def get_settings() -> Settings:

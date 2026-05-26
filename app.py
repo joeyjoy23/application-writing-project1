@@ -14,7 +14,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from db import init_db
-from utils.config import get_project_root
+from utils.config import get_project_root, sync_session_llm_selection
 
 # ── 日志配置 ──
 
@@ -122,10 +122,6 @@ def init_session() -> None:
         if key not in st.session_state:
             st.session_state[key] = val
 
-    from utils.config import sync_session_llm_selection
-
-    sync_session_llm_selection()
-
 
 # ── 主入口 ──
 
@@ -139,6 +135,10 @@ def main() -> None:
     )
     load_css()
     init_session()
+    try:
+        sync_session_llm_selection()
+    except Exception as exc:
+        _logger.warning("同步模型选择失败: %s", exc)
     init_db()
     _logger.info("应用启动")
 
