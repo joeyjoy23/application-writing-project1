@@ -207,6 +207,7 @@ def render_sidebar() -> bool:
             "openai": "OpenAI API Key",
             "gemini": "Gemini API Key",
             "dashscope": "阿里云百炼 API Key",
+            "mimo": "小米 MiMo API Key",
         }.get(st.session_state.provider, "API Key")
 
         st.session_state.api_key = st.text_input(
@@ -244,6 +245,7 @@ def render_sidebar() -> bool:
                 "openai": "OPENAI_API_KEY",
                 "gemini": "GEMINI_API_KEY",
                 "dashscope": "DASHSCOPE_API_KEY",
+                "mimo": "MIMO_API_KEY",
             }.get(st.session_state.provider, "OPENAI_API_KEY")
             st.warning(f"请在上方输入 Key，或在 .env 配置 {env_name}")
             return False

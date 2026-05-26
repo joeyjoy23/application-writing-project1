@@ -8,13 +8,14 @@ from dotenv import load_dotenv
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _ENV_PATH = _PROJECT_ROOT / ".env"
 
-PROVIDER_OPTIONS = ["deepseek", "openai", "gemini", "dashscope"]
+PROVIDER_OPTIONS = ["deepseek", "openai", "gemini", "dashscope", "mimo"]
 
 PROVIDER_LABELS = {
     "deepseek": "DeepSeek",
     "openai": "OpenAI",
     "gemini": "Google Gemini",
     "dashscope": "阿里云百炼",
+    "mimo": "小米 MiMo（OpenAI 兼容）",
 }
 
 PROVIDER_API_KEY_ENV = {
@@ -22,6 +23,7 @@ PROVIDER_API_KEY_ENV = {
     "openai": "OPENAI_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "dashscope": "DASHSCOPE_API_KEY",
+    "mimo": "MIMO_API_KEY",
 }
 
 PROVIDER_BASE_URL = {
@@ -35,6 +37,10 @@ PROVIDER_BASE_URL = {
         "DASHSCOPE_BASE_URL",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ),
+    "mimo": (
+        "MIMO_BASE_URL",
+        "https://token-plan-cn.xiaomimimo.com/v1",
+    ),
 }
 
 PROVIDER_DEFAULT_MODEL = {
@@ -42,6 +48,7 @@ PROVIDER_DEFAULT_MODEL = {
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-plus",
+    "mimo": "MiMo-V2.5-Pro",
 }
 
 # 图片识题用的视觉模型（与各厂商 OpenAI 兼容视觉接口对应）
@@ -50,6 +57,11 @@ PROVIDER_VISION_MODELS = {
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-vl-max",
+    "mimo": "MiMo-V2.5-Pro",
+}
+
+MIMO_MODEL_LABELS: dict[str, str] = {
+    "MiMo-V2.5-Pro": "MiMo-V2.5-Pro · 小米 MiMo 旗舰",
 }
 
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称）
@@ -69,13 +81,16 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     "gemini": ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"],
     "dashscope": list(DASHSCOPE_MODEL_LABELS.keys()),
+    "mimo": list(MIMO_MODEL_LABELS.keys()),
 }
 
 
 def format_model_label(provider: str, model_id: str) -> str:
-    """侧边栏下拉展示名；百炼用中文说明，其它提供商显示原始 ID。"""
+    """侧边栏下拉展示名；百炼 / MiMo 用中文说明，其它提供商显示原始 ID。"""
     if provider == "dashscope":
         return DASHSCOPE_MODEL_LABELS.get(model_id, model_id)
+    if provider == "mimo":
+        return MIMO_MODEL_LABELS.get(model_id, model_id)
     return model_id
 
 

@@ -33,7 +33,7 @@ streamlit run app.py --server.port 8502
 
 浏览器访问：**http://localhost:8502**（默认端口已写在 `.streamlit/config.toml`，也可双击 `run.bat` 启动）。
 
-启动后在**左侧边栏**选择模型提供商（DeepSeek / OpenAI / Gemini / 百炼）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 读取对应变量。
+启动后在**左侧边栏**选择模型提供商（DeepSeek / OpenAI / Gemini / 百炼 / **小米 MiMo**）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 读取对应变量。MiMo 默认接口为 `https://token-plan-cn.xiaomimimo.com/v1`，模型 `MiMo-V2.5-Pro`。
 
 支持**图片识题**：在「图片识题」页上传真题照片，识别后自动填入题目框，再运行 Stage 1–4。识图使用各平台视觉模型（如 gpt-4o-mini、gemini-2.0-flash、qwen-vl-max）。
 
