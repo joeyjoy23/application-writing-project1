@@ -189,8 +189,10 @@ def render_sidebar() -> bool:
         current = st.session_state.model
         if st.session_state.provider == "mimo":
             current = normalize_mimo_model_id(current)
-            st.session_state.model = current
-        model_index = model_options.index(current) if current in model_options else 0
+        if current not in model_options:
+            current = model_options[0]
+        st.session_state.model = current
+        model_index = model_options.index(current)
         st.selectbox(
             "模型",
             options=model_options,
@@ -202,6 +204,8 @@ def render_sidebar() -> bool:
                 "百炼：最新旗舰优先排序；识图仍自动使用 qwen-vl-max。"
                 "运行中切换会停止当前请求。"
                 if st.session_state.provider == "dashscope"
+                else "MiMo 请选 mimo-v2.5-pro（API 只认小写 ID）。"
+                if st.session_state.provider == "mimo"
                 else "运行中切换会停止当前请求"
             ),
         )

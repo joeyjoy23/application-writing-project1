@@ -82,7 +82,29 @@ def normalize_mimo_model_id(model: str) -> str:
         return PROVIDER_DEFAULT_MODEL["mimo"]
     if m in MIMO_MODEL_LABELS:
         return m
-    return MIMO_MODEL_ALIASES.get(m, m)
+    if m in MIMO_MODEL_ALIASES:
+        return MIMO_MODEL_ALIASES[m]
+    lower = m.lower()
+    for api_id in MIMO_MODEL_LABELS:
+        if api_id.lower() == lower:
+            return api_id
+    # 任意含 mimo + v2.5 + pro 的误写
+    if "mimo" in lower and "v2.5" in lower and "pro" in lower:
+        return "mimo-v2.5-pro"
+    if "mimo" in lower and "flash" in lower:
+        return "mimo-v2.5-flash"
+    if "mimo" in lower and "v2.5" in lower:
+        return "mimo-v2.5"
+    return PROVIDER_DEFAULT_MODEL["mimo"]
+
+
+def resolve_model_for_provider(provider: str, model: str) -> str:
+    """按提供商规范化模型 ID（调用 API 前最后一道校验）。"""
+    p = (provider or "").lower()
+    m = (model or "").strip()
+    if p == "mimo":
+        return normalize_mimo_model_id(m)
+    return m or PROVIDER_DEFAULT_MODEL.get(p, "gpt-4o-mini")
 
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称）
 DASHSCOPE_MODEL_LABELS: dict[str, str] = {
@@ -175,6 +197,7 @@ def build_settings(
     model: str = "",
     temperature: float | None = None,
     max_tokens: int | None = None,
+    _settings_rev: str = "20260526-mimo-model-v3",
 ) -> Settings:
     """根据网页选择的提供商与 Key 构建 API 配置（可缓存，参数须为可序列化值）。"""
     _load_env()
@@ -196,15 +219,16 @@ def build_settings(
         os.getenv(url_env, url_default),
     )
 
-    resolved_model = _require_ascii(
-        "模型名称",
+    raw_model = (
         model.strip()
         or os.getenv("LLM_MODEL", "").strip()
         or os.getenv("OPENAI_MODEL", "").strip()
-        or PROVIDER_DEFAULT_MODEL[p],
+        or PROVIDER_DEFAULT_MODEL[p]
     )
-    if p == "mimo":
-        resolved_model = normalize_mimo_model_id(resolved_model)
+    resolved_model = _require_ascii(
+        "模型名称",
+        resolve_model_for_provider(p, raw_model),
+    )
 
     return Settings(
         api_key=resolved_key,

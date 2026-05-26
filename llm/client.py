@@ -10,7 +10,7 @@ class RunCancelled(RuntimeError):
     """用户切换模型/提供商或主动取消当前 API 请求。"""
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
-from utils.config import Settings, get_settings
+from utils.config import Settings, get_settings, resolve_model_for_provider
 
 
 def _api_timeout() -> httpx.Timeout:
@@ -71,8 +71,11 @@ class LLMClient:
         on_stream: Callable[[str, int, str], None] | None = None,
         should_cancel: Callable[[], bool] | None = None,
     ) -> str:
+        api_model = resolve_model_for_provider(
+            self.settings.provider, self.settings.model
+        )
         kwargs = dict(
-            model=self.settings.model,
+            model=api_model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -170,8 +173,11 @@ class LLMClient:
     ) -> str:
         b64 = base64.standard_b64encode(image_bytes).decode("ascii")
         data_url = f"data:{mime_type};base64,{b64}"
+        api_model = resolve_model_for_provider(
+            self.settings.provider, self.settings.model
+        )
         kwargs = dict(
-            model=self.settings.model,
+            model=api_model,
             messages=[
                 {"role": "system", "content": system},
                 {

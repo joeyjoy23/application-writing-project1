@@ -136,6 +136,12 @@ def main() -> None:
     load_css()
     init_session()
     init_db()
+    from utils.config import resolve_model_for_provider
+
+    if st.session_state.provider == "mimo":
+        st.session_state.model = resolve_model_for_provider(
+            "mimo", st.session_state.model
+        )
     _logger.info("应用启动")
 
     # 延迟导入，避免循环依赖

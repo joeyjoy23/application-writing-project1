@@ -12,7 +12,7 @@ import streamlit as st
 logger = logging.getLogger("app.run_manager")
 
 from llm.client import LLMClient, RunCancelled
-from utils.config import build_settings
+from utils.config import build_settings, resolve_model_for_provider
 from utils.status_log import (
     APP_START,
     CALLING_API,
@@ -487,14 +487,17 @@ def try_start_run_job(mode: str, question: str) -> bool:
         return False
 
     st.session_state.workflow_state = state
+    locked_provider = st.session_state.provider
+    locked_model = resolve_model_for_provider(locked_provider, st.session_state.model)
+    st.session_state.model = locked_model
     st.session_state.run_job = {
         "mode": mode,
         "question": question,
         "stages": stages,
         "stage_index": 0,
         "phase": "api",
-        "locked_provider": st.session_state.provider,
-        "locked_model": st.session_state.model,
+        "locked_provider": locked_provider,
+        "locked_model": locked_model,
         "api_key": st.session_state.api_key,
         "cancel_event": threading.Event(),
         "thread": None,
