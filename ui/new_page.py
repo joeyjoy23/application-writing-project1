@@ -18,7 +18,6 @@ from db import (
     get_all_records,
     get_record_by_id,
     history_scope,
-    is_history_admin,
     upsert_record,
     using_postgres,
 )
@@ -498,13 +497,8 @@ def render_history_list() -> None:
     ensure_guest_id()
     owner_id, admin = history_scope()
     st.subheader("📚 历史备课包")
-    if using_postgres():
-        if admin:
-            st.caption("🔓 管理员模式：显示全部用户的云端历史")
-        else:
-            st.caption("🔒 仅显示本浏览器下的你的历史（换设备需重新生成）")
-    elif admin:
-        st.caption("🔓 管理员模式：显示全部本地历史")
+    if using_postgres() and not admin:
+        st.caption("云端保存；换浏览器或清缓存后仅能看到本机新记录")
     keyword = st.text_input(
         "搜索题目",
         value=st.session_state.history_search_keyword,

@@ -77,6 +77,60 @@ def _on_settings_changed() -> None:
         st.session_state.run_cancelled = True
 
 
+# ── 隐蔽管理员入口（侧边栏底部 · 需知晓位置）──
+
+
+def _render_admin_gate() -> None:
+    """底部弱提示入口；已解锁时用于退出。"""
+    if not admin_password_configured():
+        return
+
+    if is_history_admin():
+        if st.button(
+            "退出维护视图",
+            key="btn_admin_logout",
+            type="tertiary",
+            use_container_width=True,
+        ):
+            logout_admin()
+            invalidate_history_cache()
+            st.rerun()
+        return
+
+    gate_open = st.session_state.get("_admin_gate_open", False)
+    if not gate_open:
+        if st.button(
+            " ",
+            key="admin_gate_trigger",
+            type="tertiary",
+            help="",
+        ):
+            st.session_state._admin_gate_open = True
+            st.rerun()
+        return
+
+    pwd = st.text_input(
+        "口令",
+        type="password",
+        key="admin_pwd_input",
+        label_visibility="collapsed",
+        placeholder="口令",
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("确认", key="btn_admin_login", use_container_width=True):
+            if try_admin_login(pwd):
+                st.session_state._admin_gate_open = False
+                invalidate_history_cache()
+                st.rerun()
+            else:
+                st.error("无效")
+    with c2:
+        if st.button("取消", key="btn_admin_gate_cancel", use_container_width=True):
+            st.session_state._admin_gate_open = False
+            st.rerun()
+
+
 # ── 渲染 ──
 
 
@@ -101,35 +155,10 @@ def render_sidebar() -> bool:
         owner_id, admin = history_scope()
         try:
             total_hist = count_records("", owner_id, admin)
-            scope_hint = "（全部）" if admin else "（我的）"
             cloud_hint = " · 云端" if using_postgres() else ""
-            st.caption(f"历史记录：共 {total_hist} 条{scope_hint}{cloud_hint}")
+            st.caption(f"历史记录：共 {total_hist} 条{cloud_hint}")
         except Exception:
             pass
-
-        with st.expander("🔐 历史管理员", expanded=False):
-            if not admin_password_configured():
-                st.caption("未配置 ADMIN_PASSWORD（Secrets / .env）")
-            elif is_history_admin():
-                st.success("已解锁：可查看全部历史")
-                if st.button("退出管理员", use_container_width=True, key="btn_admin_logout"):
-                    logout_admin()
-                    invalidate_history_cache()
-                    st.rerun()
-            else:
-                pwd = st.text_input(
-                    "管理员密码",
-                    type="password",
-                    key="admin_pwd_input",
-                    help="解锁后可查看所有用户的历史记录",
-                )
-                if st.button("解锁", use_container_width=True, key="btn_admin_login"):
-                    if try_admin_login(pwd):
-                        invalidate_history_cache()
-                        st.toast("已进入管理员模式", icon="🔓")
-                        st.rerun()
-                    else:
-                        st.error("密码错误或未配置")
 
         if st.session_state.app_mode == "历史":
             if st.button("刷新历史列表", use_container_width=True):
@@ -270,5 +299,9 @@ def render_sidebar() -> bool:
                     st.rerun()
             else:
                 st.caption("暂无日志文件")
+
+        st.markdown('<div class="sidebar-admin-gate">', unsafe_allow_html=True)
+        _render_admin_gate()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     return True

@@ -117,6 +117,7 @@ def init_session() -> None:
         "failed_stage": None,
         "guest_id": None,
         "is_history_admin": False,
+        "_admin_gate_open": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
