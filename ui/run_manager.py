@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from typing import Any
@@ -305,7 +306,11 @@ def _execute_stage_api(
     raise ValueError(f"invalid stage: {stage_num}")
 
 
-_STAGE_TIMEOUT_SECONDS = 90
+def _stage_timeout_seconds() -> float:
+    """单 Stage API 线程最长等待（秒）；与 API_READ_TIMEOUT_SECONDS 建议一致或略小。"""
+    return float(os.getenv("STAGE_TIMEOUT_SECONDS", "300"))
+
+
 _THREAD_JOIN_AFTER_CANCEL_SECONDS = 2.0
 
 
@@ -324,8 +329,8 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
         lock = _ensure_job_lock(job)
         try:
             timeout_msg = (
-                f"Stage {stage_num} 生成超时，"
-                "请切换到更快的模型（如 qwen-plus）重试，或稍后再试。"
+                f"Stage {stage_num} 生成超时（超过 {int(_stage_timeout_seconds())} 秒），"
+                "请换更快模型重试，或在 Secrets / .env 增大 STAGE_TIMEOUT_SECONDS。"
             )
             cancelled_msg = "已切换模型或提供商，当前请求已停止。"
             start_time = time.time()
@@ -354,7 +359,7 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
 
                 t = threading.Thread(target=_run_once, daemon=True)
                 t.start()
-                t.join(timeout=_STAGE_TIMEOUT_SECONDS)
+                t.join(timeout=_stage_timeout_seconds())
 
                 if not t.is_alive():
                     with lock:
@@ -374,7 +379,7 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
                     "Stage %d 第 %d 次调用超时（%d 秒），正在停止旧线程…",
                     stage_num,
                     attempt + 1,
-                    _STAGE_TIMEOUT_SECONDS,
+                    int(_stage_timeout_seconds()),
                 )
                 _stop_api_thread(t, cancel_event)
 
@@ -445,7 +450,7 @@ def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None
         t3 = threading.Thread(target=lambda: run_one(3), daemon=True)
         t2.start()
         t3.start()
-        timeout = _STAGE_TIMEOUT_SECONDS * 2
+        timeout = _stage_timeout_seconds()
         t2.join(timeout=timeout)
         t3.join(timeout=timeout)
         if t2.is_alive():

@@ -64,7 +64,7 @@
 **字段说明：**
 | 字段 | 要求 |
 |------|------|
-| `core_points` | 对象数组，每项含 `point`（要点原文）、`tier_reason`（为何是核心）、`body_length_advice`（主体段建议篇幅，如「约 40–50 词 / 半段」） |
+| `core_points` | 对象数组，每项含 `point`（要点原文）、`tier_reason`（为何是核心）、`body_length_advice`（主体段建议篇幅，如「约 40–50 词 / 半段」；**按总篇幅 105–125 词反推，勿按原题词数缩放**） |
 | `supporting_points` | 对象数组，格式同 `core_points`，说明为何属于支撑而非核心 |
 | `optional_points` | 字符串数组，可写可不写的拓展要点 |
 | `mandatory_points` | 字符串数组，**必须**等于「核心要点 + 支撑要点」的 `point` 文本合集（按写作顺序），供下游 Agent 校验覆盖 |

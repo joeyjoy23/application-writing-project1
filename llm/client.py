@@ -154,8 +154,8 @@ class LLMClient:
         on_stream: Callable[[str, int, str], None] | None,
         should_cancel: Callable[[], bool] | None = None,
     ) -> tuple[str, ChatUsage]:
-        idle_limit = float(os.getenv("STREAM_IDLE_TIMEOUT_SECONDS", "120"))
-        first_chunk_limit = float(os.getenv("STREAM_FIRST_CHUNK_TIMEOUT_SECONDS", "90"))
+        idle_limit = float(os.getenv("STREAM_IDLE_TIMEOUT_SECONDS", "180"))
+        first_chunk_limit = float(os.getenv("STREAM_FIRST_CHUNK_TIMEOUT_SECONDS", "120"))
         report_every = int(os.getenv("STREAM_UI_UPDATE_CHARS", "40"))
         stream_kwargs = {**kwargs, "stream": True}
         if os.getenv("ENABLE_STREAM_USAGE", "1").strip().lower() not in ("0", "false"):
