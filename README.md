@@ -35,11 +35,9 @@ streamlit run app.py --server.port 8502
 
 浏览器访问：**http://localhost:8502**（默认端口已写在 `.streamlit/config.toml`，也可双击 `run.bat` 启动）。
 
-启动后在**左侧边栏**选择模型提供商（DeepSeek / **智谱** / OpenAI / Gemini / 百炼 / **小米 MiMo**）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 或 Streamlit Secrets 读取。DeepSeek 官方仅 **`deepseek-v4-pro`**；智谱为 **`glm-5.1` / `glm-4.7` / `glm-5v-turbo`**（[open.bigmodel.cn](https://open.bigmodel.cn)）。
+启动后在**左侧边栏**选择模型提供商（DeepSeek / **智谱** / OpenAI / Gemini / 百炼 / **小米 MiMo**）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 或 Streamlit Secrets 读取。DeepSeek 官方仅 **`deepseek-v4-pro`**；智谱为 **`glm-5.1` / `glm-4.7`**（[open.bigmodel.cn](https://open.bigmodel.cn)）。
 
-**Streamlit Cloud 更新**：改代码后须 `git push` 到 GitHub，再在 Cloud 里 **Reboot**；侧边栏底部 `界面 2026.05.26-zhipu-ds4` 可核对是否已部署。
-
-支持**图片识题**：在「图片识题」页上传真题照片，识别后自动填入题目框，再运行 Stage 1–4。识图使用各平台视觉模型（如 gpt-4o-mini、gemini-2.0-flash、qwen-vl-max）。
+**Streamlit Cloud 更新**：改代码后须 `git push` 到 GitHub，再在 Cloud 里 **Reboot**；侧边栏底部版本标签可核对是否已部署。
 
 ### 云端历史（Neon，可选）
 

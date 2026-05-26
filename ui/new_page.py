@@ -23,7 +23,6 @@ from db import (
 )
 from utils.config import PROVIDER_OPTIONS, resolve_api_key
 from utils.export_word import export_workflow_to_word
-from utils.image_ocr import extract_question_from_image_with_ui_settings
 from workflow import (
     Stage1Result,
     Stage2Result,
@@ -822,66 +821,10 @@ def render_history_page() -> None:
 
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
-    tab_text, tab_image = st.tabs(["📝 文字输入", "🖼️ 图片识题"])
-
-    with tab_image:
-        st.caption("上传高考真题/试卷照片，自动识别题目文字后，与手动输入走相同备课流程。")
-        uploaded = st.file_uploader(
-            "上传真题图片",
-            type=["png", "jpg", "jpeg", "webp"],
-            help="支持试卷截图、拍照，请保证题目区域清晰完整",
-        )
-        if uploaded is not None:
-            st.image(uploaded, caption=uploaded.name, use_container_width=True)
-            # 上传状态反馈
-            _recognized = bool(st.session_state.uploaded_image_name)
-            if _recognized and st.session_state.uploaded_image_name == uploaded.name:
-                st.markdown(
-                    '<span class="upload-status upload-status--recognized">'
-                    '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.22 5.97l-4 4a.75.75 0 01-1.06 0l-2-2a.75.75 0 111.06-1.06L6.72 8.94l3.47-3.47a.75.75 0 111.06 1.06z"/></svg>'
-                    f'已识别：{uploaded.name}</span>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    '<span class="upload-status upload-status--ready">'
-                    '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 3a.75.75 0 01.75.75v2.5h2.5a.75.75 0 010 1.5h-2.5v2.5a.75.75 0 01-1.5 0v-2.5h-2.5a.75.75 0 010-1.5h2.5v-2.5A.75.75 0 018 4z"/></svg>'
-                    f'已上传：{uploaded.name}，点击下方按钮识别</span>',
-                    unsafe_allow_html=True,
-                )
-            col_ocr, _ = st.columns([1, 2])
-            with col_ocr:
-                btn_ocr = st.button("识别题目文字", type="secondary", use_container_width=True)
-            if btn_ocr:
-                if not api_ready:
-                    st.error("请先在侧边栏配置 API Key")
-                else:
-                    with st.spinner("正在识别图片中的题目…"):
-                        try:
-                            image_bytes = uploaded.getvalue()
-                            recognized = extract_question_from_image_with_ui_settings(
-                                image_bytes,
-                                st.session_state.provider,
-                                api_key=st.session_state.api_key,
-                                model=st.session_state.model,
-                                mime_type=uploaded.type,
-                                filename=uploaded.name,
-                            )
-                            st.session_state.question = recognized
-                            st.session_state.uploaded_image_name = uploaded.name
-                            st.success("识别完成，已填入下方题目框，可直接运行备课流程")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"识题失败: {e}")
-
-        if st.session_state.uploaded_image_name:
-            st.info(f"最近识图来源：{st.session_state.uploaded_image_name}")
-
-    with tab_text:
-        st.caption("直接粘贴或输入完整题目（含要点、字数要求）。")
+    st.caption("粘贴或输入完整题目（含要点、字数要求）。")
 
     question = st.text_area(
-        "题目内容（可粘贴文字，或由图片识别自动填入）",
+        "题目内容",
         value=st.session_state.question,
         height=220,
         placeholder="例如：假定你是李华，校英文报正在开展…请写一封建议信…",
@@ -948,7 +891,7 @@ def render_new_analysis(api_ready: bool) -> None:
                 st.rerun()
 
     if not question.strip():
-        st.warning("请先输入题目，或在「图片识题」中上传真题并点击「识别题目文字」")
+        st.warning("请先输入题目内容")
         return
 
     if not api_ready:

@@ -16,7 +16,6 @@
 | 分步 / 全流程 | 可只跑某一阶段，也可一键跑满四阶段；支持跳过已完成阶段续跑 |
 | 多模型提供商 | DeepSeek、OpenAI、Gemini、阿里云百炼、小米 MiMo（OpenAI 兼容接口） |
 | 侧边栏配 Key | 网页端直接填 API Key，也可用 `.env` / Streamlit Secrets |
-| 图片识题 | 上传真题照片，视觉模型 OCR 后填入题目框 |
 | 历史记录 | 同题同模型合并为一条；每完成一个 Stage 自动保存，失败也可保留已完成部分 |
 | 载入续跑 | 从历史记录载入题目与进度，回到「新建」继续跑后续 Stage |
 | 导出 Word | 一键生成排版好的 `.docx`（标题、正文层级） |
@@ -55,7 +54,7 @@ app.py                 # Streamlit 入口、会话初始化
 ├── workflow.py        # 四阶段编排（纯业务，不依赖 Streamlit）
 ├── llm/client.py      # OpenAI 兼容客户端（流式、用量统计）
 ├── db/                # 历史 + LLM 缓存（SQLite 本地 / Neon 云端）
-├── utils/             # 配置、解析、OCR、Word 导出、缓存键
+├── utils/             # 配置、解析、Word 导出、缓存键
 └── prompts/           # 各阶段 Prompt 模板（Markdown）
 ```
 
@@ -71,7 +70,7 @@ app.py                 # Streamlit 入口、会话初始化
 
 1. 启动：本地双击 `run.bat` 或 `streamlit run app.py`（默认端口见 `.streamlit/config.toml`）。  
 2. 在侧边栏选择**提供商、模型**，填写 **API Key**。  
-3. 在「**新建**」模式粘贴题目，或使用「**图片识题**」上传照片。  
+3. 在「**新建**」模式粘贴或输入题目。  
 4. 点击 **Stage 1~4** 或 **全流程**；运行中可看步骤日志与生成字数。  
 5. 完成后 **导出 Word**；或切到「**历史**」查看、搜索、载入续跑。  
 

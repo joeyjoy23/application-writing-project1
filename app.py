@@ -105,7 +105,6 @@ def init_session() -> None:
         "provider": os.getenv("LLM_PROVIDER", "deepseek"),
         "model": os.getenv("LLM_MODEL", ""),
         "api_key": "",
-        "uploaded_image_name": None,
         "app_mode": "新建",
         "history_view_id": None,
         "history_confirm_delete_id": None,

@@ -65,16 +65,6 @@ PROVIDER_DEFAULT_MODEL = {
     "mimo": "mimo-v2.5-pro",
 }
 
-# 图片识题用的视觉模型（与各厂商 OpenAI 兼容视觉接口对应）
-PROVIDER_VISION_MODELS = {
-    "deepseek": "deepseek-v4-pro",
-    "zhipu": "glm-5v-turbo",
-    "openai": "gpt-4o-mini",
-    "gemini": "gemini-2.0-flash",
-    "dashscope": "qwen-vl-max",
-    "mimo": "mimo-v2.5-pro",
-}
-
 # API 模型 ID 须小写连字符，见 https://platform.xiaomimimo.com/docs/zh-CN/tokenplan/quick-access
 MIMO_MODEL_LABELS: dict[str, str] = {
     "mimo-v2.5-pro": "mimo-v2.5-pro · MiMo 旗舰（Agent / 编程）",
@@ -125,14 +115,14 @@ def normalize_deepseek_model_id(model: str) -> str:
 ZHIPU_MODEL_LABELS: dict[str, str] = {
     "glm-5.1": "glm-5.1 · 旗舰",
     "glm-4.7": "glm-4.7 · 高性价比",
-    "glm-5v-turbo": "glm-5v-turbo · 多模态（识图）",
 }
 
 ZHIPU_MODEL_ALIASES: dict[str, str] = {
     "GLM-5.1": "glm-5.1",
     "GLM-4.7": "glm-4.7",
-    "GLM-5V-Turbo": "glm-5v-turbo",
-    "glm-5v": "glm-5v-turbo",
+    "GLM-5V-Turbo": "glm-5.1",
+    "glm-5v-turbo": "glm-5.1",
+    "glm-5v": "glm-5.1",
 }
 
 
@@ -205,7 +195,7 @@ DASHSCOPE_MODEL_LABELS: dict[str, str] = {
 
 PROVIDER_MODELS: dict[str, list[str]] = {
     "deepseek": list(DEEPSEEK_MODEL_LABELS.keys()),
-    "zhipu": ["glm-5.1", "glm-4.7", "glm-5v-turbo"],
+    "zhipu": ["glm-5.1", "glm-4.7"],
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     "gemini": ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"],
     "dashscope": list(DASHSCOPE_MODEL_LABELS.keys()),

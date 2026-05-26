@@ -1,4 +1,3 @@
-import base64
 import os
 import time
 from collections.abc import Callable
@@ -216,45 +215,3 @@ class LLMClient:
         if not text:
             raise RuntimeError("模型返回空内容（流式）")
         return text, usage
-
-    def chat_with_image(
-        self,
-        system: str,
-        user_text: str,
-        image_bytes: bytes,
-        *,
-        mime_type: str = "image/jpeg",
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        on_stream: Callable[[str, int, str], None] | None = None,
-    ) -> str:
-        b64 = base64.standard_b64encode(image_bytes).decode("ascii")
-        data_url = f"data:{mime_type};base64,{b64}"
-        api_model = resolve_model_for_provider(
-            self.settings.provider, self.settings.model
-        )
-        kwargs = dict(
-            model=api_model,
-            messages=[
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": user_text},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                },
-            ],
-            temperature=temperature
-            if temperature is not None
-            else self.settings.temperature,
-            max_tokens=max_tokens
-            if max_tokens is not None
-            else self.settings.max_tokens,
-        )
-        try:
-            text, usage = self._chat_stream(kwargs, on_stream)
-            self.last_usage = usage
-            return text
-        except (APITimeoutError, APIConnectionError, APIStatusError, RateLimitError) as e:
-            raise RuntimeError(format_api_error(e)) from e

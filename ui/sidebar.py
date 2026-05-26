@@ -81,7 +81,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.05.20-stage2-level"
+UI_BUILD_TAG = "2026.05.20-no-image-ocr"
 
 
 def _render_admin_popover_body() -> None:
@@ -213,14 +213,14 @@ def render_sidebar() -> bool:
             key="model",
             on_change=_on_settings_changed,
             help=(
-                "百炼：最新旗舰优先排序；识图仍自动使用 qwen-vl-max。"
+                "百炼：最新旗舰优先排序。"
                 "运行中切换会停止当前请求。"
                 if st.session_state.provider == "dashscope"
                 else "MiMo 请选 mimo-v2.5-pro（API 只认小写 ID）。"
                 if st.session_state.provider == "mimo"
                 else "DeepSeek 官方仅 deepseek-v4-pro（chat/reasoner 已弃用）。"
                 if st.session_state.provider == "deepseek"
-                else "智谱 Key 见 open.bigmodel.cn；识图自动用 glm-5v-turbo。"
+                else "智谱 Key 见 open.bigmodel.cn。"
                 if st.session_state.provider == "zhipu"
                 else "运行中切换会停止当前请求"
             ),

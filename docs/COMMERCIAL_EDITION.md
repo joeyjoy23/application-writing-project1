@@ -47,7 +47,7 @@ git remote add origin <新仓库 URL>
 - `workflow.py`、`prompts/`、`utils/parsers.py`、`llm/client.py`（若改为平台 Key）
 - `ui/run_manager.py` 线程/流式/分阶段逻辑
 - `db` 双后端模式、`upsert` 历史、`llm_cache` 降本
-- Word 导出、图片识题（若对外提供）
+- Word 导出
 
 **必须改或新增**
 
