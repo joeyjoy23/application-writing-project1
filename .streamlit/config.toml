@@ -1,10 +1,10 @@
 # 长时间 AI 调用时保持连接稳定（完整流程约 3–10 分钟）
+# 注意：不要在此设置 port。Streamlit Cloud 固定使用 8501；本地请用 run.bat（8502）。
 
 [server]
-port = 8502
 maxUploadSize = 50
 fileWatcherType = "none"
-enableStaticServing = true
+enableStaticServing = false
 
 [runner]
 fastReruns = false
