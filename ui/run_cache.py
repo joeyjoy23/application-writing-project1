@@ -31,6 +31,8 @@ def _cache_kwargs(job: dict[str, Any], state: WorkflowState) -> dict[str, Any]:
         kw["stage2_raw"] = state.stage2.raw
     if state.stage3:
         kw["stage3_raw"] = state.stage3.raw
+    if job.get("student_level"):
+        kw["student_level"] = job["student_level"]
     return kw
 
 

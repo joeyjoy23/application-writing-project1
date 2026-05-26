@@ -81,7 +81,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.05.26-zhipu-ds4"
+UI_BUILD_TAG = "2026.05.20-stage2-level"
 
 
 def _render_admin_popover_body() -> None:

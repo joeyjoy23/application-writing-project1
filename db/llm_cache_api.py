@@ -42,6 +42,7 @@ def cache_key_for_stage(
     stage1_json: dict[str, Any] | None = None,
     stage2_raw: str = "",
     stage3_raw: str = "",
+    student_level: str = "",
 ) -> str:
     upstream = ""
     if stage >= 2:
@@ -50,6 +51,8 @@ def cache_key_for_stage(
         upstream = upstream_hash_stage4(
             stage1_json or {}, stage2_raw, stage3_raw
         )
+        level = student_level if student_level in ("基础", "中等", "进阶") else "中等"
+        upstream = f"{upstream}|sl:{level}"
     return make_cache_key(
         owner_id=_owner_id(),
         provider=provider,
@@ -69,6 +72,7 @@ def get_cached_stage_result(
     stage1_json: dict[str, Any] | None = None,
     stage2_raw: str = "",
     stage3_raw: str = "",
+    student_level: str = "",
 ) -> Any | None:
     key = cache_key_for_stage(
         provider=provider,
@@ -78,6 +82,7 @@ def get_cached_stage_result(
         stage1_json=stage1_json,
         stage2_raw=stage2_raw,
         stage3_raw=stage3_raw,
+        student_level=student_level,
     )
     raw = _backend().get_llm_cache(key, owner_id=_owner_id())
     if not raw:
@@ -99,6 +104,7 @@ def save_cached_stage_result(
     stage1_json: dict[str, Any] | None = None,
     stage2_raw: str = "",
     stage3_raw: str = "",
+    student_level: str = "",
 ) -> None:
     key = cache_key_for_stage(
         provider=provider,
@@ -108,6 +114,7 @@ def save_cached_stage_result(
         stage1_json=stage1_json,
         stage2_raw=stage2_raw,
         stage3_raw=stage3_raw,
+        student_level=student_level,
     )
     payload = serialize_stage_result(stage, result)
     _backend().upsert_llm_cache(

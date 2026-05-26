@@ -123,6 +123,7 @@ def init_session() -> None:
         "is_history_admin": False,
         "use_llm_cache": True,
         "llm_run_usage": None,
+        "student_level": "中等",
     }
     for key, val in defaults.items():
         if key not in st.session_state:

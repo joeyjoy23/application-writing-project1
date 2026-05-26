@@ -293,6 +293,7 @@ def _execute_stage_api(
             state.stage1.structured_json,  # type: ignore[union-attr]
             state.stage2.raw,  # type: ignore[union-attr]
             state.stage3.raw,  # type: ignore[union-attr]
+            student_level=job.get("student_level", "中等"),
             on_progress=_job_on_progress(job, 4, cancel_event),
             on_stream=_job_on_stream(job, 4, cancel_event),
             should_cancel=should_cancel,
@@ -662,6 +663,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "_flush_queue_idx": 0,
         "parallel_mode": False,
         "parallel_results": None,
+        "student_level": st.session_state.get("student_level", "中等"),
     }
     st.session_state.llm_run_usage = None
     if mode == "full":

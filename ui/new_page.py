@@ -306,17 +306,121 @@ FOLD_CHAR_THRESHOLD = 5000
 FOLD_PREVIEW_CHARS = 1000
 
 
-def render_foldable_markdown(text: str) -> None:
-    """超过阈值时折叠：外侧预览 + expander 内全文。"""
+def render_foldable_markdown(text: str, *, expanded: bool = False) -> None:
+    """超过阈值时折叠：外侧预览 + expander 内全文；expanded=True 时默认展开。"""
     if not text or not text.strip():
         return
     if len(text) <= FOLD_CHAR_THRESHOLD:
+        st.markdown(text)
+        return
+    if expanded:
         st.markdown(text)
         return
     st.markdown(text[:FOLD_PREVIEW_CHARS])
     st.caption(f"共 {len(text)} 字，点击展开查看完整内容")
     with st.expander("查看完整内容", expanded=False):
         st.markdown(text)
+
+
+# ── Stage3 话题词汇：必备 / 进阶 / 亮点 表格解析 ──
+
+_VOCAB_SECTION_RE = re.compile(
+    r"#\s*二[、.．]?\s*话题词汇锦囊",
+    re.IGNORECASE,
+)
+_LEVEL_HEADING_RE = re.compile(
+    r"^\s*(?:#{1,4}\s*)?\*{0,2}(必备级|进阶级|亮点级)\*{0,2}\s*[:：]?\s*$"
+)
+_EXAMPLE_LINE_RE = re.compile(r"^\s*\*{0,2}具体使用例句\*{0,2}")
+_VOCAB_ITEM_ZH_RE = re.compile(
+    r"^\*{0,2}([^*]+?)\*{0,2}\s*/\s*\*{0,2}中文\*{0,2}\s*[:：]\s*(.+)$"
+)
+
+
+def _split_stage3_vocab_section(raw: str) -> tuple[str, str]:
+    """拆分为「功能句型包」与「话题词汇锦囊」两段。"""
+    m = _VOCAB_SECTION_RE.search(raw)
+    if not m:
+        return raw.strip(), ""
+    return raw[: m.start()].strip(), raw[m.start() :].strip()
+
+
+def _detect_vocab_level(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("|"):
+        return None
+    m = _LEVEL_HEADING_RE.match(stripped)
+    if m:
+        return m.group(1)
+    plain = re.sub(r"^#+\s*", "", stripped).strip("* ").strip()
+    if plain in ("必备级", "进阶级", "亮点级"):
+        return plain
+    return None
+
+
+def _parse_vocab_bullet(line: str) -> tuple[str, str | None] | None:
+    text = re.sub(r"^[-*+]\s+", "", line.strip())
+    if not text or _EXAMPLE_LINE_RE.match(text):
+        return None
+    m = _VOCAB_ITEM_ZH_RE.match(text)
+    if m:
+        eng = m.group(1).strip()
+        zh = m.group(2).strip()
+        zh = re.split(r"\*{0,2}具体使用例句", zh, maxsplit=1)[0].strip(" /")
+        return eng, zh or None
+    if "**" in text:
+        eng = re.sub(r"\*+", "", text.split("/")[0]).strip()
+        if eng:
+            return eng, None
+    cleaned = text.strip()
+    return (cleaned, None) if cleaned else None
+
+
+def _parse_vocab_tiers(vocab_text: str) -> dict[str, list[tuple[str, str | None]]]:
+    tiers: dict[str, list[tuple[str, str | None]]] = {
+        "必备级": [],
+        "进阶级": [],
+        "亮点级": [],
+    }
+    current: str | None = None
+    for line in vocab_text.splitlines():
+        level = _detect_vocab_level(line)
+        if level:
+            current = level
+            continue
+        if not current:
+            continue
+        if line.strip().startswith(("-", "*", "+")):
+            item = _parse_vocab_bullet(line)
+            if item:
+                tiers[current].append(item)
+    return tiers
+
+
+def _render_vocab_tier_table(
+    title: str, rows: list[tuple[str, str | None]]
+) -> None:
+    if not rows:
+        return
+    st.markdown(f"#### {title}")
+    has_zh = any(zh for _, zh in rows if zh)
+    if has_zh:
+        table_data = [["英文词块", "中文释义"]]
+        table_data.extend([[eng, zh or ""] for eng, zh in rows])
+    else:
+        table_data = [["英文词块"]]
+        table_data.extend([[eng] for eng, _ in rows])
+    st.table(table_data)
+
+
+def _render_vocab_tier_tables(vocab_text: str) -> bool:
+    """解析并渲染三级词汇表；成功返回 True。"""
+    tiers = _parse_vocab_tiers(vocab_text)
+    if not any(tiers.values()):
+        return False
+    for title in ("必备级", "进阶级", "亮点级"):
+        _render_vocab_tier_table(title, tiers[title])
+    return True
 
 
 # ── Stage 渲染 ──
@@ -339,7 +443,7 @@ def render_stage2(state: WorkflowState) -> None:
     if not state.stage2:
         st.info("尚未运行 Stage 2（需先完成 Stage 1）")
         return
-    render_foldable_markdown(state.stage2.raw)
+    st.markdown(state.stage2.raw)
 
 
 def render_stage3(state: WorkflowState) -> None:
@@ -350,7 +454,16 @@ def render_stage3(state: WorkflowState) -> None:
     if not state.stage3:
         st.info("尚未运行 Stage 3（需先完成 Stage 1）")
         return
-    render_foldable_markdown(state.stage3.raw)
+    raw = state.stage3.raw
+    phrases_part, vocab_part = _split_stage3_vocab_section(raw)
+    if phrases_part:
+        render_foldable_markdown(phrases_part)
+    if vocab_part:
+        st.markdown("### 话题词汇锦囊")
+        if not _render_vocab_tier_tables(vocab_part):
+            render_foldable_markdown(vocab_part)
+    elif not phrases_part:
+        render_foldable_markdown(raw)
 
 
 def render_stage4(state: WorkflowState) -> None:
@@ -775,6 +888,18 @@ def render_new_analysis(api_ready: bool) -> None:
         key="question_editor",
     )
     st.session_state.question = question
+
+    _levels = ["基础", "中等", "进阶"]
+    _current_level = st.session_state.get("student_level", "中等")
+    if _current_level not in _levels:
+        _current_level = "中等"
+    student_level = st.selectbox(
+        "学生水平",
+        _levels,
+        index=_levels.index(_current_level),
+        help="仅影响 Stage4 生成",
+    )
+    st.session_state.student_level = student_level
 
     running = st.session_state.is_running
 

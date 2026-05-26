@@ -189,11 +189,20 @@ class GaokaoWritingWorkflow:
         stage1_json: dict[str, Any],
         stage2_output: str,
         stage3_output: str,
+        *,
+        student_level: str = "中等",
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
         should_cancel: CancelFn = None,
     ) -> Stage4Result:
-        stage_prompt = load_prompt("stage4_prompt.md")
+        level = (
+            student_level
+            if student_level in ("基础", "中等", "进阶")
+            else "中等"
+        )
+        stage_prompt = load_prompt("stage4_prompt.md").replace(
+            "[student_level]", level
+        )
         json_block, s2, s3 = build_stage4_user_sections(
             stage1_json, stage2_output, stage3_output
         )
@@ -201,6 +210,8 @@ class GaokaoWritingWorkflow:
             system_base=self._system,
             stage_prompt=stage_prompt,
             user_parts=[
+                f"当前学生水平：{level}",
+                f"student_level：{level}",
                 f"【Stage1 JSON】\n\n```json\n{json_block}\n```",
                 f"【Stage2 输出（PEEL 与范文）】\n\n{s2}",
                 f"【Stage3 输出（句型与词汇）】\n\n{s3}",
@@ -217,7 +228,9 @@ class GaokaoWritingWorkflow:
         )
         return Stage4Result(raw=raw)
 
-    def run_full_pipeline(self, question: str) -> WorkflowState:
+    def run_full_pipeline(
+        self, question: str, *, student_level: str = "中等"
+    ) -> WorkflowState:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         state = WorkflowState(question=question)
@@ -250,6 +263,7 @@ class GaokaoWritingWorkflow:
                 state.stage1.structured_json,
                 state.stage2.raw,
                 state.stage3.raw,
+                student_level=student_level,
             )
         except Exception as e:
             state.errors.append(f"Stage4 失败: {e}")

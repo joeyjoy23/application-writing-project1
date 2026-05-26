@@ -23,7 +23,7 @@
 3. 打开 [share.streamlit.io](https://share.streamlit.io) → 你的 App → **Manage app** → **Reboot app**。
 
 4. 打开网页，看侧边栏最底部版本号，例如：
-   - `界面 2026.05.26-zhipu-ds4` → 已含智谱 + DeepSeek v4-pro
+   - `界面 2026.05.20-stage2-level` → 已含 Stage2 新 Prompt、Stage4 学情选择器
 
 ### 其它可能
 
