@@ -77,35 +77,17 @@ def _on_settings_changed() -> None:
         st.session_state.run_cancelled = True
 
 
-# ── 隐蔽管理员入口（侧边栏底部 · 需知晓位置）──
+# 界面版本号：部署后可在侧边栏底部核对是否已更新
+UI_BUILD_TAG = "2026.05.26-gate"
 
 
-def _render_admin_gate() -> None:
-    """底部弱提示入口；已解锁时用于退出。"""
-    if not admin_password_configured():
-        return
-
+def _render_admin_popover_body() -> None:
+    """Popover 内：口令登录 / 退出维护视图。"""
     if is_history_admin():
-        if st.button(
-            "退出维护视图",
-            key="btn_admin_logout",
-            type="tertiary",
-            use_container_width=True,
-        ):
+        st.caption("当前为维护视图（可见全部历史）")
+        if st.button("退出", key="btn_admin_logout", use_container_width=True):
             logout_admin()
             invalidate_history_cache()
-            st.rerun()
-        return
-
-    gate_open = st.session_state.get("_admin_gate_open", False)
-    if not gate_open:
-        if st.button(
-            " ",
-            key="admin_gate_trigger",
-            type="tertiary",
-            help="",
-        ):
-            st.session_state._admin_gate_open = True
             st.rerun()
         return
 
@@ -114,21 +96,22 @@ def _render_admin_gate() -> None:
         type="password",
         key="admin_pwd_input",
         label_visibility="collapsed",
-        placeholder="口令",
+        placeholder="输入口令",
     )
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("确认", key="btn_admin_login", use_container_width=True):
-            if try_admin_login(pwd):
-                st.session_state._admin_gate_open = False
-                invalidate_history_cache()
-                st.rerun()
-            else:
-                st.error("无效")
-    with c2:
-        if st.button("取消", key="btn_admin_gate_cancel", use_container_width=True):
-            st.session_state._admin_gate_open = False
+    if st.button("确认", key="btn_admin_login", use_container_width=True):
+        if try_admin_login(pwd):
+            invalidate_history_cache()
             st.rerun()
+        else:
+            st.error("口令无效")
+
+
+def _render_admin_popover_trigger() -> None:
+    """历史条数右侧「⋯」，点开输入口令（需已配置 ADMIN_PASSWORD）。"""
+    if not admin_password_configured():
+        return
+    with st.popover("⋯"):
+        _render_admin_popover_body()
 
 
 # ── 渲染 ──
@@ -156,7 +139,11 @@ def render_sidebar() -> bool:
         try:
             total_hist = count_records("", owner_id, admin)
             cloud_hint = " · 云端" if using_postgres() else ""
-            st.caption(f"历史记录：共 {total_hist} 条{cloud_hint}")
+            hist_left, hist_right = st.columns([5, 1])
+            with hist_left:
+                st.caption(f"历史记录：共 {total_hist} 条{cloud_hint}")
+            with hist_right:
+                _render_admin_popover_trigger()
         except Exception:
             pass
 
@@ -300,8 +287,9 @@ def render_sidebar() -> bool:
             else:
                 st.caption("暂无日志文件")
 
-        st.markdown('<div class="sidebar-admin-gate">', unsafe_allow_html=True)
-        _render_admin_gate()
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.caption(
+            f"界面 {UI_BUILD_TAG}",
+            help="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app",
+        )
 
     return True

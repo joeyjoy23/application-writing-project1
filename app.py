@@ -78,8 +78,8 @@ load_dotenv(ROOT / ".env", encoding="utf-8")
 
 
 @st.cache_data(show_spinner=False)
-def _read_css_text(css_path: str) -> str:
-    """读取 CSS 文件内容（可缓存，参数为路径字符串）。"""
+def _read_css_text(css_path: str, _asset_rev: str = "20260526-admin-gate") -> str:
+    """读取 CSS 文件内容（可缓存；_asset_rev 用于样式更新后刷新缓存）。"""
     path = Path(css_path)
     if not path.is_file():
         return ""
@@ -117,7 +117,6 @@ def init_session() -> None:
         "failed_stage": None,
         "guest_id": None,
         "is_history_admin": False,
-        "_admin_gate_open": False,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
