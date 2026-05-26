@@ -1,0 +1,235 @@
+"""侧边栏：模式切换、API 设置、断点缓存管理。"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import streamlit as st
+
+from db import count_records
+from utils.config import (
+    PROVIDER_LABELS,
+    PROVIDER_MODELS,
+    PROVIDER_OPTIONS,
+    build_settings,
+    format_model_label,
+)
+from utils.config import resolve_api_key
+from workflow import WorkflowState
+
+
+# ── session_state 读写工具 ──
+
+
+def clear_run_job() -> None:
+    """清除运行状态（不删除已生成的阶段结果）。"""
+    st.session_state.run_job = None
+    st.session_state.is_running = False
+    st.session_state.run_cancelled = False
+
+
+def api_key_configured() -> bool:
+    return bool(resolve_api_key(st.session_state.provider, st.session_state.api_key))
+
+
+def clear_checkpoint() -> None:
+    """清除所有断点续传缓存，回到初始状态。"""
+    st.session_state.workflow_state = None
+    st.session_state.last_question = ""
+    st.session_state.failed_stage = None
+    st.session_state._confirm_clear = False
+    st.toast("已清除缓存，可重新开始", icon="🔄")
+
+
+def stage_has_content(state: WorkflowState, stage_num: int) -> bool:
+    return {
+        1: state.stage1,
+        2: state.stage2,
+        3: state.stage3,
+        4: state.stage4,
+    }.get(stage_num) is not None
+
+
+# ── 侧边栏回调 ──
+
+
+def _on_settings_changed() -> None:
+    """侧边栏切换提供商/模型时，若正在运行则取消当前 API。"""
+    job = st.session_state.get("run_job")
+    if not st.session_state.get("is_running") or not job:
+        return
+    if (
+        st.session_state.provider != job["locked_provider"]
+        or st.session_state.model != job["locked_model"]
+    ):
+        job["cancel_event"].set()
+        st.session_state.run_cancelled = True
+
+
+# ── 渲染 ──
+
+
+def render_sidebar() -> bool:
+    """渲染侧边栏；返回 True 表示 API 已配置。"""
+    with st.sidebar:
+        st.header("📂 工作区")
+        mode_options = ["新建", "历史"]
+        current_mode = st.session_state.get("app_mode", "新建")
+        if current_mode == "新建分析":
+            current_mode = "新建"
+        if current_mode == "查看历史":
+            current_mode = "历史"
+        mode_index = mode_options.index(current_mode) if current_mode in mode_options else 0
+        st.session_state.app_mode = st.selectbox(
+            "模式",
+            mode_options,
+            index=mode_index,
+            help="新建：输入题目并运行备课流程；历史：查看、搜索、导出已保存的备课包",
+        )
+        try:
+            total_hist = count_records()
+            st.caption(f"历史记录：共 {total_hist} 条")
+        except Exception:
+            pass
+        if st.session_state.app_mode == "历史":
+            if st.button("刷新历史列表", use_container_width=True):
+                st.session_state.history_page = 1
+                st.rerun()
+        st.divider()
+        st.header("⚙️ API 设置")
+
+        if st.session_state.is_running:
+            st.info(
+                "运行中可切换下方模型；**切换后将自动停止**当前请求，"
+                "再点击 Stage 按钮用新模型重跑。"
+            )
+            if st.button("停止当前运行", use_container_width=True, key="btn_stop_run"):
+                job = st.session_state.get("run_job")
+                if job:
+                    job["cancel_event"].set()
+                st.session_state.run_cancelled = True
+                clear_run_job()
+                st.warning("已停止。请确认模型后重新点击 Stage。")
+                st.rerun()
+
+        st.selectbox(
+            "模型提供商",
+            options=PROVIDER_OPTIONS,
+            format_func=lambda p: PROVIDER_LABELS.get(p, p),
+            index=PROVIDER_OPTIONS.index(
+                st.session_state.provider
+                if st.session_state.provider in PROVIDER_OPTIONS
+                else "deepseek"
+            ),
+            key="provider",
+            on_change=_on_settings_changed,
+            help="支持 OpenAI 兼容接口的常用服务；运行中切换会停止当前请求",
+        )
+
+        model_options = PROVIDER_MODELS.get(
+            st.session_state.provider, ["deepseek-chat"]
+        )
+        current = st.session_state.model
+        model_index = model_options.index(current) if current in model_options else 0
+        st.selectbox(
+            "模型",
+            options=model_options,
+            index=model_index,
+            format_func=lambda m: format_model_label(st.session_state.provider, m),
+            key="model",
+            on_change=_on_settings_changed,
+            help=(
+                "百炼：最新旗舰优先排序；识图仍自动使用 qwen-vl-max。"
+                "运行中切换会停止当前请求。"
+                if st.session_state.provider == "dashscope"
+                else "运行中切换会停止当前请求"
+            ),
+        )
+
+        key_label = {
+            "deepseek": "DeepSeek API Key",
+            "openai": "OpenAI API Key",
+            "gemini": "Gemini API Key",
+            "dashscope": "阿里云百炼 API Key",
+        }.get(st.session_state.provider, "API Key")
+
+        st.session_state.api_key = st.text_input(
+            key_label,
+            value=st.session_state.api_key,
+            type="password",
+            help="留空则尝试从 .env 读取对应环境变量",
+        )
+
+        if api_key_configured():
+            try:
+                s = build_settings(
+                    st.session_state.provider,
+                    api_key=st.session_state.api_key,
+                    model=st.session_state.model,
+                )
+                st.success("API Key 已配置")
+                st.caption(f"模型: {s.model}")
+                st.caption(
+                    f"接口: {s.base_url[:36]}…"
+                    if len(s.base_url) > 36
+                    else f"接口: {s.base_url}"
+                )
+                if st.session_state.provider == "dashscope":
+                    st.caption(
+                        "若长时间停在 Calling API：优先试 **qwen-plus** 或 **deepseek-v4-flash**；"
+                        "旗舰预览模型（如 qwen3.6-max-preview）首包可能很慢。"
+                    )
+            except ValueError as e:
+                st.error(str(e))
+                return False
+        else:
+            env_name = {
+                "deepseek": "DEEPSEEK_API_KEY",
+                "openai": "OPENAI_API_KEY",
+                "gemini": "GEMINI_API_KEY",
+                "dashscope": "DASHSCOPE_API_KEY",
+            }.get(st.session_state.provider, "OPENAI_API_KEY")
+            st.warning(f"请在上方输入 Key，或在 .env 配置 {env_name}")
+            return False
+
+        st.divider()
+        st.header("工作流说明")
+        st.markdown(
+            """
+**Stage 1** — 审题结构分析
+
+**Stage 2** — PEEL 写作策略卡与范文
+
+**Stage 3** — 功能句型包 + 话题词汇
+
+**Stage 4** — 教学指南与易错预警
+            """
+        )
+
+        # 断点续传状态与清除缓存
+        _ws = st.session_state.get("workflow_state")
+        if _ws and _ws.stage1:
+            _done = sum(1 for s in range(1, 5) if stage_has_content(_ws, s))
+            _fail = st.session_state.get("failed_stage")
+            if _fail:
+                st.caption(f"断点：已完成 {_done}/4（Stage {_fail} 失败）")
+            elif _done < 4:
+                st.caption(f"断点：已完成 {_done}/4，可继续生成")
+            if st.button("🔄 清除缓存，重新开始", use_container_width=True, key="btn_sidebar_clear_cache"):
+                clear_checkpoint()
+                st.rerun()
+
+        # 运行日志查看器
+        with st.expander("📋 运行日志"):
+            _log_path = Path(__file__).resolve().parent.parent / "logs" / "app.log"
+            if _log_path.is_file():
+                _lines = _log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                _tail = _lines[-30:] if len(_lines) >= 30 else _lines
+                st.text("\n".join(_tail))
+                if st.button("刷新日志", key="btn_refresh_log"):
+                    st.rerun()
+            else:
+                st.caption("暂无日志文件")
+
+    return True

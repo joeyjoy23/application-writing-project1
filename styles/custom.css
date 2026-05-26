@@ -1,22 +1,63 @@
 /* 高考英语应用文 AI 分析系统 — Streamlit 自定义样式 */
 
+/* ── Design Tokens ── */
+:root {
+  --c-primary: #1565c0;
+  --c-primary-light: #e3f2fd;
+  --c-danger: #c62828;
+  --c-danger-light: #ffebee;
+  --c-success: #2e7d32;
+  --c-success-light: #e8f5e9;
+  --c-muted: #6b7280;
+  --c-border: #e5e7eb;
+  --c-bg-subtle: #f8f9fa;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 8px rgb(0 0 0 / 0.08);
+  --transition: 0.2s ease;
+}
+
+/* ── Layout ── */
 .main .block-container {
-    padding-top: 2rem;
-    max-width: 1100px;
+  padding-top: 2rem;
+  max-width: 1100px;
 }
 
 h1 {
-    font-weight: 700;
-    letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
+/* ── Breadcrumb / Mode Badge ── */
+.mode-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  margin-bottom: 0.75rem;
+  border: 1px solid #bbdefb;
+}
+.mode-breadcrumb svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Stage Badges ── */
 .stage-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
 }
 
 .stage-1 { background: #e3f2fd; color: #1565c0; }
@@ -24,19 +65,94 @@ h1 {
 .stage-3 { background: #fff3e0; color: #e65100; }
 .stage-4 { background: #e8f5e9; color: #2e7d32; }
 
+/* ── Summary Box ── */
 .summary-box {
-    background: #f8f9fa;
-    border-left: 4px solid #1e88e5;
-    padding: 1rem 1.25rem;
-    border-radius: 0 8px 8px 0;
-    margin: 1rem 0;
+  background: #f8f9fa;
+  border-left: 4px solid #1e88e5;
+  padding: 1rem 1.25rem;
+  border-radius: 0 8px 8px 0;
+  margin: 1rem 0;
 }
 
 .json-preview {
-    font-family: ui-monospace, "Cascadia Code", monospace;
-    font-size: 0.8rem;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.8rem;
 }
 
+/* ── Export Section ── */
+.export-section {
+  background: var(--c-bg-subtle);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+.export-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.65rem;
+}
+.export-section-title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--c-primary);
+  flex-shrink: 0;
+}
+
+/* ── Clear Results Link-Button ── */
+.clear-results-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--c-danger);
+  cursor: pointer;
+  padding: 0.2rem 0;
+  border: none;
+  background: none;
+  transition: opacity var(--transition);
+}
+.clear-results-btn:hover {
+  opacity: 0.7;
+}
+.clear-results-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+/* ── Upload Status ── */
+.upload-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-top: 0.4rem;
+}
+.upload-status--ready {
+  background: var(--c-success-light);
+  color: var(--c-success);
+  border: 1px solid #a5d6a7;
+}
+.upload-status--recognized {
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  border: 1px solid #90caf9;
+}
+.upload-status svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+/* ── Sidebar ── */
 div[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #fafafa 0%, #f0f4f8 100%);
+  background: linear-gradient(180deg, #fafafa 0%, #f0f4f8 100%);
 }

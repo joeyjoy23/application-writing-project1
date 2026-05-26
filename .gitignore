@@ -12,3 +12,9 @@ __pycache__/
 
 # 本地历史数据库
 history.db
+
+# Windows 误生成的空设备名文件
+nul
+
+# 本地 Agent 笔记（非应用代码）
+.workbuddy/

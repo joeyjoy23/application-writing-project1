@@ -1,0 +1,708 @@
+"""运行管理：RunUI、线程调度、advance_run_job、try_start_run_job。"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from typing import Any
+
+import streamlit as st
+
+logger = logging.getLogger("app.run_manager")
+
+from llm.client import LLMClient, RunCancelled
+from utils.config import build_settings
+from utils.status_log import (
+    APP_START,
+    CALLING_API,
+    LOADING_PROMPT,
+    PARSING_RESPONSE,
+    PIPELINE_DONE,
+    PREPARING,
+    stage_call_api,
+    stage_complete,
+    stage_load_prompt,
+)
+from workflow import GaokaoWritingWorkflow, WorkflowState
+
+from ui.sidebar import api_key_configured, clear_run_job, stage_has_content
+
+
+# ── 延迟导入：避免与 ui.new_page 的循环依赖 ──
+
+def _np_auto_save_history(*args, **kwargs):
+    from ui.new_page import auto_save_history
+    return auto_save_history(*args, **kwargs)
+
+def _np_get_next_stage(*args, **kwargs):
+    from ui.new_page import get_next_stage
+    return get_next_stage(*args, **kwargs)
+
+def _np_render_one_stage(*args, **kwargs):
+    from ui.new_page import render_one_stage
+    return render_one_stage(*args, **kwargs)
+
+def _np_sync_slots_from_state(*args, **kwargs):
+    from ui.new_page import sync_slots_from_state
+    return sync_slots_from_state(*args, **kwargs)
+
+
+# ── Workflow 工厂 ──
+
+
+def get_workflow() -> GaokaoWritingWorkflow:
+    settings = build_settings(
+        st.session_state.provider,
+        api_key=st.session_state.api_key,
+        model=st.session_state.model,
+    )
+    return GaokaoWritingWorkflow(client=LLMClient(settings))
+
+
+def get_workflow_from_job(job: dict[str, Any]) -> GaokaoWritingWorkflow:
+    settings = build_settings(
+        job["locked_provider"],
+        api_key=job.get("api_key") or st.session_state.api_key,
+        model=job["locked_model"],
+    )
+    return GaokaoWritingWorkflow(client=LLMClient(settings))
+
+
+# ── RunUI ──
+
+
+class RunUI:
+    """运行过程 UI：步骤列表（不刷屏）+ 单行字数 + 实时预览。"""
+
+    def __init__(self, steps: list[str] | None = None) -> None:
+        self.progress = st.progress(0, text="等待开始…")
+        self.status = st.status("运行状态", expanded=True)
+        self._steps: list[str] = list(steps) if steps else []
+        self._step_area = self.status.empty()
+        self._live_line = st.empty()
+        self._preview_title = st.empty()
+        self._preview_body = st.empty()
+        self._last_stream_total = 0
+        if self._steps:
+            self._refresh_steps()
+
+    def log(self, message: str) -> None:
+        """追加一步（相同内容不重复）。"""
+        if message and message not in self._steps:
+            self._steps.append(message)
+            self._refresh_steps()
+
+    def _refresh_steps(self) -> None:
+        if self._steps:
+            self._step_area.markdown("\n".join(f"- {s}" for s in self._steps))
+        else:
+            self._step_area.markdown("_等待开始…_")
+
+    def update_stream(self, stage: int, total: int, full_text: str) -> None:
+        """原地刷新字数；预览用纯文本减轻卡顿。"""
+        if total == self._last_stream_total and total >= 3000:
+            hint = "（字数暂未增加，模型可能在收尾，请稍候…）"
+        else:
+            hint = ""
+            self._last_stream_total = total
+        self._live_line.markdown(
+            f"**Stage {stage}** 生成中 · 已收到 **{total}** 字{hint}"
+        )
+        if total > 0:
+            self.set_progress(
+                min(8 + stage * 18 + min(total // 80, 12), 75),
+                text=f"Stage {stage} · 生成中（{total} 字）…",
+            )
+        if total < 800:
+            return
+        self._preview_title.markdown("**实时生成内容**（纯文本预览）")
+        show = full_text[-2500:] if len(full_text) > 2500 else full_text
+        if len(full_text) > 2500:
+            show = "…（仅显示最后 2500 字）\n" + show
+        self._preview_body.text(show)
+
+    def clear_stream_preview(self) -> None:
+        self._live_line.empty()
+        self._preview_title.empty()
+        self._preview_body.empty()
+
+    def set_progress(self, value: int, text: str) -> None:
+        self.progress.progress(min(max(value, 0), 100), text=text)
+
+    def sync_stream_from_job(self, job: dict[str, Any]) -> None:
+        stage, total, preview = _read_job_stream(job)
+        if total <= 0:
+            return
+        self.update_stream(stage, total, preview)
+
+    def persist_logs(self, job: dict[str, Any]) -> None:
+        job["logs"] = list(self._steps)
+
+
+# ── 内部工具 ──
+
+
+def _sync_cancel_from_settings(job: dict[str, Any]) -> None:
+    if (
+        st.session_state.provider != job["locked_provider"]
+        or st.session_state.model != job["locked_model"]
+    ):
+        job["cancel_event"].set()
+        st.session_state.run_cancelled = True
+
+
+def _flush_stage(
+    state: WorkflowState,
+    stage_num: int,
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+    ui: RunUI,
+) -> None:
+    """保存状态并仅渲染刚完成的 Stage。"""
+    st.session_state.workflow_state = state
+    ui.clear_stream_preview()
+    ui.log(f"正在显示 Stage {stage_num} 结果…")
+    ui.set_progress(min(82 + stage_num * 4, 99), text=f"Stage {stage_num} · 显示结果…")
+    _np_render_one_stage(slots[stage_num - 1], state, stage_num)
+    ui.log(stage_complete(stage_num))
+
+
+def _ensure_job_lock(job: dict[str, Any]) -> threading.Lock:
+    lock = job.get("job_lock")
+    if lock is None:
+        lock = threading.Lock()
+        job["job_lock"] = lock
+    return lock
+
+
+def _job_append_log(
+    job: dict[str, Any],
+    message: str,
+    cancel_event: threading.Event | None = None,
+) -> None:
+    if cancel_event and cancel_event.is_set():
+        return
+    with _ensure_job_lock(job):
+        logs: list[str] = job.setdefault("logs", [])
+        if message and message not in logs:
+            logs.append(message)
+
+
+def _job_on_progress(
+    job: dict[str, Any], stage: int, cancel_event: threading.Event
+):
+    def _cb(msg: str) -> None:
+        if cancel_event.is_set():
+            return
+        _job_append_log(job, msg, cancel_event)
+        with _ensure_job_lock(job):
+            job["stream_stage"] = stage
+
+    return _cb
+
+
+def _job_on_stream(job: dict[str, Any], stage: int, cancel_event: threading.Event):
+    def _cb(_d: str, total: int, full: str) -> None:
+        if cancel_event.is_set():
+            return
+        preview = full[-2500:] if len(full) > 2500 else full
+        with _ensure_job_lock(job):
+            job["stream_stage"] = stage
+            job["stream_total"] = total
+            job["stream_preview"] = preview
+
+    return _cb
+
+
+def _read_job_stream(job: dict[str, Any]) -> tuple[int, int, str]:
+    """主线程读取流式进度（与 worker 写入互斥）。"""
+    with _ensure_job_lock(job):
+        return (
+            int(job.get("stream_stage") or 1),
+            int(job.get("stream_total") or 0),
+            str(job.get("stream_preview") or ""),
+        )
+
+
+def _execute_stage_api(
+    job: dict[str, Any],
+    stage_num: int,
+    state: WorkflowState,
+    cancel_event: threading.Event,
+) -> Any:
+    if cancel_event.is_set():
+        raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+
+    wf = get_workflow_from_job(job)
+    question = job["question"]
+    should_cancel = cancel_event.is_set
+
+    if stage_num == 1:
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        result = wf.run_stage1(
+            question,
+            on_progress=_job_on_progress(job, 1, cancel_event),
+            on_stream=_job_on_stream(job, 1, cancel_event),
+            should_cancel=should_cancel,
+        )
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        return result
+    if stage_num == 2:
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        result = wf.run_stage2(
+            question,
+            state.stage1.structured_json,  # type: ignore[union-attr]
+            on_progress=_job_on_progress(job, 2, cancel_event),
+            on_stream=_job_on_stream(job, 2, cancel_event),
+            should_cancel=should_cancel,
+        )
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        return result
+    if stage_num == 3:
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        result = wf.run_stage3(
+            question,
+            state.stage1.structured_json,  # type: ignore[union-attr]
+            on_progress=_job_on_progress(job, 3, cancel_event),
+            on_stream=_job_on_stream(job, 3, cancel_event),
+            should_cancel=should_cancel,
+        )
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        return result
+    if stage_num == 4:
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        result = wf.run_stage4(
+            state.stage1.structured_json,  # type: ignore[union-attr]
+            state.stage2.raw,  # type: ignore[union-attr]
+            state.stage3.raw,  # type: ignore[union-attr]
+            on_progress=_job_on_progress(job, 4, cancel_event),
+            on_stream=_job_on_stream(job, 4, cancel_event),
+            should_cancel=should_cancel,
+        )
+        if cancel_event.is_set():
+            raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+        return result
+    raise ValueError(f"invalid stage: {stage_num}")
+
+
+_STAGE_TIMEOUT_SECONDS = 90
+_THREAD_JOIN_AFTER_CANCEL_SECONDS = 2.0
+
+
+def _stop_api_thread(t: threading.Thread, cancel_event: threading.Event) -> None:
+    """通知 API 线程停止并等待收尾。"""
+    cancel_event.set()
+    t.join(timeout=_THREAD_JOIN_AFTER_CANCEL_SECONDS)
+
+
+def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState) -> None:
+    cancel_event: threading.Event = job["cancel_event"]
+    _ensure_job_lock(job)
+    model = job.get("locked_model", "unknown")
+
+    def worker() -> None:
+        lock = _ensure_job_lock(job)
+        try:
+            timeout_msg = (
+                f"Stage {stage_num} 生成超时，"
+                "请切换到更快的模型（如 qwen-plus）重试，或稍后再试。"
+            )
+            cancelled_msg = "已切换模型或提供商，当前请求已停止。"
+            start_time = time.time()
+
+            for attempt in range(2):
+                if cancel_event.is_set():
+                    with lock:
+                        job["thread_error"] = ("cancelled", cancelled_msg)
+                    return
+
+                result_holder: list[Any] = []
+                error_holder: list[tuple[str, str]] = []
+
+                def _run_once() -> None:
+                    try:
+                        logger.info("Stage %d 开始调用 API，模型: %s", stage_num, model)
+                        result_holder.append(
+                            _execute_stage_api(job, stage_num, state, cancel_event)
+                        )
+                    except RunCancelled:
+                        logger.info("Stage %d 用户取消", stage_num)
+                        error_holder.append(("cancelled", cancelled_msg))
+                    except Exception as e:
+                        logger.exception("Stage %d 失败", stage_num)
+                        error_holder.append(("error", str(e)))
+
+                t = threading.Thread(target=_run_once, daemon=True)
+                t.start()
+                t.join(timeout=_STAGE_TIMEOUT_SECONDS)
+
+                if not t.is_alive():
+                    with lock:
+                        if result_holder:
+                            elapsed = time.time() - start_time
+                            logger.info(
+                                "Stage %d 完成，耗时 %.1f 秒", stage_num, elapsed
+                            )
+                            job["thread_result"] = result_holder[0]
+                            return
+                        if error_holder:
+                            job["thread_error"] = error_holder[0]
+                            return
+
+                cancelled_during_wait = cancel_event.is_set()
+                logger.warning(
+                    "Stage %d 第 %d 次调用超时（%d 秒），正在停止旧线程…",
+                    stage_num,
+                    attempt + 1,
+                    _STAGE_TIMEOUT_SECONDS,
+                )
+                _stop_api_thread(t, cancel_event)
+
+                if cancelled_during_wait:
+                    with lock:
+                        if error_holder:
+                            job["thread_error"] = error_holder[0]
+                        else:
+                            job["thread_error"] = ("cancelled", cancelled_msg)
+                    return
+
+                if attempt == 0:
+                    cancel_event.clear()
+                    continue
+
+                with lock:
+                    job["thread_error"] = ("timeout", timeout_msg)
+                return
+        finally:
+            with lock:
+                job["thread_done"] = True
+
+    with _ensure_job_lock(job):
+        job["thread"] = threading.Thread(target=worker, daemon=True)
+        job["thread_done"] = False
+        job["thread_error"] = None
+        job["thread_result"] = None
+        job["stream_total"] = 0
+        job["stream_preview"] = ""
+        job["stream_stage"] = stage_num
+        job["thread"].start()
+
+
+def _prepare_stage_api_logs(ui: RunUI, stage_num: int) -> None:
+    ui.log(LOADING_PROMPT)
+    ui.log(stage_load_prompt(stage_num))
+    ui.set_progress(8 + stage_num * 18, text=f"Stage {stage_num} · 加载提示词…")
+    ui.log(CALLING_API)
+    ui.log(stage_call_api(stage_num))
+    model = st.session_state.get("run_job", {}).get("locked_model", st.session_state.model)
+    ui._live_line.caption(
+        f"正在连接 API（模型：**{model}**）。可随时在侧边栏换模型以停止本次请求。"
+    )
+
+
+def _apply_stage_result(state: WorkflowState, stage_num: int, result: Any) -> None:
+    if stage_num == 1:
+        state.stage1 = result
+    elif stage_num == 2:
+        state.stage2 = result
+    elif stage_num == 3:
+        state.stage3 = result
+    elif stage_num == 4:
+        state.stage4 = result
+
+
+def _pipeline_stages_for_mode(mode: str, *, skip_completed: bool = False, state: WorkflowState | None = None) -> list[int]:
+    """返回 mode 对应的 Stage 列表。"""
+    ALL_STAGES = [1, 2, 3, 4]
+    if mode == "full":
+        stages = list(ALL_STAGES)
+    elif mode == "stage1":
+        stages = [1]
+    elif mode == "stage2":
+        stages = [2]
+    elif mode == "stage3":
+        stages = [3]
+    elif mode == "stage4":
+        stages = [4]
+    elif mode == "resume":
+        if state:
+            next_stage = _np_get_next_stage(state)
+            if next_stage is not None:
+                stages = list(range(next_stage, 5))
+            else:
+                stages = []
+        else:
+            stages = list(ALL_STAGES)
+    else:
+        return []
+
+    if skip_completed and state and mode != "resume":
+        stages = [s for s in stages if not stage_has_content(state, s)]
+
+    return stages
+
+
+# ── 公开 API ──
+
+
+def try_start_run_job(mode: str, question: str) -> bool:
+    """尝试启动运行任务；返回 True 表示成功启动。"""
+    if st.session_state.is_running:
+        st.warning("正在分析中；若要换模型，请先在侧边栏切换（将自动停止）或点「停止当前运行」。")
+        return False
+    if not api_key_configured():
+        st.error("请先在侧边栏配置 API Key")
+        return False
+
+    state: WorkflowState = st.session_state.workflow_state or WorkflowState(
+        question=question
+    )
+    state.question = question
+
+    if mode == "stage2" and not state.stage1:
+        st.error("请先运行 Stage 1")
+        return False
+    if mode == "stage3" and not state.stage1:
+        st.error("请先运行 Stage 1")
+        return False
+    if mode == "stage4" and (not state.stage1 or not state.stage2 or not state.stage3):
+        st.error("请先完成 Stage 1、Stage 2 与 Stage 3")
+        return False
+
+    skip_completed = (mode == "full")
+    stages = _pipeline_stages_for_mode(
+        mode,
+        skip_completed=skip_completed,
+        state=state if skip_completed or mode == "resume" else None,
+    )
+    if not stages:
+        st.info("所有阶段已完成，无需重新生成。如需重跑，请先清空结果。")
+        return False
+
+    st.session_state.workflow_state = state
+    st.session_state.run_job = {
+        "mode": mode,
+        "question": question,
+        "stages": stages,
+        "stage_index": 0,
+        "phase": "api",
+        "locked_provider": st.session_state.provider,
+        "locked_model": st.session_state.model,
+        "api_key": st.session_state.api_key,
+        "cancel_event": threading.Event(),
+        "thread": None,
+        "thread_done": False,
+        "thread_error": None,
+        "thread_result": None,
+        "logs": [APP_START, PREPARING],
+        "stream_stage": stages[0],
+        "stream_total": 0,
+        "stream_preview": "",
+    }
+    if mode == "full":
+        if len(stages) < 4:
+            st.session_state.run_job["logs"].append(
+                f"断点续传：跳过已完成阶段，从 Stage {stages[0]} 继续…"
+            )
+        else:
+            st.session_state.run_job["logs"].append("Running full pipeline (4 stages)…")
+    elif mode == "resume":
+        st.session_state.run_job["logs"].append(
+            f"断点续传：从 Stage {stages[0]} 继续生成…"
+        )
+    st.session_state.run_cancelled = False
+    st.session_state.is_running = True
+    st.session_state.failed_stage = None
+    logger.info("运行启动 mode=%s stages=%s model=%s", mode, stages, st.session_state.model)
+    return True
+
+
+# ── 任务结束处理 ──
+
+
+def _finish_job_cancelled(
+    ui: RunUI,
+    job: dict[str, Any],
+    msg: str,
+    state: WorkflowState,
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+) -> None:
+    stage_num = job["stages"][job["stage_index"]]
+    logger.info("用户取消了 Stage %d", stage_num)
+    ui.log(f"⏹ {msg}")
+    ui.status.update(label="已停止", state="error")
+    ui.persist_logs(job)
+    st.session_state.workflow_state = state
+    st.session_state.last_question = job["question"]
+    st.session_state.failed_stage = stage_num
+    _np_sync_slots_from_state(state, slots)
+    clear_run_job()
+    st.warning(msg)
+
+
+def _finish_job_success(
+    ui: RunUI,
+    job: dict[str, Any],
+    state: WorkflowState,
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+) -> None:
+    mode = job["mode"]
+    if mode == "full":
+        ui.set_progress(100, text="全部完成")
+        ui.log(PIPELINE_DONE)
+        ui.status.update(label="✅ 完整流程已完成", state="complete")
+    else:
+        stage_num = job["stages"][-1]
+        ui.set_progress(100, text=f"Stage {stage_num} 完成")
+        ui.status.update(label=f"✅ Stage {stage_num} 完成", state="complete")
+    ui.persist_logs(job)
+    st.session_state.workflow_state = state
+    st.session_state.last_question = job["question"]
+    st.session_state.failed_stage = None
+    logger.info("运行完成 mode=%s", mode)
+    _np_auto_save_history(
+        state,
+        provider=job.get("locked_provider"),
+        model=job.get("locked_model"),
+        raw_input=job.get("question"),
+    )
+    clear_run_job()
+    if state.errors:
+        for err in state.errors:
+            st.warning(err)
+
+
+# ── 主循环 ──
+
+
+
+
+def advance_run_job(
+    question: str,
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+) -> None:
+    """轮询后台 API；允许侧边栏在 rerun 间切换模型并取消。"""
+    job = st.session_state.run_job
+    if not job:
+        return
+
+    _sync_cancel_from_settings(job)
+    state: WorkflowState = st.session_state.workflow_state or WorkflowState(
+        question=question
+    )
+    state.question = job["question"]
+    ui = RunUI(job.get("logs"))
+    stage_num = job["stages"][job["stage_index"]]
+
+    if job["phase"] == "api":
+        if job.get("thread") is None:
+            _prepare_stage_api_logs(ui, stage_num)
+            ui.persist_logs(job)
+            _start_api_thread(job, stage_num, state)
+            time.sleep(0.2)
+            st.rerun()
+
+        thread: threading.Thread = job["thread"]
+        ui.sync_stream_from_job(job)
+        ui.persist_logs(job)
+
+        if thread.is_alive():
+            if job["cancel_event"].is_set():
+                _stop_api_thread(thread, job["cancel_event"])
+                _finish_job_cancelled(
+                    ui,
+                    job,
+                    "已切换模型或提供商，当前请求已停止。请用新模型重新点击运行。",
+                    state,
+                    slots,
+                )
+                time.sleep(0.2)
+                st.rerun()
+                return
+            time.sleep(0.2)
+            st.rerun()
+            return
+
+        with _ensure_job_lock(job):
+            err = job.get("thread_error")
+            thread_result = job.get("thread_result")
+        if err:
+            kind, msg = err
+            if kind == "cancelled":
+                _finish_job_cancelled(ui, job, msg, state, slots)
+                time.sleep(0.2)
+                st.rerun()
+                return
+            if kind == "timeout":
+                ui.status.update(label=f"Stage {stage_num} 超时，跳过", state="error")
+                ui.log(f"⏱️ {msg}")
+                state.errors.append(msg)
+                st.session_state.workflow_state = state
+                st.session_state.last_question = job["question"]
+                st.session_state.failed_stage = stage_num
+                ui.persist_logs(job)
+                st.warning(msg)
+                if job["stage_index"] + 1 < len(job["stages"]):
+                    job["stage_index"] += 1
+                    job["phase"] = "api"
+                    job["thread"] = None
+                    job["thread_done"] = False
+                    job["thread_error"] = None
+                    job["thread_result"] = None
+                    job["stream_total"] = 0
+                    job["stream_preview"] = ""
+                    time.sleep(0.2)
+                    st.rerun()
+                    return
+                _finish_job_success(ui, job, state, slots)
+                time.sleep(0.2)
+                st.rerun()
+                return
+            else:
+                ui.status.update(label="执行失败", state="error")
+                ui.log(f"❌ {msg}")
+                state.errors.append(msg)
+                ui.persist_logs(job)
+                st.session_state.workflow_state = state
+                st.session_state.last_question = job["question"]
+                st.session_state.failed_stage = stage_num
+                _np_sync_slots_from_state(state, slots)
+                clear_run_job()
+                st.error(msg)
+                time.sleep(0.2)
+                st.rerun()
+                return
+
+        if thread_result is not None:
+            _apply_stage_result(state, stage_num, thread_result)
+            st.session_state.workflow_state = state
+            job["phase"] = "flush"
+            job["thread"] = None
+            ui.clear_stream_preview()
+            ui.log(PARSING_RESPONSE)
+            ui.set_progress(22 + stage_num * 18, text=f"Stage {stage_num} · 解析完成")
+            ui.persist_logs(job)
+            time.sleep(0.2)
+            st.rerun()
+            return
+
+    if job["phase"] == "flush":
+        _flush_stage(state, stage_num, slots, ui)
+        ui.persist_logs(job)
+        if job["stage_index"] + 1 < len(job["stages"]):
+            job["stage_index"] += 1
+            job["phase"] = "api"
+            job["thread"] = None
+            time.sleep(0.2)
+            st.rerun()
+            return
+        _finish_job_success(ui, job, state, slots)
+        time.sleep(0.2)
+        st.rerun()

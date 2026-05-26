@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import streamlit as st
 from dotenv import load_dotenv
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -132,15 +133,15 @@ def resolve_api_key(provider: str, manual_key: str = "") -> str:
     return _require_ascii("API Key", fallback) if fallback else ""
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def build_settings(
     provider: str,
-    *,
     api_key: str = "",
     model: str = "",
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> Settings:
-    """根据网页选择的提供商与 Key 构建 API 配置。"""
+    """根据网页选择的提供商与 Key 构建 API 配置（可缓存，参数须为可序列化值）。"""
     _load_env()
     p = provider.lower()
     if p not in PROVIDER_OPTIONS:

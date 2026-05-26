@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import sqlite3
 from datetime import datetime
 from typing import Any
 
+import streamlit as st
+
 from utils.config import get_project_root
+
+logger = logging.getLogger("app.db")
 
 DB_PATH = get_project_root() / "history.db"
 
@@ -40,6 +46,22 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         )
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute(
+            "ALTER TABLE history ADD COLUMN question_hash TEXT NOT NULL DEFAULT ''"
+        )
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute(
+            "ALTER TABLE history ADD COLUMN raw_input TEXT NOT NULL DEFAULT ''"
+        )
+    except sqlite3.OperationalError:
+        pass
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_question_model "
+        "ON history(question_hash, model_name)"
+    )
 
 
 def init_db() -> None:
@@ -50,11 +72,22 @@ def init_db() -> None:
         conn.commit()
 
 
+def make_question_hash(question: str) -> str:
+    """同一道题用固定哈希，便于与模型名组合去重。"""
+    normalized = (question or "").strip().replace("\r\n", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _topic_summary(question: str, *, max_len: int = 100) -> str:
+    return (question or "（无题目）").strip().replace("\n", " ")[:max_len]
+
+
 def save_record(
     topic: str,
     model: str,
     content: str,
     *,
+    raw_input: str | None = None,
     word_count: int | None = None,
     stages_mask: str = "0000",
 ) -> int:
@@ -63,20 +96,105 @@ def save_record(
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     wc = word_count if word_count is not None else len(content)
     mask = stages_mask if len(stages_mask) == 4 else "0000"
+    raw = (raw_input if raw_input is not None else topic).strip()
+    q_hash = make_question_hash(raw)
     with _connect() as conn:
         cur = conn.execute(
             """
-            INSERT INTO history (created_at, topic, model_name, full_content, word_count, stages_mask)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO history (
+                created_at, topic, model_name, full_content, word_count, stages_mask,
+                question_hash, raw_input
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (created_at, topic.strip(), model.strip(), content, wc, mask),
+            (created_at, topic.strip(), model.strip(), content, wc, mask, q_hash, raw),
         )
         conn.commit()
-        return int(cur.lastrowid)
+        record_id = int(cur.lastrowid)
+        logger.info("备课包已保存 #%d topic=%s model=%s", record_id, topic[:30], model)
+        _invalidate_history_cache()
+        return record_id
 
 
+def upsert_record(
+    question: str,
+    model: str,
+    content: str,
+    *,
+    raw_input: str | None = None,
+    word_count: int | None = None,
+    stages_mask: str = "0000",
+) -> tuple[int, bool]:
+    """
+    同一题目 + 同一模型：更新已有记录，不新增多条。
+    同一题目 + 不同模型：各存一条。
+
+    返回 (记录 id, 是否为新插入)。
+    """
+    init_db()
+    raw = (raw_input if raw_input is not None else question).strip()
+    q_hash = make_question_hash(raw)
+    model_name = model.strip()
+    topic = _topic_summary(raw or question)
+    wc = word_count if word_count is not None else len(content)
+    mask = stages_mask if len(stages_mask) == 4 else "0000"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM history
+            WHERE question_hash = ? AND model_name = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (q_hash, model_name),
+        ).fetchone()
+
+        if row:
+            record_id = int(row[0])
+            conn.execute(
+                """
+                UPDATE history
+                SET created_at = ?, topic = ?, full_content = ?, word_count = ?, stages_mask = ?,
+                    question_hash = ?, raw_input = ?
+                WHERE id = ?
+                """,
+                (now, topic, content, wc, mask, q_hash, raw, record_id),
+            )
+            conn.commit()
+            logger.info("备课包已更新 #%d model=%s", record_id, model_name)
+            _invalidate_history_cache()
+            return record_id, False
+
+        cur = conn.execute(
+            """
+            INSERT INTO history (
+                created_at, topic, model_name, full_content, word_count, stages_mask,
+                question_hash, raw_input
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (now, topic, model_name, content, wc, mask, q_hash, raw),
+        )
+        conn.commit()
+        record_id = int(cur.lastrowid)
+        logger.info("备课包已新建 #%d topic=%s model=%s", record_id, topic[:30], model_name)
+        _invalidate_history_cache()
+        return record_id, True
+
+
+def _normalize_keyword(keyword: str | None) -> str:
+    return (keyword or "").strip()
+
+
+def _invalidate_history_cache() -> None:
+    get_all_records.clear()
+    count_records.clear()
+
+
+@st.cache_data(ttl=10, show_spinner=False)
 def get_all_records(
-    keyword: str | None = None,
+    keyword: str = "",
     *,
     limit: int = 20,
     offset: int = 0,
@@ -88,8 +206,9 @@ def get_all_records(
         "FROM history"
     )
     params: list[Any] = []
-    if keyword and keyword.strip():
-        kw = f"%{keyword.strip()}%"
+    kw_norm = _normalize_keyword(keyword)
+    if kw_norm:
+        kw = f"%{kw_norm}%"
         sql += " WHERE topic LIKE ? OR model_name LIKE ?"
         params.extend([kw, kw])
     sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
@@ -99,13 +218,15 @@ def get_all_records(
     return [dict(row) for row in rows]
 
 
-def count_records(keyword: str | None = None) -> int:
-    """符合条件的记录总数（用于「加载更多」）。"""
+@st.cache_data(ttl=10, show_spinner=False)
+def count_records(keyword: str = "") -> int:
+    """符合条件的记录总数（用于分页）。"""
     init_db()
     sql = "SELECT COUNT(*) FROM history"
     params: list[Any] = []
-    if keyword and keyword.strip():
-        kw = f"%{keyword.strip()}%"
+    kw_norm = _normalize_keyword(keyword)
+    if kw_norm:
+        kw = f"%{kw_norm}%"
         sql += " WHERE topic LIKE ? OR model_name LIKE ?"
         params.extend([kw, kw])
     with _connect() as conn:
@@ -127,7 +248,11 @@ def delete_record(record_id: int) -> bool:
     with _connect() as conn:
         cur = conn.execute("DELETE FROM history WHERE id = ?", (record_id,))
         conn.commit()
-        return cur.rowcount > 0
+        ok = cur.rowcount > 0
+        if ok:
+            logger.info("删除历史记录 #%d", record_id)
+            _invalidate_history_cache()
+        return ok
 
 
 def format_stages_mask(mask: str | None) -> str:
