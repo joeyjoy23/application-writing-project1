@@ -14,7 +14,11 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from db import init_db
-from utils.config import get_project_root, sync_session_llm_selection
+from utils.config import (
+    apply_pending_llm_selection,
+    get_project_root,
+    sync_session_llm_selection,
+)
 
 # ── 日志配置 ──
 
@@ -137,6 +141,7 @@ def main() -> None:
     init_session()
     try:
         sync_session_llm_selection()
+        apply_pending_llm_selection()
     except Exception as exc:
         _logger.warning("同步模型选择失败: %s", exc)
     init_db()

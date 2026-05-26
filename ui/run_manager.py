@@ -489,7 +489,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
     st.session_state.workflow_state = state
     locked_provider = st.session_state.provider
     locked_model = resolve_model_for_provider(locked_provider, st.session_state.model)
-    st.session_state.model = locked_model
+    # 勿写入 st.session_state.model：侧边栏 selectbox(key="model") 已绑定，会触发 StreamlitAPIException
     st.session_state.run_job = {
         "mode": mode,
         "question": question,
@@ -523,7 +523,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
     st.session_state.run_cancelled = False
     st.session_state.is_running = True
     st.session_state.failed_stage = None
-    logger.info("运行启动 mode=%s stages=%s model=%s", mode, stages, st.session_state.model)
+    logger.info("运行启动 mode=%s stages=%s model=%s", mode, stages, locked_model)
     return True
 
 

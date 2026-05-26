@@ -256,6 +256,19 @@ def build_settings(
     )
 
 
+def apply_pending_llm_selection() -> None:
+    """在侧边栏 widget 创建前应用历史载入等写入的待同步 provider/model。"""
+    if not hasattr(st, "session_state"):
+        return
+    pending_p = st.session_state.pop("_pending_provider", None)
+    pending_m = st.session_state.pop("_pending_model", None)
+    if pending_p in PROVIDER_OPTIONS:
+        st.session_state.provider = pending_p
+    if pending_m is not None and str(pending_m).strip():
+        prov = st.session_state.get("provider", "deepseek")
+        st.session_state.model = resolve_model_for_provider(prov, str(pending_m).strip())
+
+
 def sync_session_llm_selection() -> None:
     """每次页面加载校正 provider/model（修复网页 session 缓存旧 MiMo 模型名）。"""
     if not hasattr(st, "session_state"):

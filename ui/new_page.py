@@ -235,9 +235,9 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
     saved_provider = data.get("provider")
     saved_model = (data.get("model") or "").strip()
     if saved_provider in PROVIDER_OPTIONS:
-        st.session_state.provider = saved_provider
+        st.session_state["_pending_provider"] = saved_provider
     if saved_model:
-        st.session_state.model = saved_model
+        st.session_state["_pending_model"] = saved_model
 
     return True, ""
 
