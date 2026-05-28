@@ -14,15 +14,20 @@ from db.common import make_question_hash, topic_summary
 logger = logging.getLogger("app.db.sqlite")
 
 DB_PATH = get_project_root() / "history.db"
+_schema_ensured = False
 
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
+    global _schema_ensured
+    if _schema_ensured:
+        return
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS history (
@@ -39,16 +44,17 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at DESC)"
     )
-    for ddl in (
-        "ALTER TABLE history ADD COLUMN stages_mask TEXT NOT NULL DEFAULT '0000'",
-        "ALTER TABLE history ADD COLUMN question_hash TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE history ADD COLUMN raw_input TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE history ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
-    ):
-        try:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(history)")}
+    new_columns: dict[str, str] = {
+        "stages_mask": "ALTER TABLE history ADD COLUMN stages_mask TEXT NOT NULL DEFAULT '0000'",
+        "question_hash": "ALTER TABLE history ADD COLUMN question_hash TEXT NOT NULL DEFAULT ''",
+        "raw_input": "ALTER TABLE history ADD COLUMN raw_input TEXT NOT NULL DEFAULT ''",
+        "owner_id": "ALTER TABLE history ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
+        "is_starred": "ALTER TABLE history ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0",
+    }
+    for col_name, ddl in new_columns.items():
+        if col_name not in existing:
             conn.execute(ddl)
-        except sqlite3.OperationalError:
-            pass
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_history_question_model "
         "ON history(question_hash, model_name)"
@@ -75,6 +81,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_llm_cache_owner ON llm_cache(owner_id, updated_at DESC)"
     )
+    _schema_ensured = True
 
 
 def init_db() -> None:
@@ -200,16 +207,19 @@ def get_all_records(
     offset: int,
     owner_id: str,
     admin: bool,
+    starred_only: bool = False,
 ) -> list[dict[str, Any]]:
     init_db()
     sql = (
-        "SELECT id, created_at, topic, model_name, word_count, stages_mask, owner_id "
+        "SELECT id, created_at, topic, model_name, word_count, stages_mask, owner_id, is_starred "
         "FROM history WHERE 1=1"
     )
     params: list[Any] = []
     owner_sql, owner_params = _owner_filter(owner_id, admin)
     sql += owner_sql
     params.extend(owner_params)
+    if starred_only:
+        sql += " AND is_starred = 1"
     kw = (keyword or "").strip()
     if kw:
         sql += " AND (topic LIKE ? OR model_name LIKE ?)"
@@ -252,6 +262,24 @@ def get_record_by_id(
                 (record_id, owner_id),
             ).fetchone()
     return dict(row) if row else None
+
+
+def toggle_star(record_id: int, starred: bool, *, owner_id: str, admin: bool) -> bool:
+    """切换收藏（is_starred 字段）。"""
+    init_db()
+    with _connect() as conn:
+        if admin:
+            cur = conn.execute(
+                "UPDATE history SET is_starred = ? WHERE id = ?",
+                (1 if starred else 0, record_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE history SET is_starred = ? WHERE id = ? AND owner_id = ?",
+                (1 if starred else 0, record_id, owner_id),
+            )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def delete_record(record_id: int, *, owner_id: str, admin: bool) -> bool:

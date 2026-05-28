@@ -53,17 +53,63 @@ h1 {
 /* ── Stage Badges ── */
 .stage-badge {
   display: inline-block;
-  padding: 0.25rem 0.75rem;
+  padding: 0.4rem 1.2rem;
   border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+  font-size: 1.55rem;
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+/* Stage 主标题（badge 后的文字） */
+.stage-badge + strong,
+.stage-badge + b,
+/* badge 后紧跟的文本节点通过包装实现 */
+.stage-title {
+  font-size: 2.0rem;
+  font-weight: 700;
+  vertical-align: middle;
 }
 
 .stage-1 { background: #e3f2fd; color: #1565c0; }
 .stage-2 { background: #f3e5f5; color: #6a1b9a; }
 .stage-3 { background: #fff3e0; color: #e65100; }
 .stage-4 { background: #e8f5e9; color: #2e7d32; }
+
+/* ── Stage 分隔线 ── */
+.stage-divider {
+  border: none;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--c-border) 20%, var(--c-border) 80%, transparent);
+  margin: 1.25rem 0 1rem 0;
+}
+
+/* ── Stage 内容副标题（# 一、... / ## ★核心要点...）—— 缩小为原来的 2/3 ── */
+/* Streamlit markdown 渲染的 h2/h3 在各 Stage 内容区域出现时缩小 */
+.stage-content h2,
+.stage-content h3,
+/* 也覆盖直接用 st.markdown("# ...") 渲染出的标题 */
+.main .block-container > div > div > h2,
+.main .block-container > div > div > h3 {
+  font-size: 0.85em !important;
+  font-weight: 600 !important;
+  margin-top: 0.75em !important;
+  margin-bottom: 0.4em !important;
+}
+
+/* 更精确地只针对 LLM 输出中的小标题（h2=一级副题, h3=二级副题） */
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3 {
+  font-size: 0.82em !important;
+  font-weight: 600 !important;
+}
+
+/* 但保持页面级大标题（st.header / st.title）不受影响 */
+h1[data-testid="stHeading"],
+[data-testid="stHeading-1"] {
+  font-size: inherit !important;
+}
 
 /* ── Summary Box ── */
 .summary-box {

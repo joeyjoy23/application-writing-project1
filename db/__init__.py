@@ -28,6 +28,7 @@ __all__ = [
     "count_records",
     "get_record_by_id",
     "delete_record",
+    "toggle_star",
     "format_stages_mask",
     "make_question_hash",
     "ensure_guest_id",
@@ -107,13 +108,13 @@ def upsert_record(
         raw_input=raw_input,
         word_count=word_count,
         stages_mask=stages_mask,
-        **_scope_kwargs(),
+        owner_id=history_scope()[0],
     )
     invalidate_history_cache()
     return result
 
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(show_spinner=False)
 def get_all_records(
     keyword: str,
     scope_owner_id: str,
@@ -149,13 +150,8 @@ def delete_record(record_id: int) -> bool:
     return ok
 
 
-def get_cached_stage_result(*args, **kwargs):
-    from db.llm_cache_api import get_cached_stage_result as _fn
-
-    return _fn(*args, **kwargs)
-
-
-def save_cached_stage_result(*args, **kwargs):
-    from db.llm_cache_api import save_cached_stage_result as _fn
-
-    return _fn(*args, **kwargs)
+def toggle_star(record_id: int, starred: bool, *, owner_id: str, admin: bool) -> bool:
+    ok = _backend().toggle_star(record_id, starred, owner_id=owner_id, admin=admin)
+    if ok:
+        invalidate_history_cache()
+    return ok

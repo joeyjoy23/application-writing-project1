@@ -19,7 +19,16 @@ def _admin_password_from_env() -> str:
 
 
 def ensure_guest_id() -> str:
-    """每个浏览器会话一个 guest_id，用于隔离历史记录。"""
+    """每个浏览器会话一个 guest_id，用于隔离历史记录。
+
+    本地 SQLite 模式下返回固定值 ``"local"``，确保服务重启/页面刷新后
+    历史记录和 LLM 缓存仍可命中（不会因 session 变更产生新 UUID 而丢失）。
+    仅在 Neon PostgreSQL 多用户云部署时才使用会话级 UUID。
+    """
+    # 本地模式：固定 owner_id，跨 session 稳定
+    if not (os.getenv("DATABASE_URL") or "").strip():
+        return "local"
+    # 云模式：每会话一个 UUID 做多租户隔离
     gid = st.session_state.get("guest_id")
     if not gid:
         gid = str(uuid.uuid4())

@@ -12,6 +12,10 @@ import streamlit as st
 
 logger = logging.getLogger("app.run_manager")
 
+# ── 轮询间隔配置 ──
+_POLL_INTERVAL_FAST = 0.5    # 状态转换后快速进入下一状态（秒）
+_POLL_INTERVAL_SLOW = 1.0    # API 调用中轮询间隔（秒），减少闪烁
+
 from llm.client import LLMClient, RunCancelled
 from llm.usage import ChatUsage
 from utils.config import build_settings, resolve_model_for_provider
@@ -745,11 +749,47 @@ def _finish_job_success(
 
 
 
+def _poll_run_progress(
+    question: str,
+) -> bool:
+    """轮询 API 线程进度（纯判断，不渲染任何 UI）。
+
+    返回 True 表示线程仍在运行（应继续轮询），
+    返回 False 表示已进入需要整页 rerun 的状态（调用方应 st.rerun()）。
+    """
+    job = st.session_state.run_job
+    if not job or job["phase"] != "api":
+        return False
+
+    _sync_cancel_from_settings(job)
+    thread = job.get("thread")
+
+    # 还没启动线程 → 需要整页 rerun 来启动
+    if thread is None:
+        return False
+
+    if not thread.is_alive():
+        return False  # 线程结束，交给主流程处理状态转换
+
+    # 检查取消
+    if job["cancel_event"].is_set():
+        return False  # 已取消，需整页处理
+
+    # 线程仍在运行 → 刷新等待
+    time.sleep(_POLL_INTERVAL_SLOW)
+    st.rerun()
+    return True  # 不可达（rerun 抛出异常），但类型检查需要
+
+
 def advance_run_job(
     question: str,
     slots: tuple[st.empty, st.empty, st.empty, st.empty],
 ) -> None:
-    """轮询后台 API；允许侧边栏在 rerun 间切换模型并取消。"""
+    """轮询后台 API；允许侧边栏在 rerun 间切换模型并取消。
+
+    策略：API 调用中用 fragment 局部刷新减少闪烁；
+    状态转换点（启动/完成/失败/flush）仍用整页 rerun。
+    """
     job = st.session_state.run_job
     if not job:
         return
@@ -764,8 +804,9 @@ def advance_run_job(
 
     if job["phase"] == "api":
         if job.get("thread") is None:
+            # ── 启动阶段 ──
             if _begin_cached_or_api(job, state, ui, stage_num):
-                time.sleep(0.2)
+                time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
             _prepare_stage_api_logs(ui, stage_num)
@@ -774,14 +815,16 @@ def advance_run_job(
                 _start_parallel_23_thread(job, state)
             else:
                 _start_api_thread(job, stage_num, state)
-            time.sleep(0.2)
+            time.sleep(_POLL_INTERVAL_FAST)
             st.rerun()
+            return
 
         thread: threading.Thread = job["thread"]
         ui.sync_stream_from_job(job)
         ui.persist_logs(job)
 
         if thread.is_alive():
+            # 检查取消
             if job["cancel_event"].is_set():
                 _stop_api_thread(thread, job["cancel_event"])
                 _finish_job_cancelled(
@@ -791,13 +834,18 @@ def advance_run_job(
                     state,
                     slots,
                 )
-                time.sleep(0.2)
+                time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
-            time.sleep(0.2)
+
+            # ★ 线程仍在运行 → 进入 fragment 局部轮询
+            _poll_run_progress(question)
+            # fragment 返回后（线程结束/取消），重新进入主流程
+            time.sleep(_POLL_INTERVAL_FAST)
             st.rerun()
             return
 
+        # ── 线程结束，处理结果 ──
         with _ensure_job_lock(job):
             err = job.get("thread_error")
             thread_result = job.get("thread_result")
@@ -805,7 +853,7 @@ def advance_run_job(
             kind, msg = err
             if kind == "cancelled":
                 _finish_job_cancelled(ui, job, msg, state, slots)
-                time.sleep(0.2)
+                time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
             if kind == "timeout":
@@ -827,11 +875,11 @@ def advance_run_job(
                     job["thread_result"] = None
                     job["stream_total"] = 0
                     job["stream_preview"] = ""
-                    time.sleep(0.2)
+                    time.sleep(_POLL_INTERVAL_FAST)
                     st.rerun()
                     return
                 _finish_job_success(ui, job, state, slots)
-                time.sleep(0.2)
+                time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
             else:
@@ -846,7 +894,7 @@ def advance_run_job(
                 _np_sync_slots_from_state(state, slots)
                 clear_run_job()
                 st.error(msg)
-                time.sleep(0.2)
+                time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
 
@@ -867,7 +915,7 @@ def advance_run_job(
             ui.log(PARSING_RESPONSE)
             ui.log("Stage 2 与 Stage 3 并行完成")
             ui.persist_logs(job)
-            time.sleep(0.2)
+            time.sleep(_POLL_INTERVAL_FAST)
             st.rerun()
             return
 
@@ -881,7 +929,7 @@ def advance_run_job(
             ui.log(PARSING_RESPONSE)
             ui.set_progress(22 + stage_num * 18, text=f"Stage {stage_num} · 解析完成")
             ui.persist_logs(job)
-            time.sleep(0.2)
+            time.sleep(_POLL_INTERVAL_FAST)
             st.rerun()
             return
 
@@ -907,7 +955,7 @@ def advance_run_job(
             if flush_idx + 1 < len(pending):
                 job["_flush_queue_idx"] = flush_idx + 1
                 job["phase"] = "flush"
-                time.sleep(0.2)
+                time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
             job["stage_index"] += len(pending)
@@ -919,9 +967,9 @@ def advance_run_job(
         if job["stage_index"] < len(job["stages"]):
             job["phase"] = "api"
             job["thread"] = None
-            time.sleep(0.2)
+            time.sleep(_POLL_INTERVAL_FAST)
             st.rerun()
             return
         _finish_job_success(ui, job, state, slots)
-        time.sleep(0.2)
+        time.sleep(_POLL_INTERVAL_FAST)
         st.rerun()

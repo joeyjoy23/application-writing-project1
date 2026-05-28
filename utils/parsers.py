@@ -74,13 +74,22 @@ def _extract_json(text: str) -> dict[str, Any]:
         pass
 
     start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end > start:
-        try:
-            data = json.loads(text[start : end + 1])
-            if isinstance(data, dict):
-                return data
-        except json.JSONDecodeError:
-            pass
+    if start == -1:
+        return {"_parse_error": True, "_raw": text[:2000]}
+
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    data = json.loads(text[start : i + 1])
+                    if isinstance(data, dict):
+                        return data
+                except json.JSONDecodeError:
+                    pass
+                break
 
     return {"_parse_error": True, "_raw": text[:2000]}

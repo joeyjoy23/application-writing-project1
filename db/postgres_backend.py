@@ -24,10 +24,12 @@ CREATE TABLE IF NOT EXISTS history (
     stages_mask CHAR(4) NOT NULL DEFAULT '0000',
     question_hash TEXT NOT NULL DEFAULT '',
     raw_input TEXT NOT NULL DEFAULT '',
+    is_starred INTEGER NOT NULL DEFAULT 0,
     UNIQUE (owner_id, question_hash, model_name)
 );
 CREATE INDEX IF NOT EXISTS idx_history_owner_created ON history (owner_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC);
+ALTER TABLE history ADD COLUMN IF NOT EXISTS is_starred INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS llm_cache (
     cache_key TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,
@@ -187,16 +189,19 @@ def get_all_records(
     offset: int,
     owner_id: str,
     admin: bool,
+    starred_only: bool = False,
 ) -> list[dict[str, Any]]:
     init_db()
     sql = (
-        "SELECT id, created_at, topic, model_name, word_count, stages_mask, owner_id "
+        "SELECT id, created_at, topic, model_name, word_count, stages_mask, owner_id, is_starred "
         "FROM history WHERE 1=1"
     )
     params: list[Any] = []
     owner_sql, owner_params = _owner_filter(owner_id, admin)
     sql += owner_sql
     params.extend(owner_params)
+    if starred_only:
+        sql += " AND is_starred = 1"
     kw = (keyword or "").strip()
     if kw:
         sql += " AND (topic ILIKE %s OR model_name ILIKE %s)"
@@ -208,13 +213,15 @@ def get_all_records(
     return [dict(row) for row in rows]
 
 
-def count_records(keyword: str, *, owner_id: str, admin: bool) -> int:
+def count_records(keyword: str, *, owner_id: str, admin: bool, starred_only: bool = False) -> int:
     init_db()
     sql = "SELECT COUNT(*) AS c FROM history WHERE 1=1"
     params: list[Any] = []
     owner_sql, owner_params = _owner_filter(owner_id, admin)
     sql += owner_sql
     params.extend(owner_params)
+    if starred_only:
+        sql += " AND is_starred = 1"
     kw = (keyword or "").strip()
     if kw:
         sql += " AND (topic ILIKE %s OR model_name ILIKE %s)"
@@ -240,6 +247,24 @@ def get_record_by_id(
                 (record_id, owner_id),
             ).fetchone()
     return dict(row) if row else None
+
+
+def toggle_star(record_id: int, starred: bool, *, owner_id: str, admin: bool) -> bool:
+    """切换收藏（is_starred 字段）。"""
+    init_db()
+    with _connect() as conn:
+        if admin:
+            cur = conn.execute(
+                "UPDATE history SET is_starred = %s WHERE id = %s",
+                (1 if starred else 0, record_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE history SET is_starred = %s WHERE id = %s AND owner_id = %s",
+                (1 if starred else 0, record_id, owner_id),
+            )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def delete_record(record_id: int, *, owner_id: str, admin: bool) -> bool:

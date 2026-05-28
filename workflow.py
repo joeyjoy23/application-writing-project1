@@ -24,6 +24,10 @@ from utils.stage4_input import build_stage4_user_sections
 PROMPTS_DIR = get_project_root() / "prompts"
 
 
+from functools import lru_cache
+
+
+@lru_cache(maxsize=8)
 def load_prompt(name: str) -> str:
     path = PROMPTS_DIR / name
     if not path.is_file():
@@ -231,7 +235,7 @@ class GaokaoWritingWorkflow:
     def run_full_pipeline(
         self, question: str, *, student_level: str = "中等"
     ) -> WorkflowState:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ThreadPoolExecutor, wait
 
         state = WorkflowState(question=question)
         try:
@@ -248,10 +252,14 @@ class GaokaoWritingWorkflow:
                 f3 = pool.submit(
                     self.run_stage3, question, state.stage1.structured_json
                 )
-                for fut in as_completed([f2, f3]):
+                done, _ = wait([f2, f3])
+                errors = []
+                for fut in done:
                     exc = fut.exception()
                     if exc:
-                        raise exc
+                        errors.append(exc)
+                if errors:
+                    raise RuntimeError(f"Stage2/3 共 {len(errors)} 个阶段失败") from errors[0]
                 state.stage2 = f2.result()
                 state.stage3 = f3.result()
         except Exception as e:

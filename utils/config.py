@@ -352,14 +352,14 @@ def apply_pending_llm_selection() -> None:
 
 
 def sync_session_llm_selection() -> None:
-    """每次页面加载校正 provider/model（修复网页 session 缓存旧 MiMo 模型名）。"""
+    """每次页面加载校正 model 名称（如旧 MiMo 模型名），但不覆盖用户已选择的 provider。"""
     if not hasattr(st, "session_state"):
         return
-    prov = _config_value("LLM_PROVIDER", st.session_state.get("provider", "deepseek"))
-    prov = prov.lower()
+    # provider 由用户在侧边栏选择，init_session() 已设默认值，不再从 .env 强制覆盖
+    prov = st.session_state.get("provider", "deepseek")
     if prov not in PROVIDER_OPTIONS:
-        prov = st.session_state.get("provider", "deepseek")
-    st.session_state.provider = prov
+        prov = "deepseek"
+        st.session_state.provider = prov
 
     raw_model = st.session_state.get("model") or _config_value("LLM_MODEL", "")
     fixed = resolve_model_for_provider(prov, raw_model)

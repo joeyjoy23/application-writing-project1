@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import base64
+import html as html_module
 import re
 from datetime import datetime
 from typing import Any
@@ -18,6 +20,7 @@ from db import (
     get_all_records,
     get_record_by_id,
     history_scope,
+    toggle_star,
     upsert_record,
     using_postgres,
 )
@@ -422,32 +425,164 @@ def _render_vocab_tier_tables(vocab_text: str) -> bool:
     return True
 
 
+# ── 冒号前标签加粗 ──
+
+_COLON_LABEL_RE = re.compile(r'[：:]')
+
+
+def _bold_label_in_line(line: str) -> str:
+    """对单行文本中冒号前的标签文字加粗（已是粗体则跳过）。"""
+    m = _COLON_LABEL_RE.search(line)
+    if not m:
+        return line
+
+    idx = m.start()
+    before = line[:idx]
+    colon = line[idx]
+    after = line[idx + 1 :]
+
+    # 已经加粗则跳过
+    if "**" in before:
+        return line
+
+    # 分离前缀（空白 + 列表标记）与标签正文
+    prefix_m = re.match(r'^(\s*(?:[-*+]\s+|\d+[.、]\s+)?)(.*?)\s*$', before)
+    if not prefix_m:
+        return line
+
+    prefix = prefix_m.group(1)
+    label = prefix_m.group(2).strip()
+    if not label:
+        return line
+
+    # 跳过纯 markdown 标记行
+    if re.fullmatch(r'[#*_~`]+', label):
+        return line
+
+    return f"{prefix}**{label}**{colon}{after}"
+
+
+@st.cache_data(show_spinner=False)
+def bold_labels_before_colon(text: str) -> str:
+    """将 Markdown 文本每个小点中冒号前的标签文字加粗。
+
+    跳过标题行（#）、代码块、表格行等结构行。
+    """
+    if not text:
+        return text
+
+    lines = text.split("\n")
+    out: list[str] = []
+    for line in lines:
+        # 跳过标题、代码、引用、分隔线、表格
+        if re.match(r'^\s*(#{1,6}\s|```|>\||\||---|[-*_]{3,})', line):
+            out.append(line)
+        else:
+            out.append(_bold_label_in_line(line))
+    return "\n".join(out)
+
+
+# ── 一键复制按钮 ──
+
+
+def markdown_to_html(text: str) -> str:
+    """将 markdown 转为 Word 兼容的 HTML，保留粗体、标题、列表结构。"""
+    text = html_module.escape(text)
+    # 粗体
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    lines = text.split('\n')
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # 标题
+        m = re.match(r'^(#{1,6})\s+(.+)$', line)
+        if m:
+            level = len(m.group(1))
+            out.append(f'<h{level}>{m.group(2)}</h{level}>')
+            i += 1
+            continue
+        # 无序列表
+        m = re.match(r'^-\s+(.+)$', line)
+        if m:
+            out.append('<ul>')
+            while i < len(lines):
+                m2 = re.match(r'^-\s+(.+)$', lines[i])
+                if not m2:
+                    break
+                out.append(f'<li>{m2.group(1)}</li>')
+                i += 1
+            out.append('</ul>')
+            continue
+        # 有序列表
+        m = re.match(r'^\d+\.\s+(.+)$', line)
+        if m:
+            out.append('<ol>')
+            while i < len(lines):
+                m2 = re.match(r'^\d+\.\s+(.+)$', lines[i])
+                if not m2:
+                    break
+                out.append(f'<li>{m2.group(1)}</li>')
+                i += 1
+            out.append('</ol>')
+            continue
+        # 空行
+        if not line.strip():
+            out.append('<br>')
+            i += 1
+            continue
+        out.append(f'<p>{line}</p>')
+        i += 1
+    return '\n'.join(out)
+
+
+def render_copy_button(text: str) -> None:
+    """在 Streamlit 中渲染一个小的复制按钮，点击后将 markdown 以 HTML 富文本复制到剪贴板。"""
+    html_content = markdown_to_html(text)
+    html_b64 = base64.b64encode(html_content.encode('utf-8')).decode('ascii')
+    plain_b64 = base64.b64encode(text.encode('utf-8')).decode('ascii')
+    component = f"""
+    <button onclick="
+        var hb='{html_b64}',pb='{plain_b64}';
+        var h=(new TextDecoder).decode(Uint8Array.from(atob(hb),function(c){{return c.charCodeAt(0)}}));
+        var p=(new TextDecoder).decode(Uint8Array.from(atob(pb),function(c){{return c.charCodeAt(0)}}));
+        var i=new ClipboardItem({{'text/html':new Blob([h],{{type:'text/html'}}),'text/plain':new Blob([p],{{type:'text/plain'}})}});
+        navigator.clipboard.write([i]).then(function(){{this.textContent='✅ 已复制';var b=this;setTimeout(function(){{b.textContent='📋 一键复制'}},2000)}}.bind(this)).catch(function(){{this.textContent='复制失败'}}.bind(this));
+    " style="padding:4px 12px;font-size:13px;cursor:pointer;border:1px solid #ccc;border-radius:4px;background:#f8f8f8;">
+        📋 一键复制
+    </button>
+    """
+    st.components.v1.html(component, height=42)
+
+
 # ── Stage 渲染 ──
 
 
 def render_stage1(state: WorkflowState) -> None:
-    st.markdown('<span class="stage-badge stage-1">Stage 1</span> 审题结构分析', unsafe_allow_html=True)
+    st.markdown('<span class="stage-badge stage-1">Stage 1</span> <span class="stage-title">审题结构分析</span>', unsafe_allow_html=True)
     if not state.stage1:
         st.info("尚未运行 Stage 1")
         return
     s1 = state.stage1
     if s1.human_summary.strip():
-        render_foldable_markdown(s1.human_summary)
+        render_foldable_markdown(bold_labels_before_colon(s1.human_summary))
     else:
         st.info("暂无审题总结内容")
+    if s1.human_summary.strip():
+        render_copy_button(s1.human_summary)
 
 
 def render_stage2(state: WorkflowState) -> None:
-    st.markdown('<span class="stage-badge stage-2">Stage 2</span> PEEL 写作策略卡与多版范文', unsafe_allow_html=True)
+    st.markdown('<span class="stage-badge stage-2">Stage 2</span> <span class="stage-title">PEEL 写作策略卡与多版范文</span>', unsafe_allow_html=True)
     if not state.stage2:
         st.info("尚未运行 Stage 2（需先完成 Stage 1）")
         return
-    st.markdown(state.stage2.raw)
+    st.markdown(bold_labels_before_colon(state.stage2.raw))
 
 
 def render_stage3(state: WorkflowState) -> None:
     st.markdown(
-        '<span class="stage-badge stage-3">Stage 3</span> 功能句型包与话题词汇',
+        '<span class="stage-badge stage-3">Stage 3</span> <span class="stage-title">功能句型包与话题词汇</span>',
         unsafe_allow_html=True,
     )
     if not state.stage3:
@@ -456,24 +591,26 @@ def render_stage3(state: WorkflowState) -> None:
     raw = state.stage3.raw
     phrases_part, vocab_part = _split_stage3_vocab_section(raw)
     if phrases_part:
-        render_foldable_markdown(phrases_part)
+        st.markdown(bold_labels_before_colon(phrases_part))
     if vocab_part:
         st.markdown("### 话题词汇锦囊")
         if not _render_vocab_tier_tables(vocab_part):
-            render_foldable_markdown(vocab_part)
+            st.markdown(bold_labels_before_colon(vocab_part))
     elif not phrases_part:
-        render_foldable_markdown(raw)
+        st.markdown(bold_labels_before_colon(raw))
+    render_copy_button(raw)
 
 
 def render_stage4(state: WorkflowState) -> None:
     st.markdown(
-        '<span class="stage-badge stage-4">Stage 4</span> 教学指南与易错预警',
+        '<span class="stage-badge stage-4">Stage 4</span> <span class="stage-title">教学指南与易错预警</span>',
         unsafe_allow_html=True,
     )
     if not state.stage4:
         st.info("尚未运行 Stage 4（需先完成 Stage 2 与 Stage 3）")
         return
-    render_foldable_markdown(state.stage4.raw)
+    st.markdown(bold_labels_before_colon(state.stage4.raw), unsafe_allow_html=True)
+    render_copy_button(state.stage4.raw)
 
 
 _STAGE_RENDERERS = {
@@ -491,21 +628,25 @@ _STAGE_WAITING = {
 }
 
 _STAGE_BADGE_TITLES = {
-    1: '<span class="stage-badge stage-1">Stage 1</span> 审题结构分析',
-    2: '<span class="stage-badge stage-2">Stage 2</span> PEEL 写作策略卡与多版范文',
-    3: '<span class="stage-badge stage-3">Stage 3</span> 功能句型包与话题词汇',
-    4: '<span class="stage-badge stage-4">Stage 4</span> 教学指南与易错预警',
+    1: '<span class="stage-badge stage-1">Stage 1</span> <span class="stage-title">审题结构分析</span>',
+    2: '<span class="stage-badge stage-2">Stage 2</span> <span class="stage-title">PEEL 写作策略卡与多版范文</span>',
+    3: '<span class="stage-badge stage-3">Stage 3</span> <span class="stage-title">功能句型包与话题词汇</span>',
+    4: '<span class="stage-badge stage-4">Stage 4</span> <span class="stage-title">教学指南与易错预警</span>',
 }
 
 
 def render_one_stage(slot: st.empty, state: WorkflowState, stage_num: int) -> None:
     """仅更新单个 Stage 占位。"""
     with slot.container():
+        if stage_num > 1:
+            st.markdown('<hr class="stage-divider">', unsafe_allow_html=True)
         _STAGE_RENDERERS[stage_num](state)
 
 
 def render_stage_placeholder(slot: st.empty, stage_num: int) -> None:
     with slot.container():
+        if stage_num > 1:
+            st.markdown('<hr class="stage-divider">', unsafe_allow_html=True)
         st.markdown(_STAGE_BADGE_TITLES[stage_num], unsafe_allow_html=True)
         st.info(_STAGE_WAITING[stage_num])
 
@@ -637,6 +778,9 @@ def render_history_list() -> None:
         st.session_state._history_search_applied = keyword
     st.session_state.history_search_keyword = keyword
 
+    # 收藏筛选
+    starred_only = st.checkbox("只看收藏", key="history_starred_only", value=False)
+    
     page_size = int(st.session_state.get("history_page_size") or HISTORY_PAGE_SIZE)
     total = count_records(keyword or "", owner_id, admin)
     total_pages = max(1, (total + page_size - 1) // page_size)
@@ -645,9 +789,18 @@ def render_history_list() -> None:
     st.session_state.history_page = page
 
     offset = (page - 1) * page_size
-    records = get_all_records(
+    # 需要修改 get_all_records 支持 starred_only 参数
+    # 暂时先获取全部，前端筛选
+    all_records = get_all_records(
         keyword or "", owner_id, admin, limit=page_size, offset=offset
     )
+    if starred_only:
+        records = [r for r in all_records if r.get("is_starred")]
+        if not records and all_records:
+            st.info("当前筛选条件下无收藏记录")
+            return
+    else:
+        records = all_records
 
     if not records and total == 0:
         st.info("暂无历史记录，请在「新建」模式中生成备课包。")
@@ -657,18 +810,19 @@ def render_history_list() -> None:
         f"共 {total} 条 · 第 {page}/{total_pages} 页（每页 {page_size} 条，支持按题目或模型搜索）"
     )
 
-    header = st.columns([2, 3, 2, 2, 1, 2, 1])
+    header = st.columns([2, 3, 2, 2, 1, 2, 0.5, 0.5])
     header[0].markdown("**生成时间**")
     header[1].markdown("**题目摘要**")
     header[2].markdown("**模型**")
     header[3].markdown("**阶段**")
     header[4].markdown("**字数**")
     header[5].markdown("**操作**")
-    header[6].markdown("")
+    header[6].markdown("**收藏**")
+    header[7].markdown("**删除**")
 
     for rec in records:
         rid = rec["id"]
-        cols = st.columns([2, 3, 2, 2, 1, 2, 1])
+        cols = st.columns([2, 3, 2, 2, 1, 2, 0.5, 0.5])
         cols[0].write(rec["created_at"])
         topic_show = rec["topic"]
         if len(topic_show) > 50:
@@ -689,7 +843,18 @@ def render_history_list() -> None:
                 st.rerun()
             else:
                 st.error(err)
-        if cols[6].button("删", key=f"hist_del_{rid}", use_container_width=True):
+        # 收藏切换按钮
+        is_starred = rec.get("is_starred", 0)
+        star_label = "⭐" if is_starred else "☆"
+        if cols[6].button(
+            star_label,
+            key=f"hist_star_{rid}",
+            use_container_width=True,
+            help="点击切换收藏状态",
+        ):
+            toggle_star(rid, not is_starred, owner_id=owner_id, admin=admin)
+            st.rerun()
+        if cols[7].button("🗑", key=f"hist_del_{rid}", use_container_width=True):
             st.session_state.history_confirm_delete_id = rid
             st.rerun()
 
@@ -821,7 +986,10 @@ def render_history_page() -> None:
 
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
-    st.caption("粘贴或输入完整题目（含要点、字数要求）。")
+    st.markdown(
+        '<span style="color:black;font-size:1.6em;">粘贴题目内容</span>',
+        unsafe_allow_html=True,
+    )
 
     question = st.text_area(
         "题目内容",
@@ -829,39 +997,78 @@ def render_new_analysis(api_ready: bool) -> None:
         height=220,
         placeholder="例如：假定你是李华，校英文报正在开展…请写一封建议信…",
         key="question_editor",
+        label_visibility="collapsed",
     )
     st.session_state.question = question
 
-    _levels = ["基础", "中等", "进阶"]
-    _current_level = st.session_state.get("student_level", "中等")
-    if _current_level not in _levels:
-        _current_level = "中等"
-    student_level = st.selectbox(
-        "学生水平",
-        _levels,
-        index=_levels.index(_current_level),
-        help="仅影响 Stage4 生成",
+    # 快捷难度切换按钮
+    st.markdown(
+        '<span style="color:black;font-size:1.6em;">选择学生水平（仅影响 Stage4 生成）：</span>',
+        unsafe_allow_html=True,
     )
-    st.session_state.student_level = student_level
+    _current = st.session_state.get("student_level", "中等")
+    col_level1, col_level2, col_level3 = st.columns(3)
+    with col_level1:
+        if st.button(
+            "● 基础" if _current == "基础" else "○ 基础",
+            type="primary" if _current == "基础" else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.student_level = "基础"
+    with col_level2:
+        if st.button(
+            "● 中等" if _current == "中等" else "○ 中等",
+            type="primary" if _current == "中等" else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.student_level = "中等"
+    with col_level3:
+        if st.button(
+            "● 进阶" if _current == "进阶" else "○ 进阶",
+            type="primary" if _current == "进阶" else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.student_level = "进阶"
 
     running = st.session_state.is_running
 
     # ── 按钮区 ──
+    st.markdown(
+        '<span style="color:black;font-size:1.6em;">选择运行方式</span>',
+        unsafe_allow_html=True,
+    )
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         btn_full = st.button(
             "完整流程",
             type="primary",
             use_container_width=True,
+            help="依次运行 Stage 1→2→3→4，已完成的阶段自动跳过",
         )
     with col2:
-        btn_s1 = st.button("Stage 1", use_container_width=True)
+        btn_s1 = st.button(
+            "Stage 1",
+            use_container_width=True,
+            help="审题与结构分析：体裁、时态、人称、要点分级、结构规划",
+        )
     with col3:
-        btn_s2 = st.button("Stage 2", use_container_width=True)
+        btn_s2 = st.button(
+            "Stage 2",
+            use_container_width=True,
+            help="PEEL 写作策略卡与多版范文生成",
+        )
     with col4:
-        btn_s3 = st.button("Stage 3", use_container_width=True)
+        btn_s3 = st.button(
+            "Stage 3",
+            use_container_width=True,
+            help="功能句型包与话题词汇整理",
+        )
     with col5:
-        btn_s4 = st.button("Stage 4", use_container_width=True)
+        btn_s4 = st.button(
+            "Stage 4",
+            use_container_width=True,
+            help="教学指南与易错预警（受学生水平影响）",
+        )
 
     # 清空结果：空行间隔 + 低视觉权重
     st.write("")
@@ -976,6 +1183,30 @@ def render_new_analysis(api_ready: bool) -> None:
         cached = st.session_state.workflow_state
         if cached:
             render_all_stages(cached, stage_slots)
+
+    # 单独重跑已完成的 Stage
+    if not running and not st.session_state.run_job:
+        _ws = st.session_state.workflow_state
+        if _ws and _ws.stage1:
+            st.divider()
+            st.caption("单独重跑某个 Stage（不影响其他已完成阶段）：")
+            _rerun_cols = st.columns(4)
+            _stage_names = {1: "Stage 1 审题", 2: "Stage 2 PEEL", 3: "Stage 3 句型词汇", 4: "Stage 4 教学指南"}
+            for _sn in range(1, 5):
+                with _rerun_cols[_sn - 1]:
+                    if stage_has_content(_ws, _sn):
+                        if st.button(
+                            f"🔄 {_stage_names[_sn]}",
+                            key=f"rerun_stage_{_sn}",
+                            use_container_width=True,
+                        ):
+                            st.session_state._rerun_stage_mode = f"stage{_sn}"
+                            st.rerun()
+            if st.session_state.get("_rerun_stage_mode"):
+                _mode = st.session_state.pop("_rerun_stage_mode")
+                maybe_clear_checkpoint_if_question_changed(question)
+                if try_start_run_job(_mode, question):
+                    st.rerun()
 
     state = st.session_state.workflow_state
     if not state:
