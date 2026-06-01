@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Iterator
@@ -12,37 +14,46 @@ from db.common import make_question_hash, topic_summary
 
 logger = logging.getLogger("app.db.postgres")
 
-_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS history (
-    id BIGSERIAL PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    topic TEXT NOT NULL,
-    model_name TEXT NOT NULL,
-    full_content TEXT NOT NULL,
-    word_count INTEGER NOT NULL DEFAULT 0,
-    stages_mask CHAR(4) NOT NULL DEFAULT '0000',
-    question_hash TEXT NOT NULL DEFAULT '',
-    raw_input TEXT NOT NULL DEFAULT '',
-    is_starred INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (owner_id, question_hash, model_name)
-);
-CREATE INDEX IF NOT EXISTS idx_history_owner_created ON history (owner_id, id DESC);
-CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC);
-ALTER TABLE history ADD COLUMN IF NOT EXISTS is_starred INTEGER NOT NULL DEFAULT 0;
-CREATE TABLE IF NOT EXISTS llm_cache (
-    cache_key TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    model_name TEXT NOT NULL,
-    stage INTEGER NOT NULL,
-    prompt_rev TEXT NOT NULL,
-    result_json TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_llm_cache_owner ON llm_cache (owner_id, updated_at DESC);
-"""
+# Cloud 多 worker / 多会话并发跑 DDL 时易死锁，用进程内锁 + PG advisory lock
+_schema_ensured = False
+_init_lock = threading.Lock()
+_ADVISORY_LOCK_KEY = 873421905
+
+_SCHEMA_STATEMENTS: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS history (
+        id BIGSERIAL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        full_content TEXT NOT NULL,
+        word_count INTEGER NOT NULL DEFAULT 0,
+        stages_mask CHAR(4) NOT NULL DEFAULT '0000',
+        question_hash TEXT NOT NULL DEFAULT '',
+        raw_input TEXT NOT NULL DEFAULT '',
+        is_starred INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (owner_id, question_hash, model_name)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_history_owner_created ON history (owner_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC)",
+    "ALTER TABLE history ADD COLUMN IF NOT EXISTS is_starred INTEGER NOT NULL DEFAULT 0",
+    """
+    CREATE TABLE IF NOT EXISTS llm_cache (
+        cache_key TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        stage INTEGER NOT NULL,
+        prompt_rev TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_llm_cache_owner ON llm_cache (owner_id, updated_at DESC)",
+)
 
 
 def database_url() -> str:
@@ -61,14 +72,54 @@ def _connect() -> Iterator[Any]:
         yield conn
 
 
+def _is_retryable_db_exc(exc: BaseException) -> bool:
+    name = type(exc).__name__
+    if name in ("DeadlockDetected", "LockNotAvailable", "SerializationFailure"):
+        return True
+    cause = getattr(exc, "__cause__", None)
+    return _is_retryable_db_exc(cause) if cause else False
+
+
+def _apply_schema(conn: Any) -> None:
+    conn.execute("SELECT pg_advisory_lock(%s)", (_ADVISORY_LOCK_KEY,))
+    try:
+        for stmt in _SCHEMA_STATEMENTS:
+            conn.execute(stmt.strip())
+    finally:
+        conn.execute("SELECT pg_advisory_unlock(%s)", (_ADVISORY_LOCK_KEY,))
+
+
 def init_db() -> None:
-    with _connect() as conn:
-        for stmt in _SCHEMA_SQL.split(";"):
-            s = stmt.strip()
-            if s:
-                conn.execute(s)
-        conn.commit()
-    logger.info("PostgreSQL history 表已就绪")
+    global _schema_ensured
+    if _schema_ensured:
+        return
+    with _init_lock:
+        if _schema_ensured:
+            return
+        last_err: BaseException | None = None
+        for attempt in range(5):
+            try:
+                with _connect() as conn:
+                    _apply_schema(conn)
+                    conn.commit()
+                _schema_ensured = True
+                logger.info("PostgreSQL history 表已就绪")
+                return
+            except Exception as exc:
+                last_err = exc
+                if _is_retryable_db_exc(exc) and attempt < 4:
+                    wait = 0.15 * (2**attempt)
+                    logger.warning(
+                        "PostgreSQL 建表冲突，%ss 后重试 (%d/5): %s",
+                        wait,
+                        attempt + 1,
+                        type(exc).__name__,
+                    )
+                    time.sleep(wait)
+                    continue
+                raise
+        if last_err:
+            raise last_err
 
 
 def _owner_filter(owner_id: str, admin: bool) -> tuple[str, list[Any]]:

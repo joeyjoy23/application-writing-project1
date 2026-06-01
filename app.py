@@ -13,7 +13,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from db import init_db
+from db import init_db, using_postgres
 from utils.config import (
     apply_pending_llm_selection,
     get_project_root,
@@ -174,7 +174,15 @@ def main() -> None:
         apply_pending_llm_selection()
     except Exception as exc:
         _logger.warning("同步模型选择失败: %s", exc)
-    init_db()
+    try:
+        init_db()
+    except Exception as exc:
+        _logger.exception("数据库初始化失败: %s", exc)
+        if using_postgres():
+            st.error(
+                "历史库连接异常（可能是短暂并发冲突）。请刷新页面重试；"
+                "若仍失败，请在 Streamlit Cloud 中 Reboot app。"
+            )
     _logger.info("应用启动")
 
     # 延迟导入，避免循环依赖
