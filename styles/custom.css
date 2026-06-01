@@ -429,3 +429,70 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 footer {
   visibility: hidden;
 }
+
+/* ── 清空结果按钮（右对齐描边样式） ── */
+.clear-results-col-marker {
+  display: none;
+  margin: 0;
+  padding: 0;
+  height: 0;
+}
+
+.main div[data-testid="column"]:has(.clear-results-col-marker)
+  + div[data-testid="column"]
+  .stButton
+  > button {
+  margin-top: 0.15rem;
+  background: var(--c-card) !important;
+  border: 1px dashed var(--c-border) !important;
+  color: var(--c-ink-muted) !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em;
+  padding: 0.35rem 0.65rem !important;
+  min-height: 2.15rem;
+  box-shadow: none !important;
+}
+
+.main div[data-testid="column"]:has(.clear-results-col-marker)
+  + div[data-testid="column"]
+  .stButton
+  > button:hover {
+  background: var(--c-danger-light) !important;
+  border-color: rgb(155 61 61 / 0.45) !important;
+  border-style: solid !important;
+  color: var(--c-danger) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.main div[data-testid="column"]:has(.clear-results-col-marker)
+  + div[data-testid="column"]
+  .stButton
+  > button:active {
+  transform: scale(0.98);
+}
+
+/* 清空确认提示框 */
+.clear-confirm-box {
+  background: var(--c-danger-light);
+  border: 1px solid rgb(155 61 61 / 0.22);
+  border-left: 3px solid var(--c-danger);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem 0.75rem;
+  margin: 0.75rem 0 0.65rem;
+}
+
+.clear-confirm-title {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--c-danger);
+  margin: 0 0 0.35rem;
+}
+
+.clear-confirm-desc {
+  font-size: 0.82rem;
+  color: var(--c-ink-muted);
+  margin: 0;
+  line-height: 1.55;
+}

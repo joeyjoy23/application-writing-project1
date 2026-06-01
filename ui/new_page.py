@@ -1077,24 +1077,33 @@ def render_new_analysis(api_ready: bool) -> None:
             help="教学指南与易错预警（受学生水平影响）",
         )
 
-    # 清空结果：空行间隔 + 低视觉权重
-    st.write("")
-    _clear_col1, _clear_col2 = st.columns([1, 8])
-    with _clear_col1:
+    # 清空结果：右对齐、低视觉权重
+    _clear_spacer, _clear_btn_col = st.columns([5, 1])
+    with _clear_spacer:
+        st.markdown(
+            '<p class="clear-results-col-marker" aria-hidden="true"></p>',
+            unsafe_allow_html=True,
+        )
+    with _clear_btn_col:
         if st.button(
-            "🗑 清空结果",
+            "清空结果",
             key="btn_clear_results",
-            help="清除当前所有阶段的生成结果",
+            help="清除当前所有阶段的生成结果（保留题目与学生水平）",
+            use_container_width=True,
         ):
             st.session_state._confirm_clear = True
             st.rerun()
-    with _clear_col2:
-        pass
 
-    # 清空确认弹层
+    # 清空确认
     if st.session_state.get("_confirm_clear"):
-        st.warning("⚠️ 确认清空所有生成结果？此操作不可撤销。")
-        _cc1, _cc2 = st.columns([1, 3])
+        st.markdown(
+            '<div class="clear-confirm-box">'
+            '<p class="clear-confirm-title">确认清空生成结果？</p>'
+            '<p class="clear-confirm-desc">将清除 Stage 1–4 的全部输出，题目与学生水平设置保留。此操作不可撤销。</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        _cc1, _cc2, _cc3 = st.columns([1, 1, 2])
         with _cc1:
             if st.button("确认清空", type="primary", key="btn_confirm_clear"):
                 clear_checkpoint()
