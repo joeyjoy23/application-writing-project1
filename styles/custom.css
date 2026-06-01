@@ -1,208 +1,431 @@
-/* 高考英语应用文 AI 分析系统 — Streamlit 自定义样式 */
+/* 高考英语应用文 AI 分析 — 轻学术风 */
+
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap");
 
 /* ── Design Tokens ── */
 :root {
-  --c-primary: #1565c0;
-  --c-primary-light: #e3f2fd;
-  --c-danger: #c62828;
-  --c-danger-light: #ffebee;
-  --c-success: #2e7d32;
-  --c-success-light: #e8f5e9;
-  --c-muted: #6b7280;
-  --c-border: #e5e7eb;
-  --c-bg-subtle: #f8f9fa;
+  --font-serif: "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif;
+  --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  --c-ink: #1f2937;
+  --c-ink-muted: #4b5563;
+  --c-ink-light: #6b7280;
+
+  --c-navy: #1e3a5f;
+  --c-navy-soft: #2c4a7c;
+  --c-navy-light: #e8eef6;
+
+  --c-paper: #faf8f4;
+  --c-paper-deep: #f3efe6;
+  --c-card: #ffffff;
+  --c-border: #ddd6c8;
+  --c-border-light: #ebe6dc;
+
+  --c-accent: #9a7b4f;
+  --c-accent-light: #f5efe3;
+
+  --c-success: #2f6f4e;
+  --c-success-light: #e8f3ec;
+  --c-danger: #9b3d3d;
+  --c-danger-light: #faf0f0;
+
+  --stage-1: #1e3a5f;
+  --stage-2: #3d5a80;
+  --stage-3: #4a6741;
+  --stage-4: #6b4f7a;
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 8px rgb(0 0 0 / 0.08);
-  --transition: 0.2s ease;
+  --shadow-sm: 0 1px 2px rgb(30 58 95 / 0.04);
+  --shadow-md: 0 2px 8px rgb(30 58 95 / 0.06);
+  --transition: 0.18s ease;
 }
 
-/* ── Layout ── */
+/* ── Base & Layout ── */
+html,
+body,
+[data-testid="stAppViewContainer"],
+.main {
+  font-family: var(--font-sans);
+  color: var(--c-ink);
+}
+
+[data-testid="stAppViewContainer"] {
+  background: linear-gradient(180deg, var(--c-paper) 0%, #f7f4ed 48%, var(--c-paper) 100%);
+}
+
 .main .block-container {
-  padding-top: 2rem;
-  max-width: 1100px;
+  padding-top: 1.75rem;
+  padding-bottom: 3rem;
+  max-width: 1080px;
 }
 
-h1 {
+.main h1,
+.main h2,
+.main h3,
+.main h4 {
+  font-family: var(--font-serif);
+  color: var(--c-navy);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.main p,
+.main li,
+.main label,
+.main .stMarkdown {
+  line-height: 1.65;
+}
+
+/* ── Hero ── */
+.hero-block {
+  margin-bottom: 0.25rem;
+}
+
+.hero-title {
+  font-family: var(--font-serif);
+  font-size: 2rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.35rem;
+  color: var(--c-navy);
 }
 
-/* ── Breadcrumb / Mode Badge ── */
+.hero-subtitle {
+  font-size: 0.92rem;
+  color: var(--c-ink-muted);
+  letter-spacing: 0.06em;
+  margin-bottom: 0.85rem;
+}
+
+.hero-underline {
+  width: 72px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--c-navy-soft), var(--c-accent));
+  margin-bottom: 1.25rem;
+}
+
+/* ── Mode Breadcrumb ── */
 .mode-breadcrumb {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.3rem 0.85rem;
+  padding: 0.28rem 0.9rem;
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  background: var(--c-primary-light);
-  color: var(--c-primary);
-  margin-bottom: 0.75rem;
-  border: 1px solid #bbdefb;
+  background: var(--c-card);
+  color: var(--c-navy-soft);
+  margin-bottom: 1rem;
+  border: 1px solid var(--c-border-light);
+  box-shadow: var(--shadow-sm);
 }
+
 .mode-breadcrumb svg {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  opacity: 0.85;
 }
 
-/* ── Stage Badges ── */
+/* ── Section panels (Streamlit blocks) ── */
+.section-label {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--c-navy);
+  margin: 1.1rem 0 0.65rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.section-hint {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--c-ink-light);
+  letter-spacing: 0;
+}
+
+/* ── Stage Cards ── */
+.stage-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--c-border-light);
+  background: var(--c-card);
+  padding: 1.35rem 1.5rem 1.5rem;
+  margin: 1.25rem 0;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.stage-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  opacity: 0.9;
+}
+
+.stage-card-1::before { background: var(--stage-1); }
+.stage-card-2::before { background: var(--stage-2); }
+.stage-card-3::before { background: var(--stage-3); }
+.stage-card-4::before { background: var(--stage-4); }
+
 .stage-badge {
   display: inline-block;
-  padding: 0.4rem 1.2rem;
-  border-radius: 999px;
-  font-size: 1.55rem;
-  font-weight: 700;
-  margin-bottom: 0.6rem;
-  letter-spacing: 0.02em;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.65rem;
+  border-radius: 4px;
+  color: var(--c-navy);
+  background: var(--c-navy-light);
+  border: 1px solid rgb(30 58 95 / 0.08);
   vertical-align: middle;
 }
 
-/* Stage 主标题（badge 后的文字） */
-.stage-badge + strong,
-.stage-badge + b,
-/* badge 后紧跟的文本节点通过包装实现 */
+.stage-badge.stage-1 { color: var(--stage-1); background: #eef2f8; }
+.stage-badge.stage-2 { color: var(--stage-2); background: #eef3f8; }
+.stage-badge.stage-3 { color: var(--stage-3); background: #eef4ec; }
+.stage-badge.stage-4 { color: var(--stage-4); background: #f3eef6; }
+
 .stage-title {
-  font-size: 2.0rem;
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-left: 0.55rem;
   vertical-align: middle;
+  color: var(--c-navy);
 }
 
-.stage-1 { background: #e3f2fd; color: #1565c0; }
-.stage-2 { background: #f3e5f5; color: #6a1b9a; }
-.stage-3 { background: #fff3e0; color: #e65100; }
-.stage-4 { background: #e8f5e9; color: #2e7d32; }
-
-/* ── Stage 分隔线 ── */
 .stage-divider {
   border: none;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--c-border) 20%, var(--c-border) 80%, transparent);
-  margin: 1.25rem 0 1rem 0;
+  border-top: 1px dashed var(--c-border);
+  margin: 1.75rem 0 0.5rem;
+  opacity: 0.85;
 }
 
-/* ── Stage 内容副标题（# 一、... / ## ★核心要点...）—— 缩小为原来的 2/3 ── */
-/* Streamlit markdown 渲染的 h2/h3 在各 Stage 内容区域出现时缩小 */
 .stage-content h2,
-.stage-content h3,
-/* 也覆盖直接用 st.markdown("# ...") 渲染出的标题 */
-.main .block-container > div > div > h2,
-.main .block-container > div > div > h3 {
-  font-size: 0.85em !important;
+.stage-content h3 {
+  font-family: var(--font-serif) !important;
+  font-size: 0.95em !important;
   font-weight: 600 !important;
-  margin-top: 0.75em !important;
-  margin-bottom: 0.4em !important;
+  color: var(--c-navy-soft) !important;
 }
 
-/* 更精确地只针对 LLM 输出中的小标题（h2=一级副题, h3=二级副题） */
-[data-testid="stMarkdownContainer"] h2,
-[data-testid="stMarkdownContainer"] h3 {
-  font-size: 0.82em !important;
-  font-weight: 600 !important;
-}
-
-/* 但保持页面级大标题（st.header / st.title）不受影响 */
-h1[data-testid="stHeading"],
-[data-testid="stHeading-1"] {
-  font-size: inherit !important;
-}
-
-/* ── Summary Box ── */
+/* ── Summary & Export ── */
 .summary-box {
-  background: #f8f9fa;
-  border-left: 4px solid #1e88e5;
-  padding: 1rem 1.25rem;
-  border-radius: 0 8px 8px 0;
-  margin: 1rem 0;
+  background: var(--c-paper-deep);
+  border-left: 3px solid var(--c-accent);
+  padding: 0.9rem 1.15rem;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin: 0.85rem 0;
 }
 
-.json-preview {
-  font-family: ui-monospace, "Cascadia Code", monospace;
-  font-size: 0.8rem;
-}
-
-/* ── Export Section ── */
 .export-section {
-  background: var(--c-bg-subtle);
-  border: 1px solid var(--c-border);
+  background: var(--c-card);
+  border: 1px solid var(--c-border-light);
   border-radius: var(--radius-md);
-  padding: 1rem 1.25rem;
-  margin: 1rem 0;
+  padding: 1rem 1.2rem 0.85rem;
+  margin: 1rem 0 1.25rem;
+  box-shadow: var(--shadow-sm);
 }
+
 .export-section-title {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
+  font-family: var(--font-serif);
   font-size: 0.95rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--c-navy);
   margin-bottom: 0.65rem;
 }
+
 .export-section-title svg {
   width: 16px;
   height: 16px;
-  color: var(--c-primary);
+  color: var(--c-accent);
   flex-shrink: 0;
 }
 
-/* ── Clear Results Link-Button ── */
-.clear-results-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.82rem;
-  color: var(--c-danger);
-  cursor: pointer;
-  padding: 0.2rem 0;
-  border: none;
-  background: none;
-  transition: opacity var(--transition);
-}
-.clear-results-btn:hover {
-  opacity: 0.7;
-}
-.clear-results-btn svg {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
+/* ── Copy button ── */
+.copy-btn {
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-paper-deep) !important;
+  color: var(--c-ink-muted) !important;
+  margin-top: 0.5rem;
+  font-family: var(--font-sans) !important;
 }
 
-/* ── Sidebar ── */
+.copy-btn:hover {
+  background: var(--c-accent-light) !important;
+  border-color: var(--c-accent) !important;
+  color: var(--c-navy) !important;
+}
+
+/* ── Sidebar — 浅色学术侧栏 ── */
 div[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, #fafafa 0%, #f0f4f8 100%);
+  background: linear-gradient(180deg, #fbf9f5 0%, #f5f1e8 100%);
+  border-right: 1px solid var(--c-border-light);
 }
 
-/* 历史条数旁的隐蔽入口「⋯」：无边框，仍可点击 */
-div[data-testid="stSidebar"] [data-testid="stPopover"] {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
+div[data-testid="stSidebar"] > div:first-child {
+  background: transparent;
 }
+
+div[data-testid="stSidebar"] .stMarkdown,
+div[data-testid="stSidebar"] label,
+div[data-testid="stSidebar"] span,
+div[data-testid="stSidebar"] p {
+  color: var(--c-ink) !important;
+}
+
+div[data-testid="stSidebar"] h1,
+div[data-testid="stSidebar"] h2,
+div[data-testid="stSidebar"] h3 {
+  font-family: var(--font-serif);
+  color: var(--c-navy) !important;
+}
+
+div[data-testid="stSidebar"] hr {
+  border-color: var(--c-border-light);
+}
+
+div[data-testid="stSidebar"] input,
+div[data-testid="stSidebar"] textarea,
+div[data-testid="stSidebar"] [data-baseweb="select"] > div {
+  background: var(--c-card) !important;
+  color: var(--c-ink) !important;
+  border-color: var(--c-border) !important;
+}
+
+div[data-testid="stSidebar"] input::placeholder {
+  color: var(--c-ink-light) !important;
+}
+
+div[data-testid="stSidebar"] .stButton > button {
+  border-color: var(--c-border) !important;
+  background: var(--c-card) !important;
+  color: var(--c-navy) !important;
+}
+
+div[data-testid="stSidebar"] .stButton > button[kind="primary"],
+div[data-testid="stSidebar"] .stButton > button[data-testid="baseButton-primary"] {
+  background: var(--c-navy-soft) !important;
+  color: #fff !important;
+  border-color: var(--c-navy-soft) !important;
+}
+
 div[data-testid="stSidebar"] [data-testid="stPopover"] > button {
-  min-height: 1.25rem;
-  padding: 0.1rem 0.35rem;
-  font-size: 0.85rem;
-  line-height: 1;
-  opacity: 0.35;
-  border: none !important;
-  outline: none !important;
+  opacity: 0.45;
+  color: var(--c-ink-light) !important;
   background: transparent !important;
-  color: var(--c-muted) !important;
-  box-shadow: none !important;
-  cursor: pointer;
+  border: none !important;
 }
-div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover,
-div[data-testid="stSidebar"] [data-testid="stPopover"] > button:focus,
-div[data-testid="stSidebar"] [data-testid="stPopover"] > button:focus-visible,
-div[data-testid="stSidebar"] [data-testid="stPopover"] > button:active {
-  opacity: 0.85;
-  color: var(--c-primary) !important;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
+
+div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+  opacity: 0.9;
+  color: var(--c-navy) !important;
+}
+
+/* ── Main inputs & buttons ── */
+.main textarea,
+.main input[type="text"],
+.main input[type="password"] {
+  border-radius: var(--radius-md) !important;
+  border-color: var(--c-border) !important;
+  background: var(--c-card) !important;
+}
+
+.main .stButton > button {
+  border-radius: var(--radius-md) !important;
+  font-weight: 500 !important;
+  font-family: var(--font-sans) !important;
+  transition: background var(--transition), border-color var(--transition), box-shadow var(--transition) !important;
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-card) !important;
+  color: var(--c-navy) !important;
+}
+
+.main .stButton > button:hover {
+  border-color: var(--c-navy-soft) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.main .stButton > button[kind="primary"],
+.main .stButton > button[data-testid="baseButton-primary"] {
+  background: var(--c-navy-soft) !important;
+  color: #fff !important;
+  border-color: var(--c-navy-soft) !important;
+}
+
+.main .stButton > button[kind="primary"]:hover {
+  background: var(--c-navy) !important;
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.stTabs [data-baseweb="tab"] {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  color: var(--c-ink-muted);
+  background: transparent;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.stTabs [aria-selected="true"] {
+  color: var(--c-navy) !important;
+  background: var(--c-card) !important;
+  border: 1px solid var(--c-border-light) !important;
+  border-bottom-color: var(--c-card) !important;
+}
+
+/* Alerts — 柔和学术色 */
+.main [data-testid="stAlert"] {
+  border-radius: var(--radius-md);
+  border-width: 1px;
+}
+
+.main [data-testid="stAlert"][data-baseweb="notification"] {
+  box-shadow: none;
+}
+
+/* Expander */
+.main .streamlit-expanderHeader {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  color: var(--c-navy);
+  background: var(--c-card);
+  border-radius: var(--radius-sm);
+}
+
+/* Data / metrics caption */
+.main .stCaption,
+.main small {
+  color: var(--c-ink-light) !important;
+}
+
+/* Download button */
+.main .stDownloadButton > button {
+  border-radius: var(--radius-md) !important;
+}
+
+/* Hide Streamlit footer branding spacing tweak */
+footer {
+  visibility: hidden;
 }

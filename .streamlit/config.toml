@@ -12,3 +12,10 @@ magicEnabled = false
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+primaryColor = "#2C4A7C"
+backgroundColor = "#FAF8F4"
+secondaryBackgroundColor = "#F3EFE6"
+textColor = "#1F2937"
+font = "sans serif"

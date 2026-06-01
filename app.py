@@ -158,7 +158,14 @@ def main() -> None:
 
     api_ready = render_sidebar()
 
-    st.title("高考英语应用文 AI 分析系统")
+    st.markdown(
+        '<div class="hero-block">'
+        '<div class="hero-title">高考英语应用文 AI 分析系统</div>'
+        '<div class="hero-subtitle">四阶段备课工作流 · 审题 · 范文 · 语言 · 教学</div>'
+        '<div class="hero-underline"></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     # 面包屑/模式提示
     if st.session_state.app_mode == "历史":

@@ -542,13 +542,13 @@ def render_copy_button(text: str) -> None:
     html_b64 = base64.b64encode(html_content.encode('utf-8')).decode('ascii')
     plain_b64 = base64.b64encode(text.encode('utf-8')).decode('ascii')
     component = f"""
-    <button onclick="
+    <button class="copy-btn" onclick="
         var hb='{html_b64}',pb='{plain_b64}';
         var h=(new TextDecoder).decode(Uint8Array.from(atob(hb),function(c){{return c.charCodeAt(0)}}));
         var p=(new TextDecoder).decode(Uint8Array.from(atob(pb),function(c){{return c.charCodeAt(0)}}));
         var i=new ClipboardItem({{'text/html':new Blob([h],{{type:'text/html'}}),'text/plain':new Blob([p],{{type:'text/plain'}})}});
         navigator.clipboard.write([i]).then(function(){{this.textContent='✅ 已复制';var b=this;setTimeout(function(){{b.textContent='📋 一键复制'}},2000)}}.bind(this)).catch(function(){{this.textContent='复制失败'}}.bind(this));
-    " style="padding:4px 12px;font-size:13px;cursor:pointer;border:1px solid #ccc;border-radius:4px;background:#f8f8f8;">
+    ">
         📋 一键复制
     </button>
     """
@@ -559,9 +559,11 @@ def render_copy_button(text: str) -> None:
 
 
 def render_stage1(state: WorkflowState) -> None:
+    st.markdown('<div class="stage-card stage-card-1">', unsafe_allow_html=True)
     st.markdown('<span class="stage-badge stage-1">Stage 1</span> <span class="stage-title">审题结构分析</span>', unsafe_allow_html=True)
     if not state.stage1:
         st.info("尚未运行 Stage 1")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     s1 = state.stage1
     if s1.human_summary.strip():
@@ -570,23 +572,29 @@ def render_stage1(state: WorkflowState) -> None:
         st.info("暂无审题总结内容")
     if s1.human_summary.strip():
         render_copy_button(s1.human_summary)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_stage2(state: WorkflowState) -> None:
+    st.markdown('<div class="stage-card stage-card-2">', unsafe_allow_html=True)
     st.markdown('<span class="stage-badge stage-2">Stage 2</span> <span class="stage-title">PEEL 写作策略卡与多版范文</span>', unsafe_allow_html=True)
     if not state.stage2:
         st.info("尚未运行 Stage 2（需先完成 Stage 1）")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     st.markdown(bold_labels_before_colon(state.stage2.raw))
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_stage3(state: WorkflowState) -> None:
+    st.markdown('<div class="stage-card stage-card-3">', unsafe_allow_html=True)
     st.markdown(
         '<span class="stage-badge stage-3">Stage 3</span> <span class="stage-title">功能句型包与话题词汇</span>',
         unsafe_allow_html=True,
     )
     if not state.stage3:
         st.info("尚未运行 Stage 3（需先完成 Stage 1）")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     raw = state.stage3.raw
     phrases_part, vocab_part = _split_stage3_vocab_section(raw)
@@ -599,18 +607,22 @@ def render_stage3(state: WorkflowState) -> None:
     elif not phrases_part:
         st.markdown(bold_labels_before_colon(raw))
     render_copy_button(raw)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_stage4(state: WorkflowState) -> None:
+    st.markdown('<div class="stage-card stage-card-4">', unsafe_allow_html=True)
     st.markdown(
         '<span class="stage-badge stage-4">Stage 4</span> <span class="stage-title">教学指南与易错预警</span>',
         unsafe_allow_html=True,
     )
     if not state.stage4:
         st.info("尚未运行 Stage 4（需先完成 Stage 2 与 Stage 3）")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     st.markdown(bold_labels_before_colon(state.stage4.raw), unsafe_allow_html=True)
     render_copy_button(state.stage4.raw)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 _STAGE_RENDERERS = {
@@ -759,7 +771,7 @@ def render_history_list() -> None:
     """历史列表：搜索、表格、查看/删除、分页。"""
     ensure_guest_id()
     owner_id, admin = history_scope()
-    st.subheader("📚 历史备课包")
+    st.markdown('<p class="section-label">历史备课包</p>', unsafe_allow_html=True)
     if using_postgres() and not admin:
         st.caption("云端保存；换浏览器或清缓存后仅能看到本机新记录")
     st.caption(
@@ -959,7 +971,7 @@ def render_history_detail(record_id: int) -> None:
     )
 
     st.divider()
-    st.subheader("备课包内容")
+    st.markdown('<p class="section-label">备课包内容</p>', unsafe_allow_html=True)
     slot1, slot2, slot3, slot4 = st.empty(), st.empty(), st.empty(), st.empty()
     render_all_stages(state, (slot1, slot2, slot3, slot4))
 
@@ -986,10 +998,7 @@ def render_history_page() -> None:
 
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
-    st.markdown(
-        '<span style="color:black;font-size:1.6em;">粘贴题目内容</span>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<p class="section-label">题目输入</p>', unsafe_allow_html=True)
 
     question = st.text_area(
         "题目内容",
@@ -1003,7 +1012,8 @@ def render_new_analysis(api_ready: bool) -> None:
 
     # 快捷难度切换按钮
     st.markdown(
-        '<span style="color:black;font-size:1.6em;">选择学生水平（仅影响 Stage4 生成）：</span>',
+        '<p class="section-label">学生水平'
+        '<span class="section-hint"> · 仅影响 Stage 4</span></p>',
         unsafe_allow_html=True,
     )
     _current = st.session_state.get("student_level", "中等")
@@ -1033,10 +1043,7 @@ def render_new_analysis(api_ready: bool) -> None:
     running = st.session_state.is_running
 
     # ── 按钮区 ──
-    st.markdown(
-        '<span style="color:black;font-size:1.6em;">选择运行方式</span>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<p class="section-label">运行方式</p>', unsafe_allow_html=True)
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         btn_full = st.button(
@@ -1155,7 +1162,7 @@ def render_new_analysis(api_ready: bool) -> None:
         clicked_mode = "stage4"
 
     st.divider()
-    st.subheader("运行状态与结果")
+    st.markdown('<p class="section-label">运行与结果</p>', unsafe_allow_html=True)
     if running or clicked_mode or st.session_state.run_job:
         st.caption(
             "运行中可在侧边栏切换模型以**自动停止**当前请求；"
