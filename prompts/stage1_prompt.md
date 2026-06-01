@@ -22,6 +22,8 @@
   "person": "",
   "tense": "",
   "writing_purpose": "",
+  "rhetorical_situation": "",
+  "success_criteria": "",
   "core_points": [],
   "supporting_points": [],
   "optional_points": [],
@@ -32,42 +34,58 @@
     "body": [],
     "ending": ""
   },
+  "genre_specific_moves": [],
   "transition_strategy": [],
   "high_score_strategy": []
 }
 
 字段说明：
+- rhetorical_situation：一句话概括「谁在什么场合写给谁、为何写」
+- success_criteria：从读者反应描述「怎样算交际成功」（与 PART B §1.4「达成标准」一致）
 - core_points：对象数组，含 point、tier_reason、body_length_advice、linked_dimension、expansion_action（简短指令）、high_score_tip、risk
 - supporting_points：对象数组，含 point、tier_reason、body_length_advice、linked_dimension、expansion_action（简短指令）
-- mandatory_points：字符串数组，等于核心要点 + 支撑要点的 point 文本合集（按写作顺序）
+- tier_reason：必须引用题干原词或同义转述，禁止泛泛写「重要」「关键」而不扣题
+- mandatory_points：字符串数组，等于核心要点 + 支撑要点的 point 文本合集；**顺序 = 建议写作顺序**，且与 PART B「要点与结构规划」中的要点编号一一对应
 - paragraph_plan.body：对象数组，含 part（段位）、purpose（功能）、content_hint（简短提示）。body 可包含主体段与结尾段的所有要点规划
+- genre_specific_moves：本体裁常用语步 2–3 条（如建议信：问题—建议—期待），短句数组
 - transition_strategy：衔接策略短句数组
 - high_score_strategy：整体高分策略短句数组
 
 ### PART B：HUMAN_READABLE_SUMMARY
 标题行写 `# PART B：HUMAN_READABLE_SUMMARY`，包含以下六个二级标题（顺序不变）：
 
-## 1. 审题结论
-- 体裁
-- 时态
-- 人称
-- 语气（简短标签，说明详见交际分析）
+## 1. 交际任务分析
 
-## 2. 交际任务分析
+### 1.1 三元审题（必写，各一行）
+- **我是谁**：（如倡议者、经历分享者，不是「向报社汇报问题的人」）
+- **写给谁**：（按题干：全校师生 / 校长 / 某部门 / 编辑等，写具体）
+- **为了什么**：（号召大家一起做 / 请对方处理 / 分享经历等，写具体）
 
-### 2.1 交际基本要素
-- 写作者身份
-- 阅读对象
-- 双方关系
-- 正式度
+### 1.2 易错提醒（必写）
+- **学生容易写成**：（如当成给编辑写信、结尾盼回复、只报问题不号召大家）
+- **本题应当写成**：（如面向全校的公开稿、用 We/Let's 动员、与题干标题/目的一致）
+- 若易套用书信格式，须写明**不要**出现的典型句（如 `I hope you will consider my advice.`）
 
-### 2.2 交际目的拆解
+### 1.3 难词怎么说清楚（题干有难译词、且未给英文提示时必写；否则写「本题无特别难译词」）
+- 列出 1–2 个关键中文词
+- 提醒**别瞎译**（如「乱涂乱画」勿当成 paint/draw 艺术创作；勿用 bad behavior 一笔带过）
+- 给 **2–3 句简单英语** 把意思说清楚（用 mark、leave marks 等学生会的词）
+- 可选：再列 1–2 个更地道的词（有则写，没有不编）
+
+### 1.4 交际目的拆解
 核心交际目的：[一句话]
 达成标准：[从读者反应描述怎样算交际成功]
 实现路径：
 - 信息层：必须传递哪些关键信息？
 - 情感层：需要营造什么情绪/氛围？
 - 行动层：希望读者读完做什么？
+
+## 2. 审题结论
+基于上文交际任务，归纳本题写作形式要求：
+- 体裁
+- 时态
+- 人称
+- 语气（简短标签，须与 §1 三元审题一致）
 
 ## 3. 能力维度与思维模型分析
 匹配以下四种高考真题常考能力之一：
@@ -121,13 +139,16 @@
 > 核心要点充分展开，支撑要点简明处理。支撑要点的位置根据交际逻辑灵活选择。
 
 ## 6. 高分警戒清单
-列出 2–4 条本次写作最易踩的致命错误：
+列出 2–4 条本次写作最易踩的致命错误（优先覆盖：写错读者/写成私人信、难词瞎译或词穷糊弄、句子语法对但不像号召/倡议）：
 - 🚫 [具体错误] → 扣分原因：[一句话]
 - 🚫 [具体错误] → 扣分原因：[一句话]
 
 ## 输出质量要求
 - JSON 部分：简洁、字段完整，要点与 PART B 编号一致，适合下游 Agent 直接读取。
 - Summary 部分：信息密度高，篇幅约 600–1300 字，避免套话。
+
+## 内部自检（勿写入输出）
+提交前在内心核对：mandatory_points 是否齐全且顺序与第 5 节一致、有无漏隐性要点、时态人称是否得体、有无编造硬事实。**不得在 PART A/B 中出现「输出前自检」标题或勾选列表。**
 
 ## 本阶段禁止
 不写范文、PEEL、句型包或话题词汇。不在 PART A/B 之外输出任何内容。

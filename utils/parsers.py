@@ -11,6 +11,25 @@ _PART_B_SPLIT = re.compile(
     re.IGNORECASE,
 )
 
+# 读者可见正文不展示「输出前自检」块（模型若仍输出则在此剥除）
+_SELF_CHECK_SECTION = re.compile(
+    r"(?:^|\n)#{1,3}\s*(?:7[\.\s、]*)?输出前自检[^\n]*\n[\s\S]*\Z",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_HTML_BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+
+def sanitize_llm_html_breaks(text: str) -> str:
+    """将模型误输出的 <br> 转为可读分隔（Markdown 表格内 HTML 不会换行）。"""
+    if not text or "<br" not in text.lower():
+        return text
+    cleaned = _HTML_BREAK_RE.sub(" ", text)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"([。；：!?])\s+", r"\1", cleaned)
+    cleaned = re.sub(r" *\n *", "\n", cleaned)
+    return cleaned
+
 
 def parse_stage1_output(raw: str) -> tuple[dict[str, Any], str]:
     """从 Stage1 模型输出中解析 JSON 与人类可读摘要。"""
@@ -38,6 +57,13 @@ def parse_stage1_output(raw: str) -> tuple[dict[str, Any], str]:
     return {}, clean_stage1_summary(text)
 
 
+def strip_reader_self_check(text: str) -> str:
+    """移除文末「输出前自检」章节，供界面展示与 Word 导出。"""
+    if not text or not text.strip():
+        return text
+    return _SELF_CHECK_SECTION.sub("", text).strip()
+
+
 def clean_stage1_summary(summary: str) -> str:
     """去掉 PART A / JSON 等，仅保留教师可读的审题总结。"""
     text = summary.strip()
@@ -50,7 +76,7 @@ def clean_stage1_summary(summary: str) -> str:
     text = _PART_B_SPLIT.sub("", text)
     text = re.sub(r"```(?:json)?\s*[\s\S]*?```", "", text)
     text = re.sub(r"^#+\s*PART\s*[AB][：:][^\n]*\n?", "", text, flags=re.IGNORECASE | re.MULTILINE)
-    return text.strip()
+    return strip_reader_self_check(text)
 
 
 def _extract_json_from_part_a(text: str) -> dict[str, Any]:

@@ -13,9 +13,12 @@ magicEnabled = false
 [browser]
 gatherUsageStats = false
 
+[client]
+toolbarMode = "minimal"
+
 [theme]
-primaryColor = "#2C4A7C"
-backgroundColor = "#FAF8F4"
-secondaryBackgroundColor = "#F3EFE6"
-textColor = "#1F2937"
+primaryColor = "#7A6882"
+backgroundColor = "#FEFDFB"
+secondaryBackgroundColor = "#F8F6F3"
+textColor = "#3A3540"
 font = "sans serif"

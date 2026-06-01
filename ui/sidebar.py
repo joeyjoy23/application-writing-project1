@@ -29,7 +29,6 @@ from utils.config import (
     normalize_zhipu_model_id,
 )
 from utils.config import resolve_api_key
-from workflow import WorkflowState
 
 
 # ── session_state 读写工具 ──
@@ -81,7 +80,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.05.27-clear-btn"
+UI_BUILD_TAG = "2026.05.27-sidebar-layout"
 
 
 def _render_admin_popover_body() -> None:
@@ -154,6 +153,7 @@ def render_sidebar() -> bool:
             if st.button("刷新历史列表", use_container_width=True):
                 st.session_state.history_page = 1
                 st.rerun()
+
         st.divider()
         st.header("⚙️ API 设置")
 

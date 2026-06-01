@@ -1,62 +1,165 @@
-/* 高考英语应用文 AI 分析 — 轻学术风 */
+/* 高考英语应用文 AI 分析 — 素墨暗香 */
 
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap");
 
-/* ── Design Tokens ── */
+/* ── Design Tokens（素墨暗香） ── */
 :root {
-  --font-serif: "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif;
-  --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-base: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
-  --c-ink: #1f2937;
-  --c-ink-muted: #4b5563;
-  --c-ink-light: #6b7280;
+  --c-ink: #3a3540;
+  --c-ink-muted: #6b6574;
+  --c-ink-light: #9690a0;
 
-  --c-navy: #1e3a5f;
-  --c-navy-soft: #2c4a7c;
-  --c-navy-light: #e8eef6;
+  --c-navy: #6b5b73;
+  --c-navy-soft: #7a6882;
+  --c-navy-light: #f7f3f8;
 
-  --c-paper: #faf8f4;
-  --c-paper-deep: #f3efe6;
+  --c-paper: #fefdfb;
+  --c-paper-deep: #f8f6f3;
   --c-card: #ffffff;
-  --c-border: #ddd6c8;
-  --c-border-light: #ebe6dc;
+  --c-border: #e8e4de;
+  --c-border-light: #f2efe9;
 
   --c-accent: #9a7b4f;
-  --c-accent-light: #f5efe3;
+  --c-accent-light: #f8f4ec;
 
-  --c-success: #2f6f4e;
-  --c-success-light: #e8f3ec;
-  --c-danger: #9b3d3d;
-  --c-danger-light: #faf0f0;
+  --c-success: #5a7a62;
+  --c-success-light: #eef4ef;
+  --c-danger: #b85c6a;
+  --c-danger-light: #faf0f2;
 
-  --stage-1: #1e3a5f;
-  --stage-2: #3d5a80;
-  --stage-3: #4a6741;
-  --stage-4: #6b4f7a;
+  --stage-1: #6b5b73;
+  --stage-2: #857592;
+  --stage-3: #9a7b4f;
+  --stage-4: #7a6b8a;
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --shadow-sm: 0 1px 2px rgb(30 58 95 / 0.04);
-  --shadow-md: 0 2px 8px rgb(30 58 95 / 0.06);
-  --transition: 0.18s ease;
-}
+  --shadow-sm: 0 1px 3px rgb(107 91 115 / 0.07);
+  --shadow-md: 0 2px 10px rgb(107 91 115 / 0.09);
+  --stage-shell-title: 1.725rem; /* Stage 2 PEEL… 等（原 1.15rem × 3/2） */
+  --stage-md-h1: 1.125rem;       /* # 一、PEEL…（约为 Streamlit 默认 h1 的 1/2） */
+  --stage-md-h2: 0.975rem;       /* ## 小节 */
+  --stage-md-h3: 0.85rem;        /* ### 更细条目 */
+  --stage-md-h4: 0.775rem;
 
 /* ── Base & Layout ── */
 html,
 body,
+[data-testid="stApp"],
 [data-testid="stAppViewContainer"],
+[data-testid="stSidebar"],
+[data-testid="stHeader"],
 .main {
-  font-family: var(--font-sans);
+  font-family: var(--font-base);
   color: var(--c-ink);
 }
 
+[data-testid="stAppViewContainer"] button,
+[data-testid="stAppViewContainer"] input,
+[data-testid="stAppViewContainer"] textarea,
+[data-testid="stSidebar"] button,
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] textarea,
+[data-testid="stSidebar"] [data-baseweb="select"] > div,
+[data-baseweb="select"] > div,
+[data-baseweb="tab"] {
+  font-family: var(--font-base) !important;
+}
+
 [data-testid="stAppViewContainer"] {
-  background: linear-gradient(180deg, var(--c-paper) 0%, #f7f4ed 48%, var(--c-paper) 100%);
+  background: var(--c-paper) !important;
+}
+
+[data-testid="stApp"],
+section.main {
+  background-color: var(--c-paper) !important;
+}
+
+/* ── 压缩顶部留白（保留侧栏开关，勿隐藏整个 stHeader） ── */
+header[data-testid="stHeader"] {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  visibility: visible !important;
+  overflow: visible !important;
+  background: transparent !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+
+/* 侧栏收起后的「展开」浮动按钮、以及顶栏内的收起按钮，必须可见 */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"],
+header[data-testid="stHeader"] [data-testid="stSidebarCollapseButton"],
+header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"] {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 999999 !important;
+}
+
+[data-testid="stSidebarCollapsedControl"] {
+  position: fixed !important;
+  top: 0.65rem !important;
+  left: 0.65rem !important;
+}
+
+/* 侧栏收起/展开：勿强制 min-width，否则会留下空白 gutter */
+[data-testid="stSidebar"][aria-expanded="false"],
+[data-testid="stSidebar"].stSidebarCollapsed {
+  min-width: 0 !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  margin-left: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: none !important;
+}
+
+[data-testid="stSidebar"][aria-expanded="false"] > div,
+[data-testid="stSidebar"].stSidebarCollapsed > div {
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* 侧栏收起时主区占满可用宽度 */
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="false"]) section.main,
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"].stSidebarCollapsed) section.main {
+  flex: 1 1 100% !important;
+  max-width: 100% !important;
+}
+
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="false"]) section.main .block-container,
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"].stSidebarCollapsed) section.main .block-container {
+  max-width: min(1280px, calc(100vw - 2.5rem)) !important;
+}
+
+section.main > div.block-container,
+[data-testid="stAppViewContainer"] .main .block-container,
+[data-testid="stMainBlockContainer"].block-container,
+.main .block-container {
+  padding-top: 0.7rem !important;
+  margin-top: 0 !important;
+}
+
+.main .block-container > div[data-testid="stVerticalBlock"] {
+  gap: 0.35rem !important;
+}
+
+.main .block-container [data-testid="stElementContainer"]:first-child,
+.main .block-container [data-testid="stMarkdownContainer"]:first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 .main .block-container {
-  padding-top: 1.75rem;
   padding-bottom: 3rem;
   max-width: 1080px;
 }
@@ -65,7 +168,7 @@ body,
 .main h2,
 .main h3,
 .main h4 {
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   color: var(--c-navy);
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -76,27 +179,134 @@ body,
 .main label,
 .main .stMarkdown {
   line-height: 1.65;
+  color: var(--c-ink);
+}
+
+/* ── 全局文字颜色（主区 + 侧栏，覆盖 Streamlit 默认色） ── */
+[data-testid="stAppViewContainer"] .main,
+[data-testid="stSidebar"] {
+  color: var(--c-ink) !important;
+}
+
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"],
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] p,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] li,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] ul,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] ol,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] blockquote,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] td,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] th,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] span:not([style*="color"]),
+[data-testid="stAppViewContainer"] .main .stage-content,
+[data-testid="stAppViewContainer"] .main .stage-content p,
+[data-testid="stAppViewContainer"] .main .stage-content li,
+[data-testid="stAppViewContainer"] .main .stage-content ul,
+[data-testid="stAppViewContainer"] .main .stage-content ol,
+[data-testid="stAppViewContainer"] .main [data-testid="stWidgetLabel"],
+[data-testid="stAppViewContainer"] .main [data-testid="stWidgetLabel"] p,
+[data-testid="stAppViewContainer"] .main [data-testid="stWidgetLabel"] label,
+[data-testid="stAppViewContainer"] .main [data-testid="stText"],
+[data-testid="stAppViewContainer"] .main [data-testid="stText"] p,
+[data-testid="stAppViewContainer"] .main .stRadio label,
+[data-testid="stAppViewContainer"] .main .stRadio label p,
+[data-testid="stAppViewContainer"] .main .stCheckbox label p,
+[data-testid="stAppViewContainer"] .main .streamlit-expanderContent,
+[data-testid="stAppViewContainer"] .main .streamlit-expanderContent p,
+[data-testid="stAppViewContainer"] .main [data-testid="stAlert"],
+[data-testid="stAppViewContainer"] .main [data-testid="stAlert"] p,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
+[data-testid="stSidebar"] [data-testid="stText"] p {
+  color: var(--c-ink) !important;
+}
+
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] h1,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] h2,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] h3,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] h4,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] h5,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] h6,
+[data-testid="stAppViewContainer"] .main .stage-content h1,
+[data-testid="stAppViewContainer"] .main .stage-content h2,
+[data-testid="stAppViewContainer"] .main .stage-content h3,
+[data-testid="stAppViewContainer"] .main .stage-content h4,
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+  color: var(--c-navy) !important;
+}
+
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] strong,
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] b,
+[data-testid="stAppViewContainer"] .main .stage-content strong,
+[data-testid="stAppViewContainer"] .main .stage-content b {
+  color: var(--c-navy) !important;
+}
+
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] a,
+[data-testid="stAppViewContainer"] .main .stage-content a {
+  color: var(--c-navy-soft) !important;
+}
+
+[data-testid="stAppViewContainer"] .main .stCaption,
+[data-testid="stAppViewContainer"] .main [data-testid="stCaptionContainer"],
+[data-testid="stAppViewContainer"] .main [data-testid="stCaptionContainer"] p,
+[data-testid="stSidebar"] .stCaption,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+  color: var(--c-ink-muted) !important;
+}
+
+[data-testid="stAppViewContainer"] .main textarea,
+[data-testid="stAppViewContainer"] .main input[type="text"],
+[data-testid="stAppViewContainer"] .main input[type="password"],
+[data-testid="stAppViewContainer"] .main [data-baseweb="select"] span,
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] textarea,
+[data-testid="stSidebar"] [data-baseweb="select"] span {
+  color: var(--c-ink) !important;
+}
+
+[data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] code,
+[data-testid="stAppViewContainer"] .main .stage-content code {
+  color: var(--c-navy) !important;
+  background: var(--c-paper-deep) !important;
+}
+
+/* Markdown 正文兜底（含 Stage 输出、说明文字等） */
+section.main [data-testid="stMarkdownContainer"] {
+  color: var(--c-ink) !important;
+}
+
+section.main [data-testid="stMarkdownContainer"] :where(p, li, ol, ul, blockquote, td, th, span, div) {
+  color: var(--c-ink) !important;
+}
+
+section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--c-navy) !important;
 }
 
 /* ── Hero ── */
 .hero-block {
-  margin-bottom: 0.25rem;
+  margin: 0 0 0.1rem;
 }
 
 .hero-title {
-  font-family: var(--font-serif);
-  font-size: 2rem;
+  font-family: var(--font-base);
+  font-size: 2.55rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  margin-bottom: 0.35rem;
-  color: var(--c-navy);
+  margin: 0 0 0.15rem;
+  color: #4d4256;
 }
 
 .hero-subtitle {
   font-size: 0.92rem;
   color: var(--c-ink-muted);
   letter-spacing: 0.06em;
-  margin-bottom: 0.85rem;
+  margin: 0 0 0.35rem;
 }
 
 .hero-underline {
@@ -104,7 +314,7 @@ body,
   height: 3px;
   border-radius: 2px;
   background: linear-gradient(90deg, var(--c-navy-soft), var(--c-accent));
-  margin-bottom: 1.25rem;
+  margin: 0 0 0.45rem;
 }
 
 /* ── Mode Breadcrumb ── */
@@ -118,7 +328,7 @@ body,
   font-weight: 500;
   background: var(--c-card);
   color: var(--c-navy-soft);
-  margin-bottom: 1rem;
+  margin-bottom: 0.4rem;
   border: 1px solid var(--c-border-light);
   box-shadow: var(--shadow-sm);
 }
@@ -132,7 +342,7 @@ body,
 
 /* ── Section panels (Streamlit blocks) ── */
 .section-label {
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--c-navy);
@@ -142,43 +352,43 @@ body,
 }
 
 .section-hint {
-  font-family: var(--font-sans);
+  font-family: var(--font-base);
   font-size: 0.78rem;
   font-weight: 400;
   color: var(--c-ink-light);
   letter-spacing: 0;
 }
 
-/* ── Stage Cards ── */
-.stage-card {
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--c-border-light);
-  background: var(--c-card);
-  padding: 1.35rem 1.5rem 1.5rem;
-  margin: 1.25rem 0;
+/* ── Stage Cards（Streamlit bordered container） ── */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge) {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--c-border-light) !important;
+  background: var(--c-card) !important;
+  padding: 1.1rem 1.35rem 1.35rem !important;
+  margin: 0.75rem 0 1.25rem !important;
   box-shadow: var(--shadow-sm);
-  position: relative;
-  overflow: hidden;
+  border-left-width: 3px !important;
 }
 
-.stage-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
-  opacity: 0.9;
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge.stage-1) {
+  border-left-color: var(--stage-1) !important;
 }
 
-.stage-card-1::before { background: var(--stage-1); }
-.stage-card-2::before { background: var(--stage-2); }
-.stage-card-3::before { background: var(--stage-3); }
-.stage-card-4::before { background: var(--stage-4); }
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge.stage-2) {
+  border-left-color: var(--stage-2) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge.stage-3) {
+  border-left-color: var(--stage-3) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge.stage-4) {
+  border-left-color: var(--stage-4) !important;
+}
 
 .stage-badge {
   display: inline-block;
-  font-family: var(--font-sans);
+  font-family: var(--font-base);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -187,22 +397,23 @@ body,
   border-radius: 4px;
   color: var(--c-navy);
   background: var(--c-navy-light);
-  border: 1px solid rgb(30 58 95 / 0.08);
+  border: 1px solid rgb(107 91 115 / 0.12);
   vertical-align: middle;
 }
 
-.stage-badge.stage-1 { color: var(--stage-1); background: #eef2f8; }
-.stage-badge.stage-2 { color: var(--stage-2); background: #eef3f8; }
-.stage-badge.stage-3 { color: var(--stage-3); background: #eef4ec; }
-.stage-badge.stage-4 { color: var(--stage-4); background: #f3eef6; }
+.stage-badge.stage-1 { color: var(--stage-1); background: #f3eff5; }
+.stage-badge.stage-2 { color: var(--stage-2); background: #f5f2f7; }
+.stage-badge.stage-3 { color: var(--stage-3); background: #f8f4ec; }
+.stage-badge.stage-4 { color: var(--stage-4); background: #f0ecf3; }
 
 .stage-title {
-  font-family: var(--font-serif);
-  font-size: 1.15rem;
+  font-family: var(--font-base);
+  font-size: var(--stage-shell-title);
   font-weight: 600;
   margin-left: 0.55rem;
   vertical-align: middle;
   color: var(--c-navy);
+  line-height: 1.35;
 }
 
 .stage-divider {
@@ -212,12 +423,47 @@ body,
   opacity: 0.85;
 }
 
-.stage-content h2,
-.stage-content h3 {
-  font-family: var(--font-serif) !important;
-  font-size: 0.95em !important;
+/* Stage 框内 AI 输出 Markdown 标题层级（shell 标题 > h1 > h2 > h3 > h4 > 正文） */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-base) !important;
   font-weight: 600 !important;
+  color: var(--c-navy) !important;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  margin-top: 0.85em;
+  margin-bottom: 0.45em;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h1 {
+  font-size: var(--stage-md-h1) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h2 {
+  font-size: var(--stage-md-h2) !important;
   color: var(--c-navy-soft) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h3 {
+  font-size: var(--stage-md-h3) !important;
+  color: var(--c-navy-soft) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h4 {
+  font-size: var(--stage-md-h4) !important;
+  color: var(--c-navy-soft) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h5,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h6 {
+  font-size: 0.75rem !important;
+  color: var(--c-ink-muted) !important;
 }
 
 /* ── Summary & Export ── */
@@ -242,7 +488,7 @@ body,
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--c-navy);
@@ -265,7 +511,7 @@ body,
   background: var(--c-paper-deep) !important;
   color: var(--c-ink-muted) !important;
   margin-top: 0.5rem;
-  font-family: var(--font-sans) !important;
+  font-family: var(--font-base) !important;
 }
 
 .copy-btn:hover {
@@ -274,16 +520,18 @@ body,
   color: var(--c-navy) !important;
 }
 
-/* ── Sidebar — 浅色学术侧栏 ── */
+/* ── Sidebar（与主区统一素墨暗香） ── */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] > div:first-child {
+  background: linear-gradient(180deg, var(--c-card) 0%, var(--c-paper) 100%) !important;
+}
+
 div[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, #fbf9f5 0%, #f5f1e8 100%);
-  border-right: 1px solid var(--c-border-light);
+  border-right: 1px solid var(--c-border);
 }
 
-div[data-testid="stSidebar"] > div:first-child {
-  background: transparent;
-}
-
+div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
 div[data-testid="stSidebar"] .stMarkdown,
 div[data-testid="stSidebar"] label,
 div[data-testid="stSidebar"] span,
@@ -291,15 +539,24 @@ div[data-testid="stSidebar"] p {
   color: var(--c-ink) !important;
 }
 
+div[data-testid="stSidebar"] .stCaption,
+div[data-testid="stSidebar"] small,
+div[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+  color: var(--c-ink-muted) !important;
+}
+
 div[data-testid="stSidebar"] h1,
 div[data-testid="stSidebar"] h2,
 div[data-testid="stSidebar"] h3 {
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   color: var(--c-navy) !important;
+  font-weight: 600;
 }
 
 div[data-testid="stSidebar"] hr {
-  border-color: var(--c-border-light);
+  border: none;
+  border-top: 1px solid var(--c-border-light);
+  margin: 0.85rem 0;
 }
 
 div[data-testid="stSidebar"] input,
@@ -308,16 +565,29 @@ div[data-testid="stSidebar"] [data-baseweb="select"] > div {
   background: var(--c-card) !important;
   color: var(--c-ink) !important;
   border-color: var(--c-border) !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 div[data-testid="stSidebar"] input::placeholder {
   color: var(--c-ink-light) !important;
 }
 
+div[data-testid="stSidebar"] [data-testid="stAlert"] {
+  background: var(--c-navy-light) !important;
+  border: 1px solid var(--c-border-light) !important;
+  color: var(--c-ink) !important;
+}
+
 div[data-testid="stSidebar"] .stButton > button {
   border-color: var(--c-border) !important;
   background: var(--c-card) !important;
   color: var(--c-navy) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+div[data-testid="stSidebar"] .stButton > button:hover {
+  border-color: var(--c-navy-soft) !important;
+  background: var(--c-navy-light) !important;
 }
 
 div[data-testid="stSidebar"] .stButton > button[kind="primary"],
@@ -325,6 +595,24 @@ div[data-testid="stSidebar"] .stButton > button[data-testid="baseButton-primary"
   background: var(--c-navy-soft) !important;
   color: #fff !important;
   border-color: var(--c-navy-soft) !important;
+}
+
+div[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+  background: var(--c-navy) !important;
+  border-color: var(--c-navy) !important;
+}
+
+div[data-testid="stSidebar"] [data-baseweb="select"] span {
+  color: var(--c-ink) !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label {
+  color: var(--c-ink) !important;
+}
+
+div[data-testid="stSidebar"] .stCheckbox label p {
+  color: var(--c-ink) !important;
 }
 
 div[data-testid="stSidebar"] [data-testid="stPopover"] > button {
@@ -350,8 +638,12 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 .main .stButton > button {
   border-radius: var(--radius-md) !important;
+  font-size: 0.875rem !important;
   font-weight: 500 !important;
-  font-family: var(--font-sans) !important;
+  font-family: var(--font-base) !important;
+  line-height: 1.35 !important;
+  min-height: 2.45rem !important;
+  padding: 0.48rem 0.85rem !important;
   transition: background var(--transition), border-color var(--transition), box-shadow var(--transition) !important;
   border: 1px solid var(--c-border) !important;
   background: var(--c-card) !important;
@@ -360,6 +652,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 .main .stButton > button:hover {
   border-color: var(--c-navy-soft) !important;
+  background: var(--c-navy-light) !important;
   box-shadow: var(--shadow-sm);
 }
 
@@ -381,7 +674,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 .stTabs [data-baseweb="tab"] {
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   font-weight: 500;
   color: var(--c-ink-muted);
   background: transparent;
@@ -399,15 +692,18 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 .main [data-testid="stAlert"] {
   border-radius: var(--radius-md);
   border-width: 1px;
+  background: var(--c-navy-light) !important;
+  color: var(--c-ink) !important;
 }
 
-.main [data-testid="stAlert"][data-baseweb="notification"] {
-  box-shadow: none;
+.main [data-testid="stAlert"] p,
+.main [data-testid="stAlert"] div {
+  color: var(--c-ink) !important;
 }
 
 /* Expander */
 .main .streamlit-expanderHeader {
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   font-weight: 600;
   color: var(--c-navy);
   background: var(--c-card);
@@ -430,34 +726,73 @@ footer {
   visibility: hidden;
 }
 
-/* ── 清空结果按钮（右对齐描边样式） ── */
-.clear-results-col-marker {
-  display: none;
-  margin: 0;
-  padding: 0;
-  height: 0;
+/* ── 运行方式：两行强制同一 4 列 Grid（Stage 各占 1 列，完整/清空 各占 2 列） ── */
+.run-mode-grid-start {
+  display: block !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
-.main div[data-testid="column"]:has(.clear-results-col-marker)
-  + div[data-testid="column"]
-  .stButton
-  > button {
-  margin-top: 0.15rem;
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"],
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 0.5rem !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+  width: auto !important;
+  min-width: 0 !important;
+  flex: none !important;
+  margin: 0 !important;
+}
+
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+  grid-column: 1 / span 2;
+}
+
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
+  grid-column: 3 / span 2;
+}
+
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] .stButton,
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] .stButton {
+  margin-top: 0 !important;
+  width: 100% !important;
+}
+
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] .stButton > button,
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] .stButton > button {
+  width: 100% !important;
+  height: 2.45rem !important;
+  min-height: 2.45rem !important;
+  max-height: 2.45rem !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 0.875rem !important;
+  line-height: 1.35 !important;
+}
+
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child .stButton > button {
   background: var(--c-card) !important;
   border: 1px dashed var(--c-border) !important;
   color: var(--c-ink-muted) !important;
-  font-size: 0.82rem !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.02em;
-  padding: 0.35rem 0.65rem !important;
-  min-height: 2.15rem;
   box-shadow: none !important;
 }
 
-.main div[data-testid="column"]:has(.clear-results-col-marker)
-  + div[data-testid="column"]
-  .stButton
-  > button:hover {
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child .stButton > button:hover {
   background: var(--c-danger-light) !important;
   border-color: rgb(155 61 61 / 0.45) !important;
   border-style: solid !important;
@@ -465,10 +800,7 @@ footer {
   box-shadow: var(--shadow-sm) !important;
 }
 
-.main div[data-testid="column"]:has(.clear-results-col-marker)
-  + div[data-testid="column"]
-  .stButton
-  > button:active {
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.run-mode-grid-start) + div[data-testid="stHorizontalBlock"] + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child .stButton > button:active {
   transform: scale(0.98);
 }
 
@@ -483,7 +815,7 @@ footer {
 }
 
 .clear-confirm-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-base);
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--c-danger);

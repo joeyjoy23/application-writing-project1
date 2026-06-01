@@ -99,6 +99,30 @@ def load_css() -> None:
         st.markdown(f"<style>{css_text}</style>", unsafe_allow_html=True)
 
 
+def ensure_sidebar_expanded_on_first_load() -> None:
+    """首次进入会话时若浏览器记住了「收起」，自动展开（之后用户可手动收起）。"""
+    if st.session_state.get("_sidebar_default_expanded"):
+        return
+    st.session_state._sidebar_default_expanded = True
+    st.components.v1.html(
+        """
+        <script>
+        (function () {
+          try {
+            var doc = window.parent.document;
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (!sb || sb.getAttribute('aria-expanded') !== 'false') return;
+            var openBtn = doc.querySelector('[data-testid="stSidebarCollapsedControl"]');
+            if (openBtn) openBtn.click();
+          } catch (e) {}
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def init_session() -> None:
     """集中初始化所有 session_state 默认值（其他模块通过参数接收，不重复定义）。"""
     defaults = {
@@ -142,8 +166,9 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    load_css()
     init_session()
+    load_css()
+    ensure_sidebar_expanded_on_first_load()
     try:
         sync_session_llm_selection()
         apply_pending_llm_selection()

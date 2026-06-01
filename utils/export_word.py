@@ -12,6 +12,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+from utils.parsers import sanitize_llm_html_breaks, strip_reader_self_check
+
 FONT_HEITI = "黑体"
 FONT_SONG = "宋体"
 FONT_HEITI_EN = "SimHei"
@@ -371,15 +373,17 @@ def export_workflow_to_word(
 
     if stage1_summary:
         _add_stage_heading(doc, STAGE_TITLES[1])
-        _write_markdown(doc, stage1_summary)
+        _write_markdown(doc, strip_reader_self_check(stage1_summary))
 
     if stage2_raw:
         _add_stage_heading(doc, STAGE_TITLES[2])
-        _write_markdown(doc, stage2_raw, indent_paragraphs=True)
+        _write_markdown(
+            doc, strip_reader_self_check(stage2_raw), indent_paragraphs=True
+        )
 
     if stage3_raw:
         _add_stage_heading(doc, STAGE_TITLES[3])
-        _write_markdown(doc, stage3_raw)
+        _write_markdown(doc, sanitize_llm_html_breaks(stage3_raw))
 
     if stage4_raw:
         _add_stage_heading(doc, STAGE_TITLES[4])

@@ -26,6 +26,7 @@ from db import (
 )
 from utils.config import PROVIDER_OPTIONS, resolve_api_key
 from utils.export_word import export_workflow_to_word
+from utils.parsers import sanitize_llm_html_breaks, strip_reader_self_check
 from workflow import (
     Stage1Result,
     Stage2Result,
@@ -559,70 +560,75 @@ def render_copy_button(text: str) -> None:
 
 
 def render_stage1(state: WorkflowState) -> None:
-    st.markdown('<div class="stage-card stage-card-1">', unsafe_allow_html=True)
-    st.markdown('<span class="stage-badge stage-1">Stage 1</span> <span class="stage-title">审题结构分析</span>', unsafe_allow_html=True)
-    if not state.stage1:
-        st.info("尚未运行 Stage 1")
-        st.markdown('</div>', unsafe_allow_html=True)
-        return
-    s1 = state.stage1
-    if s1.human_summary.strip():
-        render_foldable_markdown(bold_labels_before_colon(s1.human_summary))
-    else:
-        st.info("暂无审题总结内容")
-    if s1.human_summary.strip():
-        render_copy_button(s1.human_summary)
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(
+            '<span class="stage-badge stage-1">Stage 1</span> '
+            '<span class="stage-title">审题结构分析</span>',
+            unsafe_allow_html=True,
+        )
+        if not state.stage1:
+            st.info("尚未运行 Stage 1")
+            return
+        s1 = state.stage1
+        reader_summary = strip_reader_self_check(s1.human_summary)
+        if reader_summary.strip():
+            render_foldable_markdown(bold_labels_before_colon(reader_summary))
+        else:
+            st.info("暂无审题总结内容")
+        if reader_summary.strip():
+            render_copy_button(reader_summary)
 
 
 def render_stage2(state: WorkflowState) -> None:
-    st.markdown('<div class="stage-card stage-card-2">', unsafe_allow_html=True)
-    st.markdown('<span class="stage-badge stage-2">Stage 2</span> <span class="stage-title">PEEL 写作策略卡与多版范文</span>', unsafe_allow_html=True)
-    if not state.stage2:
-        st.info("尚未运行 Stage 2（需先完成 Stage 1）")
-        st.markdown('</div>', unsafe_allow_html=True)
-        return
-    st.markdown(bold_labels_before_colon(state.stage2.raw))
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(
+            '<span class="stage-badge stage-2">Stage 2</span> '
+            '<span class="stage-title">PEEL 写作策略卡与多版范文</span>',
+            unsafe_allow_html=True,
+        )
+        if not state.stage2:
+            st.info("尚未运行 Stage 2（需先完成 Stage 1）")
+            return
+        st.markdown(
+            bold_labels_before_colon(strip_reader_self_check(state.stage2.raw or ""))
+        )
 
 
 def render_stage3(state: WorkflowState) -> None:
-    st.markdown('<div class="stage-card stage-card-3">', unsafe_allow_html=True)
-    st.markdown(
-        '<span class="stage-badge stage-3">Stage 3</span> <span class="stage-title">功能句型包与话题词汇</span>',
-        unsafe_allow_html=True,
-    )
-    if not state.stage3:
-        st.info("尚未运行 Stage 3（需先完成 Stage 1）")
-        st.markdown('</div>', unsafe_allow_html=True)
-        return
-    raw = state.stage3.raw
-    phrases_part, vocab_part = _split_stage3_vocab_section(raw)
-    if phrases_part:
-        st.markdown(bold_labels_before_colon(phrases_part))
-    if vocab_part:
-        st.markdown("### 话题词汇锦囊")
-        if not _render_vocab_tier_tables(vocab_part):
-            st.markdown(bold_labels_before_colon(vocab_part))
-    elif not phrases_part:
-        st.markdown(bold_labels_before_colon(raw))
-    render_copy_button(raw)
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(
+            '<span class="stage-badge stage-3">Stage 3</span> '
+            '<span class="stage-title">功能句型包与话题词汇</span>',
+            unsafe_allow_html=True,
+        )
+        if not state.stage3:
+            st.info("尚未运行 Stage 3（需先完成 Stage 1）")
+            return
+        raw = sanitize_llm_html_breaks(state.stage3.raw or "")
+        phrases_part, vocab_part = _split_stage3_vocab_section(raw)
+        if phrases_part:
+            st.markdown(bold_labels_before_colon(phrases_part))
+        if vocab_part:
+            st.markdown("### 话题词汇锦囊")
+            if not _render_vocab_tier_tables(vocab_part):
+                st.markdown(bold_labels_before_colon(vocab_part))
+        elif not phrases_part:
+            st.markdown(bold_labels_before_colon(raw))
+        render_copy_button(raw)
 
 
 def render_stage4(state: WorkflowState) -> None:
-    st.markdown('<div class="stage-card stage-card-4">', unsafe_allow_html=True)
-    st.markdown(
-        '<span class="stage-badge stage-4">Stage 4</span> <span class="stage-title">教学指南与易错预警</span>',
-        unsafe_allow_html=True,
-    )
-    if not state.stage4:
-        st.info("尚未运行 Stage 4（需先完成 Stage 2 与 Stage 3）")
-        st.markdown('</div>', unsafe_allow_html=True)
-        return
-    st.markdown(bold_labels_before_colon(state.stage4.raw), unsafe_allow_html=True)
-    render_copy_button(state.stage4.raw)
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(
+            '<span class="stage-badge stage-4">Stage 4</span> '
+            '<span class="stage-title">教学指南与易错预警</span>',
+            unsafe_allow_html=True,
+        )
+        if not state.stage4:
+            st.info("尚未运行 Stage 4（需先完成 Stage 2 与 Stage 3）")
+            return
+        st.markdown(bold_labels_before_colon(state.stage4.raw), unsafe_allow_html=True)
+        render_copy_button(state.stage4.raw)
 
 
 _STAGE_RENDERERS = {
@@ -659,8 +665,9 @@ def render_stage_placeholder(slot: st.empty, stage_num: int) -> None:
     with slot.container():
         if stage_num > 1:
             st.markdown('<hr class="stage-divider">', unsafe_allow_html=True)
-        st.markdown(_STAGE_BADGE_TITLES[stage_num], unsafe_allow_html=True)
-        st.info(_STAGE_WAITING[stage_num])
+        with st.container(border=True):
+            st.markdown(_STAGE_BADGE_TITLES[stage_num], unsafe_allow_html=True)
+            st.info(_STAGE_WAITING[stage_num])
 
 
 def sync_slots_from_state(
@@ -995,6 +1002,10 @@ def render_history_page() -> None:
 
 # ── 新建分析页 ──
 
+# 运行方式区：第一行 4 等分 Stage；第二行 2 等分（完整流程 | 清空），与上行左右对齐
+_RUN_STAGE_COLS = 4
+_RUN_ACTION_COLS = 2
+
 
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
@@ -1003,7 +1014,7 @@ def render_new_analysis(api_ready: bool) -> None:
     question = st.text_area(
         "题目内容",
         value=st.session_state.question,
-        height=220,
+        height=140,
         placeholder="例如：假定你是李华，校英文报正在开展…请写一封建议信…",
         key="question_editor",
         label_visibility="collapsed",
@@ -1042,49 +1053,44 @@ def render_new_analysis(api_ready: bool) -> None:
 
     running = st.session_state.is_running
 
-    # ── 按钮区 ──
+    # ── 按钮区：两行共用 4 列 CSS Grid 对齐（见 custom.css） ──
     st.markdown('<p class="section-label">运行方式</p>', unsafe_allow_html=True)
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        btn_full = st.button(
-            "完整流程",
-            type="primary",
-            use_container_width=True,
-            help="依次运行 Stage 1→2→3→4，已完成的阶段自动跳过",
-        )
-    with col2:
+    st.markdown('<span class="run-mode-grid-start" aria-hidden="true"></span>', unsafe_allow_html=True)
+    _s1, _s2, _s3, _s4 = st.columns(_RUN_STAGE_COLS)
+    with _s1:
         btn_s1 = st.button(
             "Stage 1",
             use_container_width=True,
             help="审题与结构分析：体裁、时态、人称、要点分级、结构规划",
         )
-    with col3:
+    with _s2:
         btn_s2 = st.button(
             "Stage 2",
             use_container_width=True,
             help="PEEL 写作策略卡与多版范文生成",
         )
-    with col4:
+    with _s3:
         btn_s3 = st.button(
             "Stage 3",
             use_container_width=True,
             help="功能句型包与话题词汇整理",
         )
-    with col5:
+    with _s4:
         btn_s4 = st.button(
             "Stage 4",
             use_container_width=True,
             help="教学指南与易错预警（受学生水平影响）",
         )
 
-    # 清空结果：右对齐、低视觉权重
-    _clear_spacer, _clear_btn_col = st.columns([5, 1])
-    with _clear_spacer:
-        st.markdown(
-            '<p class="clear-results-col-marker" aria-hidden="true"></p>',
-            unsafe_allow_html=True,
+    _f1, _f2 = st.columns(_RUN_ACTION_COLS)
+    with _f1:
+        btn_full = st.button(
+            "完整流程",
+            type="primary",
+            use_container_width=True,
+            help="依次运行 Stage 1→2→3→4，已完成的阶段自动跳过",
         )
-    with _clear_btn_col:
+    with _f2:
         if st.button(
             "清空结果",
             key="btn_clear_results",
@@ -1103,13 +1109,13 @@ def render_new_analysis(api_ready: bool) -> None:
             '</div>',
             unsafe_allow_html=True,
         )
-        _cc1, _cc2, _cc3 = st.columns([1, 1, 2])
+        _cc1, _cc2, _, _ = st.columns(_RUN_STAGE_COLS)
         with _cc1:
-            if st.button("确认清空", type="primary", key="btn_confirm_clear"):
+            if st.button("确认清空", type="primary", key="btn_confirm_clear", use_container_width=True):
                 clear_checkpoint()
                 st.rerun()
         with _cc2:
-            if st.button("取消", key="btn_cancel_clear"):
+            if st.button("取消", key="btn_cancel_clear", use_container_width=True):
                 st.session_state._confirm_clear = False
                 st.rerun()
 
@@ -1127,8 +1133,8 @@ def render_new_analysis(api_ready: bool) -> None:
     _failed = st.session_state.failed_stage
 
     if _next_stage is not None and not running and not st.session_state.run_job:
-        _resume_col1, _resume_col2 = st.columns([1, 2])
-        with _resume_col1:
+        _r1, _r2 = st.columns(_RUN_ACTION_COLS)
+        with _r1:
             if st.button(
                 resume_label(_next_stage),
                 type="primary",
@@ -1138,13 +1144,13 @@ def render_new_analysis(api_ready: bool) -> None:
                 maybe_clear_checkpoint_if_question_changed(question)
                 if try_start_run_job("resume", question):
                     st.rerun()
-        with _resume_col2:
+        with _r2:
             _done = sum(1 for s in range(1, 5) if stage_has_content(_cached, s))
             st.caption(f"已完成 {_done}/4 个阶段，点击可从 Stage {_next_stage} 继续生成")
 
     if _failed is not None and not running and not st.session_state.run_job:
-        _retry_col1, _retry_col2 = st.columns([1, 2])
-        with _retry_col1:
+        _t1, _t2 = st.columns(_RUN_ACTION_COLS)
+        with _t1:
             if st.button(
                 f"🔄 重试 Stage {_failed}",
                 type="secondary",
@@ -1155,7 +1161,7 @@ def render_new_analysis(api_ready: bool) -> None:
                 _mode_map = {1: "stage1", 2: "stage2", 3: "stage3", 4: "stage4"}
                 if try_start_run_job(_mode_map.get(_failed, "full"), question):
                     st.rerun()
-        with _retry_col2:
+        with _t2:
             st.caption(f"Stage {_failed} 上次生成失败，点击可重新尝试")
 
     clicked_mode: str | None = None
@@ -1206,7 +1212,8 @@ def render_new_analysis(api_ready: bool) -> None:
         if _ws and _ws.stage1:
             st.divider()
             st.caption("单独重跑某个 Stage（不影响其他已完成阶段）：")
-            _rerun_cols = st.columns(4)
+            _rr1, _rr2, _rr3, _rr4 = st.columns(_RUN_STAGE_COLS)
+            _rerun_cols = (_rr1, _rr2, _rr3, _rr4)
             _stage_names = {1: "Stage 1 审题", 2: "Stage 2 PEEL", 3: "Stage 3 句型词汇", 4: "Stage 4 教学指南"}
             for _sn in range(1, 5):
                 with _rerun_cols[_sn - 1]:
