@@ -55,9 +55,6 @@ _logger.addHandler(_console_handler)
 # ── 环境初始化 ──
 
 
-# ── 环境初始化 ──
-
-
 def _ensure_utf8_environment() -> None:
     """Windows 下避免中文环境导致 HTTP 头 ASCII 编码失败。"""
     os.environ.setdefault("PYTHONUTF8", "1")

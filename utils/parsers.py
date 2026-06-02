@@ -20,6 +20,66 @@ _SELF_CHECK_SECTION = re.compile(
 _HTML_BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 
+_CN_MAJOR_SECTION = re.compile(
+    r"^(\s*)([一二三四五六七八九十百千]+[、．.])\s*(.+)$"
+)
+_CN_BRACKET_SECTION = re.compile(r"^(\s*)【([^】]{2,48})】\s*$")
+_CN_PAREN_SECTION = re.compile(
+    r"^(\s*)[（(]([一二三四五六七八九十\d]+)[)）]\s*(.+)$"
+)
+
+
+def promote_section_headings(text: str) -> str:
+    """将「一、」「【节名】」等提升为 Markdown 标题，强化页面层级。"""
+    if not text or not text.strip():
+        return text
+    out: list[str] = []
+    for line in text.split("\n"):
+        raw = line
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("```"):
+            out.append(raw)
+            continue
+        if stripped.startswith("|") or set(stripped) <= {"-", "*", "_"}:
+            out.append(raw)
+            continue
+
+        m_br = _CN_BRACKET_SECTION.match(stripped)
+        if m_br:
+            indent = raw[: len(raw) - len(raw.lstrip())]
+            out.append(f"{indent}## 【{m_br.group(2)}】")
+            continue
+
+        m_major = _CN_MAJOR_SECTION.match(stripped)
+        if m_major and len(m_major.group(3)) <= 72:
+            indent = raw[: len(raw) - len(raw.lstrip())]
+            out.append(
+                f"{indent}## {m_major.group(2)}{m_major.group(3).strip()}"
+            )
+            continue
+
+        m_sub = _CN_PAREN_SECTION.match(stripped)
+        if m_sub and len(m_sub.group(3)) <= 64:
+            indent = raw[: len(raw) - len(raw.lstrip())]
+            out.append(f"{indent}### （{m_sub.group(2)}）{m_sub.group(3).strip()}")
+            continue
+
+        out.append(raw)
+    return "\n".join(out)
+
+
+def prettify_stage_markdown(text: str) -> str:
+    """轻量整理 Markdown 间距，便于 Streamlit 正确分段渲染。"""
+    if not text or not text.strip():
+        return text
+    cleaned = promote_section_headings(text.strip())
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(r"([^\n])\n(#{1,6}\s)", r"\1\n\n\2", cleaned)
+    cleaned = re.sub(r"([^\n])\n([-*+]\s)", r"\1\n\n\2", cleaned)
+    cleaned = re.sub(r"([^\n])\n(\d+\.\s)", r"\1\n\n\2", cleaned)
+    return cleaned
+
+
 def sanitize_llm_html_breaks(text: str) -> str:
     """将模型误输出的 <br> 转为可读分隔（Markdown 表格内 HTML 不会换行）。"""
     if not text or "<br" not in text.lower():

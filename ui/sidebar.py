@@ -29,6 +29,8 @@ from utils.config import (
     normalize_zhipu_model_id,
 )
 from utils.config import resolve_api_key
+from services.workflow_progress import stage_has_content
+from workflow import WorkflowState
 
 
 # ── session_state 读写工具 ──
@@ -52,15 +54,6 @@ def clear_checkpoint() -> None:
     st.session_state.failed_stage = None
     st.session_state._confirm_clear = False
     st.toast("已清除缓存，可重新开始", icon="🔄")
-
-
-def stage_has_content(state: WorkflowState, stage_num: int) -> bool:
-    return {
-        1: state.stage1,
-        2: state.stage2,
-        3: state.stage3,
-        4: state.stage4,
-    }.get(stage_num) is not None
 
 
 # ── 侧边栏回调 ──

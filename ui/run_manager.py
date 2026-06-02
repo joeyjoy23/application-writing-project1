@@ -39,26 +39,28 @@ from utils.status_log import (
 )
 from workflow import GaokaoWritingWorkflow, WorkflowState
 
-from ui.sidebar import api_key_configured, clear_run_job, stage_has_content
+from services.workflow_progress import get_next_stage, stage_has_content
+from ui.history import auto_save_history
+from ui.sidebar import api_key_configured, clear_run_job
+from ui.stage_display import render_one_stage, sync_slots_from_state
 
 
-# ── 延迟导入：避免与 ui.new_page 的循环依赖 ──
+def _require_stage1_json(state: WorkflowState) -> dict[str, Any]:
+    if state.stage1 is None:
+        raise ValueError("Stage 1 未完成，无法运行后续阶段")
+    return state.stage1.structured_json
 
-def _np_auto_save_history(*args, **kwargs):
-    from ui.new_page import auto_save_history
-    return auto_save_history(*args, **kwargs)
 
-def _np_get_next_stage(*args, **kwargs):
-    from ui.new_page import get_next_stage
-    return get_next_stage(*args, **kwargs)
+def _require_stage2_raw(state: WorkflowState) -> str:
+    if state.stage2 is None:
+        raise ValueError("Stage 2 未完成，无法运行 Stage 4")
+    return state.stage2.raw
 
-def _np_render_one_stage(*args, **kwargs):
-    from ui.new_page import render_one_stage
-    return render_one_stage(*args, **kwargs)
 
-def _np_sync_slots_from_state(*args, **kwargs):
-    from ui.new_page import sync_slots_from_state
-    return sync_slots_from_state(*args, **kwargs)
+def _require_stage3_raw(state: WorkflowState) -> str:
+    if state.stage3 is None:
+        raise ValueError("Stage 3 未完成，无法运行 Stage 4")
+    return state.stage3.raw
 
 
 # ── Workflow 工厂 ──
@@ -165,18 +167,52 @@ def _sync_cancel_from_settings(job: dict[str, Any]) -> None:
         st.session_state.run_cancelled = True
 
 
+def _running_stages_for_job(job: dict[str, Any], state: WorkflowState) -> set[int]:
+    """API 线程运行中时，返回正在生成的 Stage 编号集合。"""
+    if job.get("phase") != "api":
+        return set()
+    thread = job.get("thread")
+    if thread is None or not thread.is_alive():
+        return set()
+    if should_parallel_stage23(job):
+        out: set[int] = set()
+        if not state.stage2:
+            out.add(2)
+        if not state.stage3:
+            out.add(3)
+        return out
+    idx = job["stage_index"]
+    stages = job.get("stages") or []
+    if idx < len(stages):
+        return {stages[idx]}
+    return set()
+
+
+def _sync_visible_stage_slots(
+    state: WorkflowState,
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+    job: dict[str, Any] | None,
+) -> None:
+    """每次 rerun 后恢复已完成阶段展示，避免等待 Stage2/3 时 Stage1 消失。"""
+    running = _running_stages_for_job(job, state) if job else set()
+    if not any(stage_has_content(state, n) for n in range(1, 5)) and not running:
+        return
+    sync_slots_from_state(state, slots, running_stages=running)
+
+
 def _flush_stage(
     state: WorkflowState,
     stage_num: int,
     slots: tuple[st.empty, st.empty, st.empty, st.empty],
     ui: RunUI,
+    job: dict[str, Any] | None = None,
 ) -> None:
-    """保存状态并仅渲染刚完成的 Stage。"""
+    """保存状态并刷新各 Stage 占位（含已完成阶段）。"""
     st.session_state.workflow_state = state
     ui.clear_stream_preview()
     ui.log(f"正在显示 Stage {stage_num} 结果…")
     ui.set_progress(min(82 + stage_num * 4, 99), text=f"Stage {stage_num} · 显示结果…")
-    _np_render_one_stage(slots[stage_num - 1], state, stage_num)
+    _sync_visible_stage_slots(state, slots, job)
     ui.log(stage_complete(stage_num))
 
 
@@ -268,7 +304,7 @@ def _execute_stage_api(
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
         result = wf.run_stage2(
             question,
-            state.stage1.structured_json,  # type: ignore[union-attr]
+            _require_stage1_json(state),
             on_progress=_job_on_progress(job, 2, cancel_event),
             on_stream=_job_on_stream(job, 2, cancel_event),
             should_cancel=should_cancel,
@@ -282,7 +318,7 @@ def _execute_stage_api(
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
         result = wf.run_stage3(
             question,
-            state.stage1.structured_json,  # type: ignore[union-attr]
+            _require_stage1_json(state),
             on_progress=_job_on_progress(job, 3, cancel_event),
             on_stream=_job_on_stream(job, 3, cancel_event),
             should_cancel=should_cancel,
@@ -295,9 +331,9 @@ def _execute_stage_api(
         if cancel_event.is_set():
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
         result = wf.run_stage4(
-            state.stage1.structured_json,  # type: ignore[union-attr]
-            state.stage2.raw,  # type: ignore[union-attr]
-            state.stage3.raw,  # type: ignore[union-attr]
+            _require_stage1_json(state),
+            _require_stage2_raw(state),
+            _require_stage3_raw(state),
             student_level=job.get("student_level", "中等"),
             on_progress=_job_on_progress(job, 4, cancel_event),
             on_stream=_job_on_stream(job, 4, cancel_event),
@@ -567,7 +603,7 @@ def _persist_history_from_job(
     """将当前 workflow 写入历史（至少需已完成 Stage 1）。"""
     if not job or not state.stage1:
         return
-    _np_auto_save_history(
+    auto_save_history(
         state,
         provider=job.get("locked_provider"),
         model=job.get("locked_model"),
@@ -592,7 +628,7 @@ def _pipeline_stages_for_mode(mode: str, *, skip_completed: bool = False, state:
         stages = [4]
     elif mode == "resume":
         if state:
-            next_stage = _np_get_next_stage(state)
+            next_stage = get_next_stage(state)
             if next_stage is not None:
                 stages = list(range(next_stage, 5))
             else:
@@ -712,7 +748,7 @@ def _finish_job_cancelled(
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = stage_num
     _persist_history_from_job(job, state, notify=True)
-    _np_sync_slots_from_state(state, slots)
+    sync_slots_from_state(state, slots)
     clear_run_job()
     st.warning(msg)
 
@@ -801,6 +837,7 @@ def advance_run_job(
     state.question = job["question"]
     ui = RunUI(job.get("logs"))
     stage_num = job["stages"][job["stage_index"]]
+    _sync_visible_stage_slots(state, slots, job)
 
     if job["phase"] == "api":
         if job.get("thread") is None:
@@ -891,7 +928,7 @@ def advance_run_job(
                 st.session_state.last_question = job["question"]
                 st.session_state.failed_stage = stage_num
                 _persist_history_from_job(job, state, notify=True)
-                _np_sync_slots_from_state(state, slots)
+                sync_slots_from_state(state, slots)
                 clear_run_job()
                 st.error(msg)
                 time.sleep(_POLL_INTERVAL_FAST)
@@ -941,7 +978,7 @@ def advance_run_job(
         else:
             stage_num = job["stages"][job["stage_index"]]
 
-        _flush_stage(state, stage_num, slots, ui)
+        _flush_stage(state, stage_num, slots, ui, job)
         ui.persist_logs(job)
         st.session_state.workflow_state = state
         _persist_history_from_job(job, state, notify=True, notify_updates=False)

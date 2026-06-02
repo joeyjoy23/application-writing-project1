@@ -39,10 +39,11 @@
   --shadow-sm: 0 1px 3px rgb(107 91 115 / 0.07);
   --shadow-md: 0 2px 10px rgb(107 91 115 / 0.09);
   --stage-shell-title: 1.725rem; /* Stage 2 PEEL… 等（原 1.15rem × 3/2） */
-  --stage-md-h1: 1.125rem;       /* # 一、PEEL…（约为 Streamlit 默认 h1 的 1/2） */
-  --stage-md-h2: 0.975rem;       /* ## 小节 */
-  --stage-md-h3: 0.85rem;        /* ### 更细条目 */
-  --stage-md-h4: 0.775rem;
+  --stage-md-h1: 1.28rem;        /* # 大节：一、二、… */
+  --stage-md-h2: 1.1rem;         /* ## 小节 */
+  --stage-md-h3: 0.98rem;        /* ### 要点 */
+  --stage-md-h4: 0.88rem;
+}
 
 /* ── Base & Layout ── */
 html,
@@ -438,24 +439,41 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] h1 {
   font-size: var(--stage-md-h1) !important;
+  font-weight: 700 !important;
+  color: var(--c-navy) !important;
+  margin: 1.35em 0 0.7em !important;
+  padding: 0.55em 0.85em !important;
+  background: linear-gradient(90deg, var(--c-navy-light) 0%, transparent 100%) !important;
+  border-left: 4px solid var(--c-navy) !important;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] h2 {
   font-size: var(--stage-md-h2) !important;
-  color: var(--c-navy-soft) !important;
+  font-weight: 700 !important;
+  color: var(--c-navy) !important;
+  margin: 1.15em 0 0.55em !important;
+  padding-bottom: 0.35em !important;
+  border-bottom: 2px solid var(--c-border) !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] h3 {
   font-size: var(--stage-md-h3) !important;
-  color: var(--c-navy-soft) !important;
+  font-weight: 600 !important;
+  color: var(--c-accent) !important;
+  margin: 0.95em 0 0.4em !important;
+  padding-left: 0.55em !important;
+  border-left: 3px solid var(--c-accent-light) !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] h4 {
   font-size: var(--stage-md-h4) !important;
+  font-weight: 600 !important;
   color: var(--c-navy-soft) !important;
+  margin: 0.75em 0 0.35em !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
@@ -464,6 +482,61 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   [data-testid="stMarkdownContainer"] h6 {
   font-size: 0.75rem !important;
   color: var(--c-ink-muted) !important;
+}
+
+
+/* Stage 内 AI 正文：行距、列表与分段 */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] {
+  font-size: 0.94rem !important;
+  line-height: 1.78 !important;
+  letter-spacing: 0.015em;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] p {
+  margin: 0.35em 0 0.7em !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] ul,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] ol {
+  margin: 0.45em 0 0.85em !important;
+  padding-left: 1.4em !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] li {
+  margin: 0.3em 0 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] strong,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] b {
+  font-weight: 700 !important;
+  color: var(--c-navy) !important;
+  background: var(--c-accent-light);
+  padding: 0.05em 0.2em;
+  border-radius: 3px;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] blockquote {
+  margin: 0.65em 0 !important;
+  padding: 0.55em 0.9em !important;
+  border-left: 3px solid var(--c-accent) !important;
+  background: var(--c-paper-deep) !important;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--c-ink-muted) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] hr {
+  border: none !important;
+  border-top: 1px dashed var(--c-border) !important;
+  margin: 1.15em 0 !important;
 }
 
 /* ── Summary & Export ── */

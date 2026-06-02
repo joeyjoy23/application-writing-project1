@@ -16,9 +16,12 @@
 project/
 ├── app.py              # Streamlit 入口
 ├── workflow.py         # 四阶段工作流编排
+├── services/           # 无 UI 业务逻辑（序列化、进度）
 ├── prompts/            # Prompt 模板（动态加载）
 ├── llm/                # API 客户端
 ├── utils/              # 配置与解析
+├── ui/                 # Streamlit 页面与展示
+├── tests/              # pytest 回归
 ├── styles/             # 界面样式
 ├── requirements.txt
 └── .env
@@ -34,6 +37,15 @@ streamlit run app.py --server.port 8502
 ```
 
 浏览器访问：**http://localhost:8502**（默认端口已写在 `.streamlit/config.toml`，也可双击 `run.bat` 启动）。
+
+### 开发与测试
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
+`tests/` 覆盖 Stage1 解析、工作流序列化、进度推断与 LLM 消息构造；改 `prompts/` 或 `utils/parsers.py` 后建议先跑一遍。
 
 启动后在**左侧边栏**选择模型提供商（DeepSeek / **智谱** / OpenAI / Gemini / 百炼 / **小米 MiMo**）、模型名称，并输入 API Key；留空 Key 时会尝试从 `.env` 或 Streamlit Secrets 读取。DeepSeek 官方仅 **`deepseek-v4-pro`**；智谱为 **`glm-5.1` / `glm-4.7`**（[open.bigmodel.cn](https://open.bigmodel.cn)）。
 
