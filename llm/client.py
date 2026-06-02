@@ -168,6 +168,8 @@ class LLMClient:
         last_activity = time.monotonic()
         started_at = last_activity
         usage = ChatUsage()
+        finish_reason: str | None = None
+        ended_by_idle = False
 
         for chunk in stream_resp:
             if should_cancel and should_cancel():
@@ -186,12 +188,14 @@ class LLMClient:
 
             if not chunk.choices:
                 if parts and now - last_activity > idle_limit:
+                    ended_by_idle = True
                     break
                 continue
 
             choice = chunk.choices[0]
             delta = choice.delta.content or ""
             if choice.finish_reason:
+                finish_reason = choice.finish_reason
                 if delta:
                     parts.append(delta)
                     total += len(delta)
@@ -199,6 +203,7 @@ class LLMClient:
 
             if not delta:
                 if parts and now - last_activity > idle_limit:
+                    ended_by_idle = True
                     break
                 continue
 
@@ -214,4 +219,15 @@ class LLMClient:
         text = "".join(parts).strip()
         if not text:
             raise RuntimeError("模型返回空内容（流式）")
+        if finish_reason == "length":
+            raise RuntimeError(
+                "模型输出达到 max_tokens 上限被截断（常见于 Stage1 篇幅较长）。"
+                "请重试 Stage 1，或在 .env 增大 OPENAI_MAX_TOKENS / 换更长输出的模型。"
+            )
+        if ended_by_idle and not finish_reason:
+            raise RuntimeError(
+                f"流式输出已中断：超过 {int(idle_limit)} 秒未收到新内容，"
+                "结果可能不完整（如构思维度写到一半）。"
+                "请重试；若模型较慢，可在 .env 增大 STREAM_IDLE_TIMEOUT_SECONDS。"
+            )
         return text, usage

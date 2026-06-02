@@ -10,6 +10,7 @@ import streamlit as st
 
 from services.workflow_progress import stage_has_content
 from utils.parsers import (
+    normalize_vertical_spacing,
     prettify_stage_markdown,
     sanitize_llm_html_breaks,
     strip_reader_self_check,
@@ -169,8 +170,10 @@ def _bold_label_in_line(line: str) -> str:
 
 
 def _format_stage_body(text: str) -> str:
-    """展示前：间距整理 + 冒号前标签加粗。"""
-    return bold_labels_before_colon(prettify_stage_markdown(text))
+    """展示前：间距整理 + 冒号前标签加粗 + 加粗后再统一空行。"""
+    body = prettify_stage_markdown(text)
+    body = bold_labels_before_colon(body)
+    return normalize_vertical_spacing(body)
 
 
 @st.cache_data(show_spinner=False)
@@ -367,7 +370,7 @@ def render_stage_in_progress(slot: st.empty, stage_num: int) -> None:
             st.markdown(_STAGE_BADGE_TITLES[stage_num], unsafe_allow_html=True)
             st.info(
                 f"Stage {stage_num} 正在生成中，请稍候…"
-                "（上方「运行状态」可查看实时字数）"
+                "（下方「运行状态」可查看实时字数）"
             )
 
 

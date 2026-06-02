@@ -6,6 +6,7 @@ Prompt 从 prompts/ 目录动态加载。
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,23 @@ from utils.parsers import parse_stage1_output
 from utils.stage4_input import build_stage4_user_sections
 
 PROMPTS_DIR = get_project_root() / "prompts"
+
+# 各阶段 completion 上限（仅 cap，不鼓励写满；可按 STAGE{n}_MAX_TOKENS 覆盖）
+_STAGE_MAX_TOKENS_DEFAULT: dict[int, int] = {
+    1: 8192,   # PART A JSON + PART B 六节（最易在后段截断）
+    2: 8192,   # PEEL + 三版范文 + 对比表与批注（输出量最大）
+    3: 6144,   # 功能句型三表 + 话题词汇三级
+    4: 6144,   # 教学指南约 1200–2000 字
+}
+
+
+def stage_max_tokens(stage_num: int) -> int:
+    """读取阶段 max_tokens，环境变量 STAGE1_MAX_TOKENS … STAGE4_MAX_TOKENS 可覆盖。"""
+    default = _STAGE_MAX_TOKENS_DEFAULT.get(stage_num, 6144)
+    raw = (os.getenv(f"STAGE{stage_num}_MAX_TOKENS") or "").strip()
+    if raw:
+        return max(1024, int(raw))
+    return default
 
 
 from functools import lru_cache
@@ -119,12 +137,13 @@ class GaokaoWritingWorkflow:
             stage_prompt=stage_prompt,
             user_parts=[
                 f"【应用文原题】\n\n{question.strip()}",
-                "请按 stage1 任务说明输出 STRUCTURED_JSON 与 HUMAN_READABLE_SUMMARY。",
+                "请按 stage1 任务说明输出 STRUCTURED_JSON 与 HUMAN_READABLE_SUMMARY。"
+                "JSON 从简（短句/短语）；PART B 六节必须写全，§6 须完整输出至「结尾段」。",
             ],
         )
         raw = self._call(
             messages,
-            max_tokens=3072,
+            max_tokens=stage_max_tokens(1),
             on_progress=on_progress,
             on_stream=on_stream,
             should_cancel=should_cancel,
@@ -152,7 +171,7 @@ class GaokaoWritingWorkflow:
         )
         raw = self._call(
             messages,
-            max_tokens=6144,
+            max_tokens=stage_max_tokens(2),
             on_progress=on_progress,
             on_stream=on_stream,
             should_cancel=should_cancel,
@@ -180,7 +199,7 @@ class GaokaoWritingWorkflow:
         )
         raw = self._call(
             messages,
-            max_tokens=4096,
+            max_tokens=stage_max_tokens(3),
             on_progress=on_progress,
             on_stream=on_stream,
             should_cancel=should_cancel,
@@ -224,7 +243,7 @@ class GaokaoWritingWorkflow:
         )
         raw = self._call(
             messages,
-            max_tokens=4096,
+            max_tokens=stage_max_tokens(4),
             on_progress=on_progress,
             on_stream=on_stream,
             should_cancel=should_cancel,

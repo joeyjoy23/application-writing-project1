@@ -68,11 +68,56 @@ def promote_section_headings(text: str) -> str:
     return "\n".join(out)
 
 
+_LABEL_LINE = re.compile(
+    r"^(\s*)(?:[-*+]\s+)?\*\*[^*]+?\*\*\s*[：:]"
+)
+_HEADING_LINE = re.compile(r"^\s*#{1,6}\s")
+_LIST_LINE = re.compile(r"^\s*[-*+]\s")
+
+
+def normalize_vertical_spacing(text: str) -> str:
+    """统一列表、加粗标签行与正文之间的空行，避免段落间距忽大忽小。"""
+    lines = text.split("\n")
+    out: list[str] = []
+    prev: str = "start"
+
+    def _kind(s: str) -> str:
+        if _HEADING_LINE.match(s):
+            return "heading"
+        if _LIST_LINE.match(s):
+            return "list"
+        if _LABEL_LINE.match(s):
+            return "label"
+        return "text"
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if out and out[-1] != "":
+                out.append("")
+            prev = "blank"
+            continue
+
+        kind = _kind(stripped)
+        need_gap = prev not in ("start", "blank") and (
+            (prev == "list" and kind in ("label", "text", "heading"))
+            or (prev == "text" and kind in ("list", "label", "heading"))
+            or (prev == "label" and kind in ("label", "heading", "list", "text"))
+        )
+        if need_gap and out[-1] != "":
+            out.append("")
+        out.append(line.rstrip())
+        prev = kind
+
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out))
+
+
 def prettify_stage_markdown(text: str) -> str:
     """轻量整理 Markdown 间距，便于 Streamlit 正确分段渲染。"""
     if not text or not text.strip():
         return text
     cleaned = promote_section_headings(text.strip())
+    cleaned = normalize_vertical_spacing(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"([^\n])\n(#{1,6}\s)", r"\1\n\n\2", cleaned)
     cleaned = re.sub(r"([^\n])\n([-*+]\s)", r"\1\n\n\2", cleaned)
@@ -89,6 +134,22 @@ def sanitize_llm_html_breaks(text: str) -> str:
     cleaned = re.sub(r"([。；：!?])\s+", r"\1", cleaned)
     cleaned = re.sub(r" *\n *", "\n", cleaned)
     return cleaned
+
+
+def stage1_summary_incomplete(summary: str) -> str | None:
+    """若审题总结疑似被截断，返回用户可读原因；完整则返回 None。"""
+    text = (summary or "").strip()
+    if not text:
+        return "Stage 1 审题总结为空，请重试。"
+    markers = ("## 6.", "## 6 ", "要点与结构规划", "结尾段")
+    if not any(m in text for m in markers):
+        return "Stage 1 输出可能在 §6「要点与结构规划」之前被截断，请重试 Stage 1。"
+    if "结尾段" not in text:
+        return "Stage 1 输出未写完 §6「结尾段」，请重试 Stage 1 或换更快模型。"
+    tail = text[-80:].strip()
+    if tail and tail[-1] in "（(,，、；;：:" and "）)" not in tail[-20:]:
+        return "Stage 1 输出在段落中途截断，请重试 Stage 1。"
+    return None
 
 
 def parse_stage1_output(raw: str) -> tuple[dict[str, Any], str]:

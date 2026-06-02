@@ -431,9 +431,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-weight: 600 !important;
   color: var(--c-navy) !important;
   letter-spacing: 0.01em;
-  line-height: 1.45;
-  margin-top: 0.85em;
-  margin-bottom: 0.45em;
+  line-height: 1.5;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
@@ -441,8 +439,8 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-size: var(--stage-md-h1) !important;
   font-weight: 700 !important;
   color: var(--c-navy) !important;
-  margin: 1.35em 0 0.7em !important;
-  padding: 0.55em 0.85em !important;
+  margin: 0 0 0.55em !important;
+  padding: 0.45em 0.75em !important;
   background: linear-gradient(90deg, var(--c-navy-light) 0%, transparent 100%) !important;
   border-left: 4px solid var(--c-navy) !important;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -453,8 +451,8 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-size: var(--stage-md-h2) !important;
   font-weight: 700 !important;
   color: var(--c-navy) !important;
-  margin: 1.15em 0 0.55em !important;
-  padding-bottom: 0.35em !important;
+  margin: 0.75em 0 0.4em !important;
+  padding-bottom: 0.28em !important;
   border-bottom: 2px solid var(--c-border) !important;
 }
 
@@ -463,8 +461,8 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-size: var(--stage-md-h3) !important;
   font-weight: 600 !important;
   color: var(--c-accent) !important;
-  margin: 0.95em 0 0.4em !important;
-  padding-left: 0.55em !important;
+  margin: 0.6em 0 0.3em !important;
+  padding-left: 0.5em !important;
   border-left: 3px solid var(--c-accent-light) !important;
 }
 
@@ -473,7 +471,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-size: var(--stage-md-h4) !important;
   font-weight: 600 !important;
   color: var(--c-navy-soft) !important;
-  margin: 0.75em 0 0.35em !important;
+  margin: 0.5em 0 0.25em !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
@@ -485,41 +483,62 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
 }
 
 
-/* Stage 内 AI 正文：行距、列表与分段 */
+/* Stage 内 AI 正文：统一垂直节奏（避免 p/li/标题 margin 叠加大空隙） */
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] {
   font-size: 0.94rem !important;
-  line-height: 1.78 !important;
-  letter-spacing: 0.015em;
+  line-height: 1.65 !important;
+  letter-spacing: 0.01em;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] > :first-child {
+  margin-top: 0 !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] p {
-  margin: 0.35em 0 0.7em !important;
+  margin: 0 0 0.5em !important;
+  line-height: 1.65 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] li > p,
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] li > p:last-child {
+  margin: 0 !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] ul,
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] ol {
-  margin: 0.45em 0 0.85em !important;
-  padding-left: 1.4em !important;
+  margin: 0.25em 0 0.55em !important;
+  padding-left: 1.35em !important;
+  line-height: 1.6 !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] li {
-  margin: 0.3em 0 !important;
+  margin: 0.15em 0 !important;
+  padding: 0 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] li + li {
+  margin-top: 0.2em !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] strong,
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] b {
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   color: var(--c-navy) !important;
-  background: var(--c-accent-light);
-  padding: 0.05em 0.2em;
-  border-radius: 3px;
+  background: rgb(248 244 236 / 0.85);
+  padding: 0 0.08em;
+  border-radius: 2px;
+  line-height: inherit;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)

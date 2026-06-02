@@ -333,7 +333,7 @@ def build_settings(
         else float(os.getenv("OPENAI_TEMPERATURE", "0.7")),
         max_tokens=max_tokens
         if max_tokens is not None
-        else int(os.getenv("OPENAI_MAX_TOKENS", "4096")),
+        else int(os.getenv("OPENAI_MAX_TOKENS", "8192")),
         provider=p,
     )
 

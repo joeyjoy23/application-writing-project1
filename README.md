@@ -64,7 +64,7 @@ pytest
 1. 看运行日志是否出现 **「正在接收… 已收到约 N 字」**——有数字在涨说明正常，只是模型慢。
 2. 百炼旗舰模型（如 qwen3.6-max-preview）可能 **1–3 分钟** 才有首字，可改用 **qwen-plus** / **deepseek-v4-flash** 试跑。
 3. 确认 API Key、网络；终端若有 401/404 按提示换模型或检查 Key。
-4. `.env` / Secrets 可调：`STAGE_TIMEOUT_SECONDS=300`（单 Stage 最长等待，原默认 90 秒易超时）、`API_READ_TIMEOUT_SECONDS=300`、`STREAM_IDLE_TIMEOUT_SECONDS=180`。
+4. `.env` / Secrets 可调：`STAGE_TIMEOUT_SECONDS=300`（单 Stage 最长等待）、`API_READ_TIMEOUT_SECONDS=300`、`STREAM_IDLE_TIMEOUT_SECONDS=180`；若输出在文末被截断，可增大 `STAGE1_MAX_TOKENS`～`STAGE4_MAX_TOKENS`（默认 8192/8192/6144/6144，见 `.env.example`）。
 5. 完整四阶段约 8–15 分钟；仍断开则分步运行 Stage 1→2→3→4。
 
 ## 工作流

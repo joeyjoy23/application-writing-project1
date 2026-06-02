@@ -37,12 +37,18 @@ from utils.status_log import (
     stage_complete,
     stage_load_prompt,
 )
+from utils.parsers import stage1_summary_incomplete
 from workflow import GaokaoWritingWorkflow, WorkflowState
 
 from services.workflow_progress import get_next_stage, stage_has_content
 from ui.history import auto_save_history
 from ui.sidebar import api_key_configured, clear_run_job
-from ui.stage_display import render_one_stage, sync_slots_from_state
+from ui.stage_display import (
+    render_one_stage,
+    render_stage_in_progress,
+    render_stage_placeholder,
+    sync_slots_from_state,
+)
 
 
 def _require_stage1_json(state: WorkflowState) -> dict[str, Any]:
@@ -192,12 +198,35 @@ def _sync_visible_stage_slots(
     state: WorkflowState,
     slots: tuple[st.empty, st.empty, st.empty, st.empty],
     job: dict[str, Any] | None,
+    *,
+    paint_mode: str = "full",
 ) -> None:
-    """每次 rerun 后恢复已完成阶段展示，避免等待 Stage2/3 时 Stage1 消失。"""
+    """恢复 Stage 占位。incremental 模式只绘制尚未写入的槽位，避免轮询时闪烁。"""
     running = _running_stages_for_job(job, state) if job else set()
     if not any(stage_has_content(state, n) for n in range(1, 5)) and not running:
         return
-    sync_slots_from_state(state, slots, running_stages=running)
+
+    rendered: set[int] = set()
+    if job is not None:
+        rendered = job.setdefault("slots_rendered", set())
+
+    incremental = paint_mode == "incremental"
+
+    for n, slot in enumerate(slots, start=1):
+        if stage_has_content(state, n):
+            if incremental and n in rendered:
+                continue
+            render_one_stage(slot, state, n)
+            if job is not None:
+                rendered.add(n)
+        elif n in running:
+            if incremental and n in rendered:
+                continue
+            render_stage_in_progress(slot, n)
+            if job is not None:
+                rendered.add(n)
+        elif not incremental:
+            render_stage_placeholder(slot, n)
 
 
 def _flush_stage(
@@ -212,7 +241,11 @@ def _flush_stage(
     ui.clear_stream_preview()
     ui.log(f"正在显示 Stage {stage_num} 结果…")
     ui.set_progress(min(82 + stage_num * 4, 99), text=f"Stage {stage_num} · 显示结果…")
-    _sync_visible_stage_slots(state, slots, job)
+    if job is not None:
+        job.setdefault("slots_rendered", set()).discard(stage_num)
+    render_one_stage(slots[stage_num - 1], state, stage_num)
+    if job is not None:
+        job["slots_rendered"].add(stage_num)
     ui.log(stage_complete(stage_num))
 
 
@@ -585,6 +618,9 @@ def _prepare_stage_api_logs(ui: RunUI, stage_num: int) -> None:
 def _apply_stage_result(state: WorkflowState, stage_num: int, result: Any) -> None:
     if stage_num == 1:
         state.stage1 = result
+        msg = stage1_summary_incomplete(getattr(result, "human_summary", "") or "")
+        if msg and msg not in state.errors:
+            state.errors.append(msg)
     elif stage_num == 2:
         state.stage2 = result
     elif stage_num == 3:
@@ -709,6 +745,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "parallel_mode": False,
         "parallel_results": None,
         "student_level": st.session_state.get("student_level", "中等"),
+        "slots_rendered": set(),
     }
     st.session_state.llm_run_usage = None
     if mode == "full":
@@ -837,7 +874,11 @@ def advance_run_job(
     state.question = job["question"]
     ui = RunUI(job.get("logs"))
     stage_num = job["stages"][job["stage_index"]]
-    _sync_visible_stage_slots(state, slots, job)
+    thread = job.get("thread")
+    thread_alive = thread is not None and thread.is_alive()
+    if job["phase"] != "flush":
+        if thread_alive or (job["phase"] == "api" and thread is None):
+            _sync_visible_stage_slots(state, slots, job, paint_mode="incremental")
 
     if job["phase"] == "api":
         if job.get("thread") is None:
