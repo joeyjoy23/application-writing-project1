@@ -148,6 +148,20 @@ def test_stage1_high_score_points_not_h4():
     assert "- **逻辑衔接要自然：**" in out
 
 
+def test_stage4_practice_thinking_hints_not_h4():
+    raw = (
+        "### 三、课后练习题\n\n"
+        "**练习2：完整写作迁移（适合中等/进阶）**\n"
+        "- **思考提示**：\n"
+        "1. **对照 genre_specific_moves 自检**\n"
+        "2. **检查语气是否贴合读者**"
+    )
+    out = prettify_stage_markdown(raw)
+    assert "#### 练习2：完整写作迁移（适合中等/进阶）" in out
+    assert "#### 1. **对照" not in out
+    assert "- **对照 genre_specific_moves 自检**" in out
+
+
 def test_stage4_error_list_compact():
     raw = (
         "1. **语气错位**\n\n"

@@ -175,7 +175,8 @@ def promote_stage4_block_headings(text: str) -> str:
         m = _STAGE4_NUM_BOLD.match(stripped)
         if m:
             num, rest = m.group(1), m.group(2)
-            if block in ("errors", "practices"):
+            # 仅「典型错误」条块用 h4；练习区内 1. **…** 多为思考提示子条，勿升格
+            if block == "errors":
                 out.append(f"{indent}#### {num}. {rest}")
             else:
                 out.append(f"{indent}- {rest}")
