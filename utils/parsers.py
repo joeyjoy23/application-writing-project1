@@ -117,8 +117,9 @@ _CN_MAJOR_HASH = re.compile(
 )
 _PART_HASH = re.compile(r"^#\s+(PART\s+[AB][^\n]*)$", re.IGNORECASE)
 _PEEL_POINT_HASH = re.compile(r"^##\s+([★·※].+)$")
+_PEEL_P_HEADING = re.compile(r"^#{3,5}\s+(?:P（核心句）|核心句（P）)\s*$")
 _PEEL_FIELD_HASH = re.compile(
-    r"^###\s+(P（核心句）|拓展策略[^#\n]*|连至下一点（L）)\s*$"
+    r"^###\s+(拓展策略[^#\n]*|连至下一点（L）)\s*$"
 )
 _KUOZHAN_LEGACY = re.compile(r"^(#{1,6}\s+)拓展策略（[^）\n]*）\s*$")
 _STAGE1_SUB_HASH = re.compile(r"^###\s+(\d+\.\d+\s+.+)$")
@@ -194,7 +195,7 @@ def promote_stage4_block_headings(text: str) -> str:
 def tune_stage_heading_levels(text: str) -> str:
     """
     全 Stage 统一标题阶梯（顶栏 1.48rem 下）：
-    h3 一、/PART/禁止 · h4 ★/表格/语义场/2.1/（一） · h5 P/必备级 等。
+    h3 一、/PART/禁止 · h4 ★/表格/语义场/2.1/（一） · h5 核心句（P）/必备级 等。
     """
     out: list[str] = []
     for line in text.split("\n"):
@@ -223,6 +224,9 @@ def tune_stage_heading_levels(text: str) -> str:
         m_sem = _STAGE3_SEMANTIC_HASH.match(stripped)
         if m_sem:
             out.append(f"{indent}#### {m_sem.group(1)}")
+            continue
+        if _PEEL_P_HEADING.match(stripped):
+            out.append(f"{indent}##### 核心句（P）")
             continue
         m_field = _PEEL_FIELD_HASH.match(stripped)
         if m_field:

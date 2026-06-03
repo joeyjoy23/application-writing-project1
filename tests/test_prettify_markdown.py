@@ -26,7 +26,8 @@ def test_tune_peel_demotes_field_headings_below_point():
         "## 1. 基础版（9 分档）"
     )
     out = prettify_stage_markdown(raw)
-    assert "##### P（核心句）" in out
+    assert "##### 核心句（P）" in out
+    assert "##### P（核心句）" not in out
     assert "##### 拓展策略（E）" in out
     assert "#### 1. 基础版（9 分档）" in out
 
