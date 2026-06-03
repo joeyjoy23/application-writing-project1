@@ -508,11 +508,17 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   border: none !important;
 }
 
-/* Stage3 功能句型包：「改一句」小标题 + 两行英文对照 */
+/* Stage3「改一句」/ Stage1「一句大实话」等小标题 + 正文段 */
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] h5 + p {
   margin: 0.12em 0 0.28em !important;
   line-height: var(--stage-md-li-line) !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
+  [data-testid="stMarkdownContainer"] h5 {
+  margin-top: 0.55em !important;
+  color: var(--c-accent) !important;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)

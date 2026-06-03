@@ -73,6 +73,17 @@ def test_normalize_benti_gaiyiju_splits_inline_dash():
     assert "❌ You must" not in out
 
 
+def test_format_yijuhodashihua_as_h5():
+    raw = (
+        "### 1. 动笔自查五问\n\n"
+        "**💡 一句大实话**（2–3 行）：这篇投稿最容易踩的坑是光提现象。"
+    )
+    out = prettify_stage_markdown(raw)
+    assert "##### 💡 一句大实话" in out
+    assert "这篇投稿最容易踩的坑" in out
+    assert "一句大实话**（2–3 行）：这篇" not in out
+
+
 def test_format_gaiyiju_arrow_block_multiline():
     from utils.parsers import format_gaiyiju_arrow_blocks
 

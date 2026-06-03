@@ -302,6 +302,57 @@ def _format_gaiyiju_block(wrong: str, right: str) -> str:
     return f"##### 改一句\n\n{bad} ❌\n\n→ {good} ✅"
 
 
+_DASHIHUA_LABEL = (
+    r"(?:\*\*💡\s*一句大实话\*\*|💡\s*\*\*一句大实话\*\*|💡\s*一句大实话)"
+)
+_DASHIHUA_LINE = re.compile(
+    rf"^(\s*){_DASHIHUA_LABEL}"
+    r"(?:\s*[（(][^）)]*[）)])?\s*"
+    r"[：:]\s*(.+)$"
+)
+_DASHIHUA_LINE_TITLE_ONLY = re.compile(
+    rf"^(\s*){_DASHIHUA_LABEL}"
+    r"(?:\s*[（(][^）)]*[）)])?\s*[：:]\s*$"
+)
+_DASHIHUA_LINE_SPACE_BODY = re.compile(
+    rf"^(\s*){_DASHIHUA_LABEL}"
+    r"(?:\s*[（(][^）)]*[）)])?\s+(.+)$"
+)
+
+
+def format_yijuhodashihua_block(text: str) -> str:
+    """Stage1：「💡 一句大实话」独立为 h5 小标题，正文另起段。"""
+    if "一句大实话" not in text:
+        return text
+    if re.search(r"#####\s*💡?\s*一句大实话", text):
+        return text
+
+    out: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        indent = line[: len(line) - len(stripped)]
+        m = _DASHIHUA_LINE.match(stripped)
+        if m and m.group(2).strip():
+            out.append(f"{indent}##### 💡 一句大实话")
+            out.append("")
+            out.append(f"{indent}{m.group(2).strip()}")
+            continue
+        m_sp = _DASHIHUA_LINE_SPACE_BODY.match(stripped)
+        if m_sp and m_sp.group(2).strip():
+            out.append(f"{indent}##### 💡 一句大实话")
+            out.append("")
+            out.append(f"{indent}{m_sp.group(2).strip()}")
+            continue
+        if _DASHIHUA_LINE_TITLE_ONLY.match(stripped):
+            out.append(f"{indent}##### 💡 一句大实话")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def format_gaiyiju_arrow_blocks(text: str) -> str:
     """Stage3：「改一句」小标题 + 两行对照（❌/✅ 在句末）。"""
     if "改一句" not in text or "→" not in text:
@@ -496,6 +547,7 @@ def prettify_stage_markdown(text: str) -> str:
     cleaned = tune_stage_heading_levels(cleaned)
     cleaned = normalize_benti_gaiyiju(cleaned)
     cleaned = normalize_kuozhan_strategy_heading(cleaned)
+    cleaned = format_yijuhodashihua_block(cleaned)
     cleaned = merge_list_item_continuations(cleaned)
     cleaned = normalize_list_spacing(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
