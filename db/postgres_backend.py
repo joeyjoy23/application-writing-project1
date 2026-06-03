@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 import time
 from contextlib import contextmanager
@@ -55,6 +56,22 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_llm_cache_owner ON llm_cache (owner_id, updated_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS share_links (
+        token TEXT PRIMARY KEY,
+        history_id BIGINT NOT NULL,
+        owner_id TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        stages_mask CHAR(4) NOT NULL DEFAULT '0000',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        view_count INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_share_history_owner ON share_links (history_id, owner_id)",
 )
 
 
@@ -388,3 +405,123 @@ def upsert_llm_cache(
             ),
         )
         conn.commit()
+
+
+def _fetch_history_for_owner(
+    conn: Any, history_id: int, *, owner_id: str
+) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT * FROM history WHERE id = %s AND owner_id = %s",
+        (history_id, owner_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_active_share_token(history_id: int, *, owner_id: str) -> str | None:
+    """未撤销且未过期的分享令牌。"""
+    from utils.share_util import is_share_expired
+
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT token, expires_at, revoked
+            FROM share_links
+            WHERE history_id = %s AND owner_id = %s AND revoked = 0
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (history_id, owner_id),
+        ).fetchone()
+    if not row:
+        return None
+    if int(row["revoked"]) or is_share_expired(str(row["expires_at"])):
+        return None
+    return str(row["token"])
+
+
+def create_or_refresh_share_link(history_id: int, *, owner_id: str) -> str | None:
+    from utils.share_util import expires_at_from_now, is_share_expired
+
+    init_db()
+    with _connect() as conn:
+        record = _fetch_history_for_owner(conn, history_id, owner_id=owner_id)
+        if not record:
+            return None
+        topic = str(record.get("topic") or "")
+        model_name = str(record.get("model_name") or "")
+        snapshot = str(record.get("full_content") or "")
+        mask = str(record.get("stages_mask") or "0000")
+        now = utc_now_str()
+        expires = expires_at_from_now()
+
+        row = conn.execute(
+            """
+            SELECT token, expires_at, revoked
+            FROM share_links
+            WHERE history_id = %s AND owner_id = %s AND revoked = 0
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (history_id, owner_id),
+        ).fetchone()
+
+        if row and not int(row["revoked"]) and not is_share_expired(str(row["expires_at"])):
+            token = str(row["token"])
+            conn.execute(
+                """
+                UPDATE share_links
+                SET snapshot_json = %s, topic = %s, model_name = %s, stages_mask = %s,
+                    expires_at = %s, created_at = %s
+                WHERE token = %s
+                """,
+                (snapshot, topic, model_name, mask, expires, now, token),
+            )
+        else:
+            token = secrets.token_urlsafe(24)
+            conn.execute(
+                """
+                INSERT INTO share_links (
+                    token, history_id, owner_id, snapshot_json, topic, model_name,
+                    stages_mask, created_at, expires_at, revoked, view_count
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0)
+                """,
+                (
+                    token,
+                    history_id,
+                    owner_id,
+                    snapshot,
+                    topic,
+                    model_name,
+                    mask,
+                    now,
+                    expires,
+                ),
+            )
+        conn.commit()
+        logger.info("分享链接已就绪 history=#%d token=%s…", history_id, token[:8])
+        return token
+
+
+def get_public_share(token: str) -> dict[str, Any] | None:
+    from utils.share_util import is_share_expired
+
+    if not token:
+        return None
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM share_links WHERE token = %s",
+            (token,),
+        ).fetchone()
+        if not row or int(row["revoked"]):
+            return None
+        if is_share_expired(str(row["expires_at"])):
+            return None
+        conn.execute(
+            "UPDATE share_links SET view_count = view_count + 1 WHERE token = %s",
+            (token,),
+        )
+        conn.commit()
+    return dict(row)

@@ -22,7 +22,9 @@
 
 3. 打开 [share.streamlit.io](https://share.streamlit.io) → 你的 App → **Manage app** → **Reboot app**。
 
-4. 打开网页，看侧边栏最底部版本号，例如：
+4. **分享功能**：在 Secrets 增加 `APP_BASE_URL`（与浏览器地址栏一致，如 `https://xxx.streamlit.app`），并配置 `DATABASE_URL`。分享链接形如 `APP_BASE_URL/?share=令牌`，默认 7 天有效。
+
+5. 打开网页，看侧边栏最底部版本号，例如：
    - `界面 2026.05.20-no-image-ocr` → 已移除图片识题，保留文字输入与四阶段流程
 
 ### 其它可能

@@ -66,6 +66,7 @@ def auto_save_history(
             word_count=workflow_content_length(state),
             stages_mask=workflow_stages_mask(state),
         )
+        st.session_state.current_history_record_id = int(record_id)
         st.session_state._last_save_fingerprint = fingerprint
         if notify:
             if is_new:

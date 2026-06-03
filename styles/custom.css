@@ -1055,3 +1055,54 @@ footer {
   margin: 0;
   line-height: 1.55;
 }
+
+/* 分享链接区（新建页 / 历史详情） */
+.share-section {
+  margin: 0.85rem 0 0.5rem;
+  padding: 0.75rem 0.9rem 0.65rem;
+  background: var(--c-surface-elevated, #f8f6f3);
+  border: 1px solid rgb(58 53 64 / 0.08);
+  border-radius: var(--radius-md);
+}
+
+.share-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--c-ink);
+  margin-bottom: 0.5rem;
+}
+
+.share-section-title svg {
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.75;
+}
+
+/* 分享只读预览页 */
+.share-preview-hero {
+  text-align: center;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.share-preview-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--c-ink);
+}
+
+.share-preview-subtitle {
+  font-size: 0.88rem;
+  color: var(--c-ink-muted);
+  margin-top: 0.25rem;
+}
+
+.main:has(.share-preview-hero) {
+  user-select: none;
+}
+
+.main:has(.share-preview-hero) .stTextArea textarea {
+  user-select: text;
+}

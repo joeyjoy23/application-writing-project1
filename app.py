@@ -147,6 +147,7 @@ def init_session() -> None:
         "use_llm_cache": True,
         "llm_run_usage": None,
         "student_level": "中等",
+        "current_history_record_id": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -165,6 +166,14 @@ def main() -> None:
     )
     init_session()
     load_css()
+
+    _share_param = st.query_params.get("share")
+    if _share_param:
+        from ui.share_page import render_share_page
+
+        render_share_page()
+        return
+
     ensure_sidebar_expanded_on_first_load()
     try:
         sync_session_llm_selection()

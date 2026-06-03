@@ -37,6 +37,7 @@ from workflow import WorkflowState
 from ui.history import auto_save_history, history_resume_hint, load_history_into_session
 from ui.run_manager import advance_run_job, try_start_run_job
 from ui.sidebar import api_key_configured, clear_checkpoint
+from ui.share_controls import ensure_history_record_id, render_share_controls
 from ui.stage_display import render_all_stages, sync_slots_from_state
 
 
@@ -353,6 +354,7 @@ def render_history_detail(record_id: int) -> None:
         created_at=record["created_at"],
         key_prefix=f"hist_{record_id}",
     )
+    render_share_controls(record_id, key_prefix=f"hist_share_{record_id}")
 
 
 def render_history_page() -> None:
@@ -553,6 +555,8 @@ def render_new_analysis(api_ready: bool) -> None:
     _early_state = st.session_state.workflow_state
     if _early_state and _early_state.stage1:
         render_export_buttons(_early_state)
+        _hist_id = ensure_history_record_id(_early_state)
+        render_share_controls(_hist_id, key_prefix="new_share")
 
     stage_slot1 = st.empty()
     stage_slot2 = st.empty()
