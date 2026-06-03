@@ -21,7 +21,11 @@ FOLD_CHAR_THRESHOLD = 5000
 FOLD_PREVIEW_CHARS = 1000
 
 _VOCAB_SECTION_RE = re.compile(
-    r"#\s*二[、.．]?\s*话题词汇锦囊",
+    r"^#{1,6}\s*二[、.．]?\s*话题词汇锦囊",
+    re.IGNORECASE | re.MULTILINE,
+)
+_VOCAB_SECTION_HEADING_LINE = re.compile(
+    r"^#{1,6}\s*(?:二[、.．]?\s*)?话题词汇锦囊\s*$",
     re.IGNORECASE,
 )
 _LEVEL_HEADING_RE = re.compile(
@@ -63,6 +67,18 @@ def _split_stage3_vocab_section(raw: str) -> tuple[str, str]:
     if not m:
         return raw.strip(), ""
     return raw[: m.start()].strip(), raw[m.start() :].strip()
+
+
+def _strip_vocab_section_heading(text: str) -> str:
+    """去掉段首「二、话题词汇锦囊」行，避免与 UI 节标题重复。"""
+    lines = text.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and _VOCAB_SECTION_HEADING_LINE.match(lines[0].strip()):
+        lines.pop(0)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+    return "\n".join(lines)
 
 
 def _detect_vocab_level(line: str) -> str | None:
@@ -305,9 +321,10 @@ def render_stage3(state: WorkflowState) -> None:
         if phrases_part:
             render_stage_markdown(phrases_part)
         if vocab_part:
-            st.markdown("### 话题词汇锦囊")
-            if not _render_vocab_tier_tables(vocab_part):
-                render_stage_markdown(vocab_part)
+            vocab_body = _strip_vocab_section_heading(vocab_part)
+            st.markdown("### 二、话题词汇锦囊")
+            if not _render_vocab_tier_tables(vocab_body):
+                render_stage_markdown(vocab_body)
         elif not phrases_part:
             render_stage_markdown(raw)
         render_copy_button(raw)
