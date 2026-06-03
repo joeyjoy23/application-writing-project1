@@ -407,18 +407,25 @@ def upsert_llm_cache(
         conn.commit()
 
 
-def _fetch_history_for_owner(
-    conn: Any, history_id: int, *, owner_id: str
+def _fetch_history_for_share(
+    conn: Any, history_id: int, *, viewer_owner_id: str, admin: bool
 ) -> dict[str, Any] | None:
-    row = conn.execute(
-        "SELECT * FROM history WHERE id = %s AND owner_id = %s",
-        (history_id, owner_id),
-    ).fetchone()
+    """管理员可分享任意历史；普通用户仅能分享本人记录。"""
+    if admin:
+        row = conn.execute(
+            "SELECT * FROM history WHERE id = %s",
+            (history_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM history WHERE id = %s AND owner_id = %s",
+            (history_id, viewer_owner_id),
+        ).fetchone()
     return dict(row) if row else None
 
 
-def get_active_share_token(history_id: int, *, owner_id: str) -> str | None:
-    """未撤销且未过期的分享令牌。"""
+def get_active_share_token(history_id: int) -> str | None:
+    """未撤销且未过期的分享令牌（按 history_id，全局唯一）。"""
     from utils.share_util import is_share_expired
 
     init_db()
@@ -427,11 +434,11 @@ def get_active_share_token(history_id: int, *, owner_id: str) -> str | None:
             """
             SELECT token, expires_at, revoked
             FROM share_links
-            WHERE history_id = %s AND owner_id = %s AND revoked = 0
+            WHERE history_id = %s AND revoked = 0
             ORDER BY created_at DESC
             LIMIT 1
             """,
-            (history_id, owner_id),
+            (history_id,),
         ).fetchone()
     if not row:
         return None
@@ -440,14 +447,19 @@ def get_active_share_token(history_id: int, *, owner_id: str) -> str | None:
     return str(row["token"])
 
 
-def create_or_refresh_share_link(history_id: int, *, owner_id: str) -> str | None:
+def create_or_refresh_share_link(
+    history_id: int, *, viewer_owner_id: str, admin: bool = False
+) -> str | None:
     from utils.share_util import expires_at_from_now, is_share_expired
 
     init_db()
     with _connect() as conn:
-        record = _fetch_history_for_owner(conn, history_id, owner_id=owner_id)
+        record = _fetch_history_for_share(
+            conn, history_id, viewer_owner_id=viewer_owner_id, admin=admin
+        )
         if not record:
             return None
+        record_owner = str(record["owner_id"])
         topic = str(record.get("topic") or "")
         model_name = str(record.get("model_name") or "")
         snapshot = str(record.get("full_content") or "")
@@ -459,11 +471,11 @@ def create_or_refresh_share_link(history_id: int, *, owner_id: str) -> str | Non
             """
             SELECT token, expires_at, revoked
             FROM share_links
-            WHERE history_id = %s AND owner_id = %s AND revoked = 0
+            WHERE history_id = %s AND revoked = 0
             ORDER BY created_at DESC
             LIMIT 1
             """,
-            (history_id, owner_id),
+            (history_id,),
         ).fetchone()
 
         if row and not int(row["revoked"]) and not is_share_expired(str(row["expires_at"])):
@@ -472,10 +484,10 @@ def create_or_refresh_share_link(history_id: int, *, owner_id: str) -> str | Non
                 """
                 UPDATE share_links
                 SET snapshot_json = %s, topic = %s, model_name = %s, stages_mask = %s,
-                    expires_at = %s, created_at = %s
+                    expires_at = %s, created_at = %s, owner_id = %s
                 WHERE token = %s
                 """,
-                (snapshot, topic, model_name, mask, expires, now, token),
+                (snapshot, topic, model_name, mask, expires, now, record_owner, token),
             )
         else:
             token = secrets.token_urlsafe(24)
@@ -490,7 +502,7 @@ def create_or_refresh_share_link(history_id: int, *, owner_id: str) -> str | Non
                 (
                     token,
                     history_id,
-                    owner_id,
+                    record_owner,
                     snapshot,
                     topic,
                     model_name,

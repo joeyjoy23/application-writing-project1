@@ -21,20 +21,24 @@ def get_app_base_url() -> str:
     return (os.getenv("APP_BASE_URL") or "").strip().rstrip("/")
 
 
-def create_or_refresh_share_link(history_id: int, *, owner_id: str) -> str | None:
+def create_or_refresh_share_link(
+    history_id: int, *, viewer_owner_id: str, admin: bool = False
+) -> str | None:
     if not using_postgres():
         return None
     from db import postgres_backend
 
-    return postgres_backend.create_or_refresh_share_link(history_id, owner_id=owner_id)
+    return postgres_backend.create_or_refresh_share_link(
+        history_id, viewer_owner_id=viewer_owner_id, admin=admin
+    )
 
 
-def get_active_share_url(history_id: int, *, owner_id: str, base_url: str) -> str | None:
+def get_active_share_url(history_id: int, *, base_url: str) -> str | None:
     if not using_postgres():
         return None
     from db import postgres_backend
 
-    token = postgres_backend.get_active_share_token(history_id, owner_id=owner_id)
+    token = postgres_backend.get_active_share_token(history_id)
     if not token:
         return None
     return build_share_url(token, base_url) or None
