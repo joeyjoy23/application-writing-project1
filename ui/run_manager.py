@@ -201,30 +201,22 @@ def _sync_visible_stage_slots(
     *,
     paint_mode: str = "full",
 ) -> None:
-    """恢复 Stage 占位。incremental 模式只绘制尚未写入的槽位，避免轮询时闪烁。"""
+    """恢复 Stage 占位。
+
+    每次整页 rerun 会重建 st.empty()，已完成阶段必须重绘。
+    incremental 仅用于跳过「未开始」阶段的占位，减轻轮询时占位闪烁。
+    """
     running = _running_stages_for_job(job, state) if job else set()
     if not any(stage_has_content(state, n) for n in range(1, 5)) and not running:
         return
-
-    rendered: set[int] = set()
-    if job is not None:
-        rendered = job.setdefault("slots_rendered", set())
 
     incremental = paint_mode == "incremental"
 
     for n, slot in enumerate(slots, start=1):
         if stage_has_content(state, n):
-            if incremental and n in rendered:
-                continue
             render_one_stage(slot, state, n)
-            if job is not None:
-                rendered.add(n)
         elif n in running:
-            if incremental and n in rendered:
-                continue
             render_stage_in_progress(slot, n)
-            if job is not None:
-                rendered.add(n)
         elif not incremental:
             render_stage_placeholder(slot, n)
 
@@ -241,11 +233,8 @@ def _flush_stage(
     ui.clear_stream_preview()
     ui.log(f"正在显示 Stage {stage_num} 结果…")
     ui.set_progress(min(82 + stage_num * 4, 99), text=f"Stage {stage_num} · 显示结果…")
-    if job is not None:
-        job.setdefault("slots_rendered", set()).discard(stage_num)
+    _sync_visible_stage_slots(state, slots, job, paint_mode="full")
     render_one_stage(slots[stage_num - 1], state, stage_num)
-    if job is not None:
-        job["slots_rendered"].add(stage_num)
     ui.log(stage_complete(stage_num))
 
 
@@ -745,7 +734,6 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "parallel_mode": False,
         "parallel_results": None,
         "student_level": st.session_state.get("student_level", "中等"),
-        "slots_rendered": set(),
     }
     st.session_state.llm_run_usage = None
     if mode == "full":
@@ -1012,6 +1000,7 @@ def advance_run_job(
             return
 
     if job["phase"] == "flush":
+        _sync_visible_stage_slots(state, slots, job, paint_mode="full")
         pending = job.get("pending_flushes")
         if pending:
             flush_idx = int(job.get("_flush_queue_idx") or 0)
