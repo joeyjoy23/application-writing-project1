@@ -47,21 +47,21 @@ def promote_section_headings(text: str) -> str:
         m_br = _CN_BRACKET_SECTION.match(stripped)
         if m_br:
             indent = raw[: len(raw) - len(raw.lstrip())]
-            out.append(f"{indent}## 【{m_br.group(2)}】")
+            out.append(f"{indent}### 【{m_br.group(2)}】")
             continue
 
         m_major = _CN_MAJOR_SECTION.match(stripped)
         if m_major and len(m_major.group(3)) <= 72:
             indent = raw[: len(raw) - len(raw.lstrip())]
             out.append(
-                f"{indent}## {m_major.group(2)}{m_major.group(3).strip()}"
+                f"{indent}### {m_major.group(2)}{m_major.group(3).strip()}"
             )
             continue
 
         m_sub = _CN_PAREN_SECTION.match(stripped)
         if m_sub and len(m_sub.group(3)) <= 64:
             indent = raw[: len(raw) - len(raw.lstrip())]
-            out.append(f"{indent}### （{m_sub.group(2)}）{m_sub.group(3).strip()}")
+            out.append(f"{indent}#### （{m_sub.group(2)}）{m_sub.group(3).strip()}")
             continue
 
         out.append(raw)
@@ -112,16 +112,395 @@ def normalize_vertical_spacing(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(out))
 
 
+_CN_MAJOR_HASH = re.compile(
+    r"^#\s+((?:[一二三四五六七八九十百千]+、.+)|禁止事项)$"
+)
+_PART_HASH = re.compile(r"^#\s+(PART\s+[AB][^\n]*)$", re.IGNORECASE)
+_PEEL_POINT_HASH = re.compile(r"^##\s+([★·※].+)$")
+_PEEL_FIELD_HASH = re.compile(
+    r"^###\s+(P（核心句）|拓展策略[^#\n]*|连至下一点（L）)\s*$"
+)
+_KUOZHAN_LEGACY = re.compile(r"^(#{1,6}\s+)拓展策略（[^）\n]*）\s*$")
+_STAGE1_SUB_HASH = re.compile(r"^###\s+(\d+\.\d+\s+.+)$")
+_STAGE3_TABLE_HASH = re.compile(r"^##\s+(表格\s*\d+.+)$")
+_STAGE3_SEMANTIC_HASH = re.compile(r"^##\s+(语义场\s*\d+.+)$")
+_STAGE3_TIER_HASH = re.compile(r"^###\s+(必备级|进阶级|亮点级)\s*$")
+_BRACKET_HASH = re.compile(r"^##\s+【([^】]+)】\s*$")
+_PAREN_HEADING_HASH = re.compile(r"^###\s+（[^）]+）.+$")
+_NUMBERED_SECTION_HASH = re.compile(r"^##\s+(\d+\.\s+.+)$")
+
+
+def _level_for_numbered_section(title: str) -> str:
+    """Stage1 大节 h3；Stage2/3 范文·表格等含「版/分档」者 h4。"""
+    if re.search(r"版|分档", title):
+        return "####"
+    return "###"
+
+
+_STAGE4_NUM_BOLD = re.compile(r"^(\d+)\.\s+(\*\*.+)$")
+_STAGE4_PRACTICE = re.compile(r"^\*\*(练习\s*\d+[：:][^*]+)\*\*\s*$")
+_STAGE4_OPTIONAL = re.compile(r"^\*\*（教师可选用）([^*]+)\*\*\s*$")
+_CN_SECTION_HEAD = re.compile(
+    r"^#{1,6}\s+([一二三四五六七八九十百千]+)、\s*(.+)$"
+)
+
+
+def _stage4_block_kind(section_title: str) -> str | None:
+    if "典型错误" in section_title:
+        return "errors"
+    if "课后练习" in section_title:
+        return "practices"
+    return None
+
+
+def promote_stage4_block_headings(text: str) -> str:
+    """
+    Stage4「二、典型错误」「三、课后练习」：「1. **…**」→ h4 条块标题。
+    其余 Stage（如 Stage1 §4 高分要点下的 1.2.3）→ 嵌套 bullet，避免 h4 字号过大。
+    """
+    out: list[str] = []
+    block: str | None = None
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        indent = line[: len(line) - len(stripped)]
+        m_sec = _CN_SECTION_HEAD.match(stripped) if stripped.startswith("#") else None
+        if m_sec:
+            block = _stage4_block_kind(m_sec.group(2))
+            out.append(line)
+            continue
+        m = _STAGE4_NUM_BOLD.match(stripped)
+        if m:
+            num, rest = m.group(1), m.group(2)
+            if block in ("errors", "practices"):
+                out.append(f"{indent}#### {num}. {rest}")
+            else:
+                out.append(f"{indent}- {rest}")
+            continue
+        m2 = _STAGE4_PRACTICE.match(stripped)
+        if m2 and block == "practices":
+            out.append(f"{indent}#### {m2.group(1)}")
+            continue
+        m3 = _STAGE4_OPTIONAL.match(stripped)
+        if m3 and block == "practices":
+            out.append(f"{indent}#### （教师可选用）{m3.group(1)}")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def tune_stage_heading_levels(text: str) -> str:
+    """
+    全 Stage 统一标题阶梯（顶栏 1.48rem 下）：
+    h3 一、/PART/禁止 · h4 ★/表格/语义场/2.1/（一） · h5 P/必备级 等。
+    """
+    out: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        indent = line[: len(line) - len(stripped)]
+
+        m_part = _PART_HASH.match(stripped)
+        if m_part:
+            out.append(f"{indent}### {m_part.group(1)}")
+            continue
+        m_major = _CN_MAJOR_HASH.match(stripped)
+        if m_major:
+            out.append(f"{indent}### {m_major.group(1)}")
+            continue
+        m_point = _PEEL_POINT_HASH.match(stripped)
+        if m_point:
+            out.append(f"{indent}#### {m_point.group(1)}")
+            continue
+        m_table = _STAGE3_TABLE_HASH.match(stripped)
+        if m_table:
+            out.append(f"{indent}#### {m_table.group(1)}")
+            continue
+        m_sem = _STAGE3_SEMANTIC_HASH.match(stripped)
+        if m_sem:
+            out.append(f"{indent}#### {m_sem.group(1)}")
+            continue
+        m_field = _PEEL_FIELD_HASH.match(stripped)
+        if m_field:
+            out.append(f"{indent}##### {m_field.group(1)}")
+            continue
+        m_tier = _STAGE3_TIER_HASH.match(stripped)
+        if m_tier:
+            out.append(f"{indent}##### {m_tier.group(1)}")
+            continue
+        m_sub = _STAGE1_SUB_HASH.match(stripped)
+        if m_sub:
+            out.append(f"{indent}#### {m_sub.group(1)}")
+            continue
+        m_br = _BRACKET_HASH.match(stripped)
+        if m_br:
+            out.append(f"{indent}### 【{m_br.group(1)}】")
+            continue
+        if _PAREN_HEADING_HASH.match(stripped):
+            out.append(f"{indent}#### {stripped[4:].strip()}")
+            continue
+        m_num = _NUMBERED_SECTION_HASH.match(stripped)
+        if m_num:
+            lvl = _level_for_numbered_section(m_num.group(1))
+            out.append(f"{indent}{lvl} {m_num.group(1)}")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+# 兼容旧名
+tune_peel_heading_levels = tune_stage_heading_levels
+
+
+_GAIYIJU_INLINE = re.compile(
+    r"([。；!?])\s*[-·•]?\s*(\*\*)?改一句(\*\*)?[：:]\s*"
+)
+_GAIYIJU_TAIL = re.compile(
+    r"([^\n#|])\s+[-·•]?\s*(\*\*)?改一句(\*\*)?[：:]\s*"
+)
+_GAIYIJU_LINE = re.compile(
+    r"^(\s*)[-·•]?\s*(\*\*)?改一句(\*\*)?[：:]\s*(.*)$"
+)
+_GAIYIJU_ARROW_BLOCK = re.compile(
+    r"\*\*改一句\*\*\s*[：:]\s*"
+    r"(?:❌\s*)?"
+    r"(.+?)"
+    r"\s*→\s*"
+    r"(?:✅\s*)?"
+    r"(.+?)(?=\n\n|\n#{1,6}\s|\n\*\*本题\*\*|\n\|[^\n]+\n\|[^\n]+\n|$)",
+    re.DOTALL,
+)
+_GAIYIJU_PLAIN_ARROW = re.compile(
+    r"(?<!\*)\b改一句\s*[：:]\s*"
+    r"(?:❌\s*)?"
+    r"(.+?)"
+    r"\s*→\s*"
+    r"(?:✅\s*)?"
+    r"(.+?)(?=\n\n|\n#{1,6}\s|\n\*\*本题\*\*|\n\|[^\n]+\n\|[^\n]+\n|$)",
+    re.DOTALL,
+)
+
+
+def _strip_gaiyiju_markers(s: str) -> str:
+    t = s.strip()
+    t = re.sub(r"^❌\s*", "", t)
+    t = re.sub(r"^✅\s*", "", t)
+    t = re.sub(r"\s*❌\s*$", "", t)
+    t = re.sub(r"\s*✅\s*$", "", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _format_gaiyiju_block(wrong: str, right: str) -> str:
+    bad = _strip_gaiyiju_markers(wrong)
+    good = _strip_gaiyiju_markers(right)
+    if not bad or not good:
+        return f"**改一句**：{wrong} → {right}"
+    return f"##### 改一句\n\n{bad} ❌\n\n→ {good} ✅"
+
+
+def format_gaiyiju_arrow_blocks(text: str) -> str:
+    """Stage3：「改一句」小标题 + 两行对照（❌/✅ 在句末）。"""
+    if "改一句" not in text or "→" not in text:
+        return text
+    if re.search(r"#####\s*改一句\s*\n+[^\n]+❌\s*\n+→", text):
+        return text
+
+    def _sub(m: re.Match[str]) -> str:
+        return "\n\n" + _format_gaiyiju_block(m.group(1), m.group(2)) + "\n"
+
+    cleaned = _GAIYIJU_ARROW_BLOCK.sub(_sub, text)
+    return _GAIYIJU_PLAIN_ARROW.sub(_sub, cleaned)
+
+
+def normalize_kuozhan_strategy_heading(text: str) -> str:
+    """核心/支撑要点统一为「拓展策略（E）」标题。"""
+    if "拓展策略" not in text:
+        return text
+    out: list[str] = []
+    for line in text.split("\n"):
+        m = _KUOZHAN_LEGACY.match(line.strip())
+        if m:
+            indent = line[: len(line) - len(line.strip())]
+            level = m.group(1)
+            out.append(f"{indent}{level}拓展策略（E）")
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
+def normalize_benti_gaiyiju(text: str) -> str:
+    """Stage3：「本题」与「改一句」分段，并格式化为小标题 + 两行对照。"""
+    if not text or "改一句" not in text:
+        return text
+    cleaned = _GAIYIJU_INLINE.sub(r"\1\n\n**改一句**：", text)
+    cleaned = _GAIYIJU_TAIL.sub(r"\1\n\n**改一句**：", cleaned)
+    out: list[str] = []
+    for line in cleaned.split("\n"):
+        m = _GAIYIJU_LINE.match(line)
+        if m:
+            indent = m.group(1)
+            rest = (m.group(4) or "").strip()
+            out.append(f"{indent}**改一句**：{rest}" if rest else f"{indent}**改一句**：")
+        else:
+            out.append(line)
+    cleaned = "\n".join(out)
+    return format_gaiyiju_arrow_blocks(cleaned)
+
+
+_NUM_LIST_LINE = re.compile(r"^\s*\d+\.\s")
+
+
+def _is_list_item_line(stripped: str) -> bool:
+    return bool(_LIST_LINE.match(stripped) or _NUM_LIST_LINE.match(stripped))
+
+
+def _line_indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def merge_list_item_continuations(text: str) -> str:
+    """同一条列表项内被空行/软换行拆开的续行并回上一行，避免多条 <p>。"""
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped:
+            if out and out[-1] != "":
+                out.append("")
+            i += 1
+            continue
+        if (
+            _HEADING_LINE.match(stripped)
+            or stripped.startswith("|")
+            or stripped.startswith("```")
+            or set(stripped) <= {"-", "*", "_"}
+        ):
+            out.append(line.rstrip())
+            i += 1
+            continue
+        if _is_list_item_line(stripped):
+            out.append(line.rstrip())
+            i += 1
+            continue
+        prev_idx = len(out) - 1
+        while prev_idx >= 0 and not out[prev_idx].strip():
+            prev_idx -= 1
+        if prev_idx < 0:
+            out.append(line.rstrip())
+            i += 1
+            continue
+        prev = out[prev_idx]
+        prev_s = prev.strip()
+        if not _is_list_item_line(prev_s):
+            out.append(line.rstrip())
+            i += 1
+            continue
+        prev_indent = _line_indent(prev)
+        cur_indent = _line_indent(line)
+        if cur_indent > prev_indent and _LIST_LINE.match(stripped):
+            out.append(line.rstrip())
+            i += 1
+            continue
+        if cur_indent >= prev_indent and not _NUM_LIST_LINE.match(stripped):
+            out[prev_idx] = prev.rstrip() + " " + stripped
+            i += 1
+            continue
+        out.append(line.rstrip())
+        i += 1
+    return "\n".join(out)
+
+
+def normalize_list_spacing(text: str) -> str:
+    """
+    去掉列表项之间、编号条与子条之间、列表项与续行之间的多余空行。
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+
+    def _last_nonempty() -> tuple[int, str] | None:
+        for j in range(len(out) - 1, -1, -1):
+            s = out[j].strip()
+            if s:
+                return j, s
+        return None
+
+    def _next_nonempty(k: int) -> tuple[int, str] | None:
+        while k < len(lines):
+            s = lines[k].strip()
+            if s:
+                return k, s
+            k += 1
+        return None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            prev = _last_nonempty()
+            nxt = _next_nonempty(i + 1)
+            if prev and nxt:
+                _, prev_s = prev
+                nxt_i, nxt_s = nxt
+                if _is_list_item_line(prev_s) and _is_list_item_line(nxt_s):
+                    continue
+                if _NUM_LIST_LINE.match(prev_s) and _LIST_LINE.match(nxt_s):
+                    continue
+                prev_idx, _ = prev
+                prev_indent = _line_indent(out[prev_idx])
+                nxt_indent = _line_indent(lines[nxt_i])
+                if _is_list_item_line(prev_s) and not _is_list_item_line(nxt_s):
+                    if (
+                        nxt_indent > prev_indent
+                        and not _HEADING_LINE.match(nxt_s)
+                        and not nxt_s.startswith("|")
+                    ):
+                        continue
+            if out and out[-1] != "":
+                out.append("")
+            continue
+        out.append(line.rstrip())
+    return "\n".join(out)
+
+
+def _ensure_blank_before_list_after_paragraph(text: str) -> str:
+    """仅在正文段落后、列表开始前插入一个空行（不在列表项之间插入）。"""
+    lines = text.split("\n")
+    out: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if (
+            stripped
+            and _is_list_item_line(stripped)
+            and out
+            and out[-1].strip()
+            and not _is_list_item_line(out[-1].strip())
+            and not _HEADING_LINE.match(out[-1].strip())
+            and out[-1] != ""
+        ):
+            out.append("")
+        out.append(line)
+    return "\n".join(out)
+
+
 def prettify_stage_markdown(text: str) -> str:
     """轻量整理 Markdown 间距，便于 Streamlit 正确分段渲染。"""
     if not text or not text.strip():
         return text
     cleaned = promote_section_headings(text.strip())
-    cleaned = normalize_vertical_spacing(cleaned)
+    cleaned = promote_stage4_block_headings(cleaned)
+    cleaned = tune_stage_heading_levels(cleaned)
+    cleaned = normalize_benti_gaiyiju(cleaned)
+    cleaned = normalize_kuozhan_strategy_heading(cleaned)
+    cleaned = merge_list_item_continuations(cleaned)
+    cleaned = normalize_list_spacing(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"([^\n])\n(#{1,6}\s)", r"\1\n\n\2", cleaned)
-    cleaned = re.sub(r"([^\n])\n([-*+]\s)", r"\1\n\n\2", cleaned)
-    cleaned = re.sub(r"([^\n])\n(\d+\.\s)", r"\1\n\n\2", cleaned)
+    cleaned = _ensure_blank_before_list_after_paragraph(cleaned)
     return cleaned
 
 

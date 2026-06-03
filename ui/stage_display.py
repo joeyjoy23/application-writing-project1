@@ -170,9 +170,13 @@ def _bold_label_in_line(line: str) -> str:
 
 
 def _format_stage_body(text: str) -> str:
-    """展示前：间距整理 + 冒号前标签加粗 + 加粗后再统一空行。"""
+    """展示前：Markdown 整理 → 加粗标签 → 列表合并/去空行 → 段落空行。"""
+    from utils.parsers import merge_list_item_continuations, normalize_list_spacing
+
     body = prettify_stage_markdown(text)
     body = bold_labels_before_colon(body)
+    body = merge_list_item_continuations(body)
+    body = normalize_list_spacing(body)
     return normalize_vertical_spacing(body)
 
 

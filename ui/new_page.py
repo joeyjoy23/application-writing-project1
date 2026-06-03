@@ -24,6 +24,7 @@ from services.workflow_progress import (
     resume_label,
     stage_has_content,
 )
+from utils.datetime_util import format_created_at_display
 from services.workflow_storage import (
     make_export_word_filename,
     resolve_raw_input,
@@ -90,6 +91,7 @@ def render_export_buttons(
             stage2_raw=state.stage2.raw if state.stage2 else None,
             stage3_raw=state.stage3.raw if state.stage3 else None,
             stage4_raw=state.stage4.raw if state.stage4 else None,
+            saved_at_utc=created_at,
         )
         word_name = make_export_word_filename(model, created_at)
     except Exception as e:
@@ -204,7 +206,7 @@ def render_history_list() -> None:
     for rec in records:
         rid = rec["id"]
         cols = st.columns([2, 3, 2, 2, 1, 2, 0.5, 0.5])
-        cols[0].write(rec["created_at"])
+        cols[0].write(format_created_at_display(rec["created_at"]))
         topic_show = rec["topic"]
         if len(topic_show) > 50:
             topic_show = topic_show[:50] + "…"
@@ -322,7 +324,8 @@ def render_history_detail(record_id: int) -> None:
                 st.error(err)
     with col_meta:
         st.caption(
-            f"生成时间：{record['created_at']} · 模型：{record['model_name']} · "
+            f"生成时间：{format_created_at_display(record['created_at'])}（北京时间） · "
+            f"模型：{record['model_name']} · "
             f"阶段：{format_stages_mask(record.get('stages_mask'))} · "
             f"约 {record.get('word_count', 0)} 字"
         )

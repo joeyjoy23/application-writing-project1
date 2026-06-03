@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from utils.config import get_project_root
+from utils.datetime_util import utc_now_str
 
 from db.common import make_question_hash, topic_summary
 
@@ -108,7 +109,7 @@ def save_record(
     stages_mask: str = "0000",
 ) -> int:
     init_db()
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    created_at = utc_now_str()
     wc = word_count if word_count is not None else len(content)
     mask = stages_mask if len(stages_mask) == 4 else "0000"
     raw = (raw_input if raw_input is not None else topic).strip()
@@ -157,7 +158,7 @@ def upsert_record(
     topic = topic_summary(raw or question)
     wc = word_count if word_count is not None else len(content)
     mask = stages_mask if len(stages_mask) == 4 else "0000"
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = utc_now_str()
 
     with _connect() as conn:
         row = conn.execute(
@@ -320,7 +321,7 @@ def upsert_llm_cache(
     result_json: str,
 ) -> None:
     init_db()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = utc_now_str()
     with _connect() as conn:
         row = conn.execute(
             "SELECT cache_key FROM llm_cache WHERE cache_key = ?",

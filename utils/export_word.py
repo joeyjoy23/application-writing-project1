@@ -12,6 +12,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+from utils.datetime_util import format_created_at_display, display_tz
 from utils.parsers import sanitize_llm_html_breaks, strip_reader_self_check
 
 FONT_HEITI = "黑体"
@@ -350,6 +351,15 @@ def _write_markdown(doc: Document, text: str, *, indent_paragraphs: bool = False
             _add_table(doc, data)
 
 
+def _word_report_time_line(saved_at_utc: str | None) -> str:
+    if saved_at_utc:
+        shown = format_created_at_display(saved_at_utc)
+        dt = datetime.strptime(shown, "%Y-%m-%d %H:%M:%S")
+    else:
+        dt = datetime.now(display_tz()).replace(tzinfo=None)
+    return f"生成时间：{dt.strftime('%Y年%m月%d日 %H:%M')}（北京时间）"
+
+
 def export_workflow_to_word(
     *,
     question: str,
@@ -357,16 +367,14 @@ def export_workflow_to_word(
     stage2_raw: str | None = None,
     stage3_raw: str | None = None,
     stage4_raw: str | None = None,
+    saved_at_utc: str | None = None,
 ) -> bytes:
     """生成 .docx 字节流。"""
     doc = Document()
     _set_page_margins(doc)
 
     _add_center_title(doc, "高考英语应用文备课分析报告", 22)
-    _add_subtitle(
-        doc,
-        f"生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M')}",
-    )
+    _add_subtitle(doc, _word_report_time_line(saved_at_utc))
 
     _add_stage_heading(doc, "题目原文")
     _add_body(doc, question.strip() or "（未填写）")

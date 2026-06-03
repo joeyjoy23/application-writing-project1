@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from typing import Any
 
+from utils.datetime_util import created_at_date_part, display_tz
 from workflow import (
     Stage1Result,
     Stage2Result,
@@ -19,9 +20,9 @@ from workflow import (
 def make_export_word_filename(model: str, date_str: str | None = None) -> str:
     """Word 导出文件名：应用文分析_YYYY-MM-DD_模型名.docx"""
     if not date_str:
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_str = datetime.now(display_tz()).strftime("%Y-%m-%d")
     else:
-        date_str = date_str.strip()[:10]
+        date_str = created_at_date_part(date_str)
     safe_model = re.sub(r'[<>:"/\\|?*]', "-", (model or "").strip()) or "model"
     return f"应用文分析_{date_str}_{safe_model}.docx"
 
