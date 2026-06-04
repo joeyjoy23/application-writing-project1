@@ -120,7 +120,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.04-sidebar-balance"
+UI_BUILD_TAG = "2026.06.04-sidebar-tune2"
 
 
 def _render_admin_popover_body() -> None:

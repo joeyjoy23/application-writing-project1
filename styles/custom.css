@@ -872,7 +872,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] .block-container {
-  padding-top: 0.65rem !important;
+  padding-top: 1.05rem !important;
   padding-bottom: 0.55rem !important;
 }
 
@@ -900,8 +900,8 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   justify-content: flex-start !important;
   gap: 0.35rem;
   min-height: 2.2rem;
-  margin: 0.15rem 0 0.55rem !important;
-  padding: 0.2rem 0 0.45rem 0 !important;
+  margin: 0.35rem 0 0.55rem !important;
+  padding: 0.25rem 0 0.45rem 0 !important;
   border-bottom: 1px solid var(--c-border-light);
   box-sizing: border-box;
 }
@@ -940,10 +940,29 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   gap: 0.36rem !important;
 }
 
+/* 侧栏全部下拉框：更小字号与高度（模式 + API） */
+[data-testid="stSidebar"] [data-baseweb="select"] > div {
+  min-height: 1.65rem !important;
+  padding-top: 0.1rem !important;
+  padding-bottom: 0.1rem !important;
+}
+
+[data-testid="stSidebar"] [data-baseweb="select"] span {
+  font-size: 0.78rem !important;
+  line-height: 1.25 !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] label {
+  font-size: 0.76rem !important;
+  line-height: 1.28 !important;
+  margin-bottom: 0.02rem !important;
+}
+
 /* API 设置：紧凑卡片 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head) {
   margin: 0.45rem 0 0.5rem !important;
-  padding: 0.38rem 0.55rem 0.42rem !important;
+  padding: 0.32rem 0.5rem 0.36rem !important;
   border: 1px solid var(--c-border-light) !important;
   border-radius: var(--radius-sm) !important;
   background: rgb(254 253 251 / 0.72) !important;
@@ -951,7 +970,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   [data-testid="stVerticalBlock"] {
-  gap: 0.14rem !important;
+  gap: 0.1rem !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
@@ -963,22 +982,15 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   [data-testid="stWidgetLabel"] p,
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   [data-testid="stWidgetLabel"] label {
-  font-size: 0.8rem !important;
-  line-height: 1.3 !important;
-}
-
-[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
-  [data-baseweb="select"] > div {
-  min-height: 1.95rem !important;
-  padding-top: 0.18rem !important;
-  padding-bottom: 0.18rem !important;
+  font-size: 0.76rem !important;
+  line-height: 1.28 !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   input {
-  min-height: 1.95rem !important;
-  padding: 0.22rem 0.48rem !important;
-  font-size: 0.84rem !important;
+  min-height: 1.65rem !important;
+  padding: 0.16rem 0.42rem !important;
+  font-size: 0.78rem !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
@@ -1016,20 +1028,22 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   margin: 0 0 0.22rem !important;
 }
 
-/* 已生成内容索引：略大、更易点 */
+/* 已生成内容索引：更大、更易点 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-index-block) {
   margin: 0.5rem 0 0.45rem !important;
-  padding: 0.42rem 0.5rem 0.48rem !important;
+  padding: 0.5rem 0.55rem 0.55rem !important;
   border: 1px solid var(--c-border-light) !important;
   border-radius: var(--radius-md) !important;
   background: var(--c-card) !important;
 }
 
 .sidebar-generated-index-label {
-  margin: 0 0 0.32rem !important;
+  margin: 0 0 0.38rem !important;
   padding: 0 !important;
   border: none !important;
-  font-size: 0.82rem !important;
+  font-size: 0.9rem !important;
+  font-weight: 600;
+  color: var(--c-navy) !important;
 }
 
 .sidebar-index-block {
@@ -1039,7 +1053,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 .stage-nav-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.38rem;
+  gap: 0.45rem;
   margin: 0;
 }
 
@@ -1050,11 +1064,11 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 .stage-nav-link {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
-  padding: 0.42rem 0.48rem;
-  min-height: 2.65rem;
+  gap: 0.14rem;
+  padding: 0.5rem 0.52rem;
+  min-height: 3rem;
   border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--c-card);
   text-decoration: none !important;
   transition: border-color 0.12s, background 0.12s;
@@ -1068,11 +1082,11 @@ a.stage-nav-link:hover {
 .stage-nav-link-disabled {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
-  padding: 0.42rem 0.48rem;
-  min-height: 2.65rem;
+  gap: 0.14rem;
+  padding: 0.5rem 0.52rem;
+  min-height: 3rem;
   border: 1px solid var(--c-border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--c-paper-deep);
   opacity: 0.55;
   cursor: not-allowed;
@@ -1084,16 +1098,16 @@ a.stage-nav-link:hover {
 }
 
 .stage-nav-title {
-  font-size: 0.86rem;
+  font-size: 0.94rem;
   font-weight: 600;
   color: var(--c-navy) !important;
-  line-height: 1.25;
+  line-height: 1.28;
 }
 
 .stage-nav-sub {
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   color: var(--c-ink-muted) !important;
-  line-height: 1.2;
+  line-height: 1.22;
 }
 
 div[data-testid="stSidebar"] hr {
