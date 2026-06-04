@@ -192,12 +192,10 @@ def main() -> None:
     _logger.info("应用启动")
 
     # 延迟导入，避免循环依赖
-    from ui.sidebar import render_sidebar
     from ui.new_page import render_history_page, render_new_analysis
+    from ui.sidebar import inject_sidebar_collapse_dock, render_sidebar
 
     api_ready = render_sidebar()
-    from ui.sidebar_topbar import inject_sidebar_collapse_dock
-
     inject_sidebar_collapse_dock()
 
     st.markdown(
