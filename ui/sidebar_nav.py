@@ -58,9 +58,10 @@ def render_stage_index_nav(
         items.append(f'<div class="{cls}">{inner}</div>')
 
     st.markdown(
+        '<div class="sidebar-index-block">'
         '<p class="sidebar-section-label sidebar-generated-index-label">已生成内容索引</p>'
         '<div class="stage-nav-grid">'
         + "".join(items)
-        + "</div>",
+        + "</div></div>",
         unsafe_allow_html=True,
     )
