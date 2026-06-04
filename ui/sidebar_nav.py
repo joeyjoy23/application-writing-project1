@@ -59,7 +59,8 @@ def render_stage_index_nav(
 
     st.markdown(
         '<div class="sidebar-index-block">'
-        '<p class="sidebar-section-label sidebar-generated-index-label">已生成内容索引</p>'
+        '<div class="sidebar-section-label sidebar-generated-index-label" role="heading" '
+        'aria-level="3">已生成内容索引</div>'
         '<div class="stage-nav-grid">'
         + "".join(items)
         + "</div></div>",

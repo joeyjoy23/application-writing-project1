@@ -927,12 +927,63 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   min-width: 0;
 }
 
+/* 侧栏区块小标题：模式 / API 设置 / 已生成内容索引 统一字号 */
 .sidebar-section-label {
-  margin: 0.12rem 0 0.3rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--c-ink-muted) !important;
+  display: block;
+  box-sizing: border-box;
+  margin: 0 0 0.45rem !important;
+  padding: 0 0 0.06rem !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: var(--c-navy) !important;
   letter-spacing: 0.04em;
+  line-height: 1.5 !important;
+  min-height: 1.5em;
+  overflow: visible !important;
+}
+
+[data-testid="stSidebar"] :is(
+  [data-testid="stElementContainer"],
+  [data-testid="element-container"]
+):has(.sidebar-section-label) {
+  overflow: visible !important;
+  min-height: auto !important;
+  margin-bottom: 0.08rem !important;
+}
+
+[data-testid="stSidebar"] :has(.sidebar-section-label) [data-testid="stMarkdownContainer"] {
+  overflow: visible !important;
+  min-height: auto !important;
+  line-height: 1.5 !important;
+}
+
+.sidebar-mode-head,
+.sidebar-api-head {
+  display: block;
+}
+
+/* 工作区（模式）卡片 */
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-mode-head) {
+  margin: 0.42rem 0 0.52rem !important;
+  padding: 0.48rem 0.52rem 0.42rem !important;
+  border: 1px solid var(--c-border-light) !important;
+  border-radius: var(--radius-sm) !important;
+  background: rgb(254 253 251 / 0.55) !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-mode-head)
+  [data-testid="stVerticalBlock"] {
+  gap: 0.34rem !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-mode-head)
+  [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
 /* 工作区（模式/历史）：统一间距 */
@@ -940,7 +991,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   gap: 0.36rem !important;
 }
 
-/* 侧栏全部下拉框：更小字号与高度（模式 + API） */
+/* 侧栏下拉框：更小字号与高度 */
 [data-testid="stSidebar"] [data-baseweb="select"] > div {
   min-height: 1.65rem !important;
   padding-top: 0.1rem !important;
@@ -952,11 +1003,19 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   line-height: 1.25 !important;
 }
 
-[data-testid="stSidebar"] [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] p,
-[data-testid="stSidebar"] [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] label {
+/* API 区内表单项标签（非区块小标题） */
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
+  [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
+  [data-testid="stSelectbox"] [data-testid="stWidgetLabel"] label,
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
+  [data-testid="stTextInput"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
+  [data-testid="stTextInput"] [data-testid="stWidgetLabel"] label {
   font-size: 0.76rem !important;
   line-height: 1.28 !important;
-  margin-bottom: 0.02rem !important;
+  margin-bottom: 0.04rem !important;
+  color: var(--c-ink-muted) !important;
 }
 
 /* API 设置：紧凑卡片 */
@@ -995,7 +1054,8 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   [data-testid="stCheckbox"] {
-  margin: 0.05rem 0 0.08rem !important;
+  margin-top: 0.28rem !important;
+  margin-bottom: 0.14rem !important;
   min-height: 1.45rem !important;
 }
 
@@ -1006,11 +1066,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
-  [data-testid="stAlert"],
-[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
-  [data-testid="stSuccess"],
-[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
-  [data-testid="stWarning"] {
+  :is([data-testid="stAlert"], [data-testid="stSuccess"], [data-testid="stWarning"]) {
   padding: 0.28rem 0.42rem !important;
   margin: 0.1rem 0 !important;
   font-size: 0.78rem !important;
@@ -1025,12 +1081,19 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 .sidebar-api-head {
-  margin: 0 0 0.22rem !important;
+  margin: 0 0 0.5rem !important;
+}
+
+[data-testid="stSidebar"] :is(
+  [data-testid="stElementContainer"],
+  [data-testid="element-container"]
+):has(.sidebar-build-tag) {
+  margin-top: 0.35rem !important;
 }
 
 /* 已生成内容索引：更大、更易点 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-index-block) {
-  margin: 0.5rem 0 0.45rem !important;
+  margin: 0.5rem 0 0.75rem !important;
   padding: 0.5rem 0.55rem 0.55rem !important;
   border: 1px solid var(--c-border-light) !important;
   border-radius: var(--radius-md) !important;
@@ -1038,12 +1101,15 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 .sidebar-generated-index-label {
-  margin: 0 0 0.38rem !important;
+  margin: 0 0 0.45rem !important;
   padding: 0 !important;
   border: none !important;
-  font-size: 0.9rem !important;
-  font-weight: 600;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
   color: var(--c-navy) !important;
+  line-height: 1.5 !important;
+  min-height: 1.5em;
+  overflow: visible !important;
 }
 
 .sidebar-index-block {
@@ -1108,6 +1174,18 @@ a.stage-nav-link:hover {
   font-size: 0.8rem;
   color: var(--c-ink-muted) !important;
   line-height: 1.22;
+}
+
+.sidebar-build-tag {
+  display: block;
+  margin: 0.75rem 0 0.2rem !important;
+  padding: 0.55rem 0 0 !important;
+  border-top: 1px solid var(--c-border-light);
+  font-size: 0.72rem !important;
+  font-weight: 400 !important;
+  color: var(--c-ink-muted) !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0.01em;
 }
 
 div[data-testid="stSidebar"] hr {

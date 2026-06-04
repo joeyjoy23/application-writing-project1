@@ -120,7 +120,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.04-sidebar-tune2"
+UI_BUILD_TAG = "2026.06.04-sidebar-v3"
 
 
 def _render_admin_popover_body() -> None:
@@ -164,40 +164,51 @@ def render_sidebar() -> bool:
     with st.sidebar:
         render_sidebar_workspace_topbar()
         api_ready = True
-        mode_options = ["新建", "历史"]
-        current_mode = st.session_state.get("app_mode", "新建")
-        if current_mode == "新建分析":
-            current_mode = "新建"
-        if current_mode == "查看历史":
-            current_mode = "历史"
-        mode_index = mode_options.index(current_mode) if current_mode in mode_options else 0
-        st.session_state.app_mode = st.selectbox(
-            "模式",
-            mode_options,
-            index=mode_index,
-            help="新建：输入题目并运行备课流程；历史：查看、搜索、导出已保存的备课包",
-        )
-        ensure_guest_id()
-        owner_id, admin = history_scope()
-        try:
-            total_hist = count_records("", owner_id, admin)
-            cloud_hint = " · 云端" if using_postgres() else ""
-            hist_left, hist_right = st.columns([5, 1])
-            with hist_left:
-                st.caption(f"历史记录：共 {total_hist} 条{cloud_hint}")
-            with hist_right:
-                _render_admin_popover_trigger()
-        except Exception:
-            pass
 
-        if st.session_state.app_mode == "历史":
-            if st.button("刷新历史列表", use_container_width=True):
-                st.session_state.history_page = 1
-                st.rerun()
-
-        with st.container(border=False):
+        with st.container(border=True):
             st.markdown(
-                '<p class="sidebar-section-label sidebar-api-head">API 设置</p>',
+                '<div class="sidebar-section-label sidebar-mode-head" role="heading" '
+                'aria-level="3">模式</div>',
+                unsafe_allow_html=True,
+            )
+            mode_options = ["新建", "历史"]
+            current_mode = st.session_state.get("app_mode", "新建")
+            if current_mode == "新建分析":
+                current_mode = "新建"
+            if current_mode == "查看历史":
+                current_mode = "历史"
+            mode_index = (
+                mode_options.index(current_mode) if current_mode in mode_options else 0
+            )
+            st.session_state.app_mode = st.selectbox(
+                "app_mode_select",
+                mode_options,
+                index=mode_index,
+                label_visibility="collapsed",
+                help="新建：输入题目并运行备课流程；历史：查看、搜索、导出已保存的备课包",
+            )
+            ensure_guest_id()
+            owner_id, admin = history_scope()
+            try:
+                total_hist = count_records("", owner_id, admin)
+                cloud_hint = " · 云端" if using_postgres() else ""
+                hist_left, hist_right = st.columns([5, 1])
+                with hist_left:
+                    st.caption(f"历史记录：共 {total_hist} 条{cloud_hint}")
+                with hist_right:
+                    _render_admin_popover_trigger()
+            except Exception:
+                pass
+
+            if st.session_state.app_mode == "历史":
+                if st.button("刷新历史列表", use_container_width=True):
+                    st.session_state.history_page = 1
+                    st.rerun()
+
+        with st.container(border=True):
+            st.markdown(
+                '<div class="sidebar-section-label sidebar-api-head" role="heading" '
+                'aria-level="3">API 设置</div>',
                 unsafe_allow_html=True,
             )
 
@@ -280,7 +291,7 @@ def render_sidebar() -> bool:
                 key_label,
                 value=st.session_state.api_key,
                 type="password",
-                help="网页端在此输入即可；留空则尝试 Streamlit Secrets 或 .env",
+                help="在上方输入 API Key 后即可使用",
             )
 
             if api_key_configured():
@@ -297,24 +308,16 @@ def render_sidebar() -> bool:
                         ct = int(usage.get("completion_tokens") or 0)
                         if pt or ct:
                             st.caption(f"上次 token：{pt} / {ct}")
-                except ValueError as e:
-                    st.error(str(e))
-                    api_ready = False
-                else:
                     api_ready = True
+                except ValueError as e:
+                    msg = str(e)
+                    if "未配置" not in msg and "API Key" not in msg:
+                        st.error(msg)
+                    api_ready = False
             else:
-                env_name = {
-                    "deepseek": "DEEPSEEK_API_KEY",
-                    "openai": "OPENAI_API_KEY",
-                    "gemini": "GEMINI_API_KEY",
-                    "dashscope": "DASHSCOPE_API_KEY",
-                    "mimo": "MIMO_API_KEY",
-                    "zhipu": "ZHIPU_API_KEY",
-                }.get(st.session_state.provider, "OPENAI_API_KEY")
-                st.warning(f"请在上方输入 Key，或在 .env 配置 {env_name}")
                 api_ready = False
 
-        with st.container(border=False):
+        with st.container(border=True):
             _ws_nav = st.session_state.get("workflow_state")
             _job_nav = st.session_state.get("run_job")
             _running_nav: set[int] = set()
@@ -325,9 +328,10 @@ def render_sidebar() -> bool:
             render_stage_index_nav(_ws_nav, running_stages=_running_nav)
 
         if not api_ready:
-            st.caption(
-                f"界面 {UI_BUILD_TAG}",
-                help="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app",
+            st.markdown(
+                f'<p class="sidebar-build-tag" title="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app">'
+                f"界面 {UI_BUILD_TAG}</p>",
+                unsafe_allow_html=True,
             )
             return False
 
@@ -356,9 +360,10 @@ def render_sidebar() -> bool:
             else:
                 st.caption("暂无日志文件")
 
-        st.caption(
-            f"界面 {UI_BUILD_TAG}",
-            help="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app",
+        st.markdown(
+            f'<p class="sidebar-build-tag" title="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app">'
+            f"界面 {UI_BUILD_TAG}</p>",
+            unsafe_allow_html=True,
         )
 
     return True

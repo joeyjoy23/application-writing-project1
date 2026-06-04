@@ -491,7 +491,7 @@ def render_new_analysis(api_ready: bool) -> None:
         return
 
     if not api_ready:
-        st.info("请先在左侧边栏选择 API 提供商并填写 Key")
+        st.info("请先在左侧边栏填写 API Key")
         return
 
     # ── 断点续传 ──
