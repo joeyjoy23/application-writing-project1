@@ -31,6 +31,7 @@ from utils.config import (
 from utils.config import resolve_api_key
 from services.workflow_progress import stage_has_content
 from ui.sidebar_nav import render_stage_index_nav
+from ui.sidebar_topbar import render_sidebar_workspace_topbar
 from workflow import WorkflowState
 
 
@@ -74,7 +75,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.04-sidebar-top"
+UI_BUILD_TAG = "2026.06.04-sidebar-row"
 
 
 def _render_admin_popover_body() -> None:
@@ -116,12 +117,7 @@ def _render_admin_popover_trigger() -> None:
 def render_sidebar() -> bool:
     """渲染侧边栏；返回 True 表示 API 已配置。"""
     with st.sidebar:
-        st.markdown(
-            '<div class="sidebar-topbar" aria-hidden="false">'
-            '<span class="sidebar-workspace-title">📂 工作区</span>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        render_sidebar_workspace_topbar()
         mode_options = ["新建", "历史"]
         current_mode = st.session_state.get("app_mode", "新建")
         if current_mode == "新建分析":
@@ -165,10 +161,7 @@ def render_sidebar() -> bool:
         )
 
         if st.session_state.is_running:
-            st.info(
-                "运行中可切换下方模型；**切换后将自动停止**当前请求，"
-                "再点击 Stage 按钮用新模型重跑。"
-            )
+            st.caption("运行中切换模型将**自动停止**当前请求，请重新点击 Stage。")
             if st.button("停止当前运行", use_container_width=True, key="btn_stop_run"):
                 job = st.session_state.get("run_job")
                 if job:
@@ -250,39 +243,44 @@ def render_sidebar() -> bool:
                     api_key=st.session_state.api_key,
                     model=st.session_state.model,
                 )
-                st.success("API Key 已配置")
-                st.caption(f"模型: {s.model}")
-                st.caption(
-                    f"接口: {s.base_url[:36]}…"
-                    if len(s.base_url) > 36
-                    else f"接口: {s.base_url}"
-                )
+                st.success(f"API 已配置 · {s.model}")
                 usage = st.session_state.get("llm_run_usage")
                 if usage and isinstance(usage, dict):
-                    cached = int(usage.get("cached_tokens") or 0)
-                    st.caption(
-                        f"上次运行 token：输入 {usage.get('prompt_tokens', 0)} · "
-                        f"输出 {usage.get('completion_tokens', 0)}"
-                        + (f" · 缓存命中 {cached}" if cached else "")
-                    )
-                if st.session_state.provider == "dashscope":
-                    st.caption(
-                        "若长时间停在 Calling API：优先试 **qwen-plus** 或 **deepseek-v4-flash**；"
-                        "旗舰模型（如 qwen3.7-max、qwen3.6-max-preview）首包可能很慢。"
-                    )
+                    pt = int(usage.get("prompt_tokens") or 0)
+                    ct = int(usage.get("completion_tokens") or 0)
+                    if pt or ct:
+                        st.caption(f"上次 token：{pt} / {ct}")
             except ValueError as e:
                 st.error(str(e))
-                return False
+                api_ready = False
+            else:
+                api_ready = True
         else:
             env_name = {
                 "deepseek": "DEEPSEEK_API_KEY",
                 "openai": "OPENAI_API_KEY",
                 "gemini": "GEMINI_API_KEY",
                 "dashscope": "DASHSCOPE_API_KEY",
-            "mimo": "MIMO_API_KEY",
-            "zhipu": "ZHIPU_API_KEY",
-        }.get(st.session_state.provider, "OPENAI_API_KEY")
+                "mimo": "MIMO_API_KEY",
+                "zhipu": "ZHIPU_API_KEY",
+            }.get(st.session_state.provider, "OPENAI_API_KEY")
             st.warning(f"请在上方输入 Key，或在 .env 配置 {env_name}")
+            api_ready = False
+
+        _ws_nav = st.session_state.get("workflow_state")
+        _job_nav = st.session_state.get("run_job")
+        _running_nav: set[int] = set()
+        if _job_nav and _ws_nav:
+            from ui.run_manager import _running_stages_for_job
+
+            _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
+        render_stage_index_nav(_ws_nav, running_stages=_running_nav)
+
+        if not api_ready:
+            st.caption(
+                f"界面 {UI_BUILD_TAG}",
+                help="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app",
+            )
             return False
 
         # 断点续传状态与清除缓存
@@ -309,15 +307,6 @@ def render_sidebar() -> bool:
                     st.rerun()
             else:
                 st.caption("暂无日志文件")
-
-        _ws_nav = st.session_state.get("workflow_state")
-        _job_nav = st.session_state.get("run_job")
-        _running_nav: set[int] = set()
-        if _job_nav and _ws_nav:
-            from ui.run_manager import _running_stages_for_job
-
-            _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
-        render_stage_index_nav(_ws_nav, running_stages=_running_nav)
 
         st.caption(
             f"界面 {UI_BUILD_TAG}",
