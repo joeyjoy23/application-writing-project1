@@ -854,6 +854,88 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   color: var(--c-navy) !important;
 }
 
+/* 侧栏顶栏：「工作区」与收起按钮同一行 */
+[data-testid="stSidebar"] > div:first-child,
+[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+[data-testid="stSidebar"] section[data-testid="stSidebarUserContent"] {
+  padding-top: 0.35rem !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
+  top: 0.4rem !important;
+  right: 0.45rem !important;
+}
+
+.sidebar-workspace-header {
+  margin: 0 0 0.35rem;
+  padding: 0.15rem 2.1rem 0 0;
+  min-height: 1.75rem;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-base);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--c-navy) !important;
+  letter-spacing: 0.02em;
+}
+
+.sidebar-section-label {
+  margin: 0.15rem 0 0.28rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--c-ink-muted) !important;
+  letter-spacing: 0.04em;
+}
+
+/* 侧栏紧凑排版，尽量一屏展示 */
+div[data-testid="stSidebar"] hr {
+  margin: 0.4rem 0 !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+  gap: 0.3rem !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
+  margin-bottom: 0.1rem !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stCheckbox"] {
+  margin-bottom: 0.1rem !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stAlert"] {
+  padding: 0.45rem 0.55rem !important;
+  margin-bottom: 0.2rem !important;
+  font-size: 0.82rem !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stExpander"] {
+  margin-top: 0.15rem !important;
+}
+
+div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+  font-size: 0.84rem !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+
+div[data-testid="stSidebar"] iframe[title="streamlit_components_v1"] {
+  border: none !important;
+  margin: 0 !important;
+}
+
+/* 主区 Stage 锚点（侧栏索引跳转） */
+.stage-scroll-anchor {
+  display: block;
+  height: 0;
+  width: 100%;
+  overflow: hidden;
+  scroll-margin-top: 0.75rem;
+  pointer-events: none;
+}
+
 /* ── Main inputs & buttons ── */
 .main textarea,
 .main input[type="text"],

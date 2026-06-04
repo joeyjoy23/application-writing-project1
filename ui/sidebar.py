@@ -30,6 +30,7 @@ from utils.config import (
 )
 from utils.config import resolve_api_key
 from services.workflow_progress import stage_has_content
+from ui.sidebar_nav import render_stage_index_nav
 from workflow import WorkflowState
 
 
@@ -73,7 +74,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.02-share-preview"
+UI_BUILD_TAG = "2026.06.03-sidebar-nav"
 
 
 def _render_admin_popover_body() -> None:
@@ -115,7 +116,10 @@ def _render_admin_popover_trigger() -> None:
 def render_sidebar() -> bool:
     """渲染侧边栏；返回 True 表示 API 已配置。"""
     with st.sidebar:
-        st.header("📂 工作区")
+        st.markdown(
+            '<div class="sidebar-workspace-header">📂 工作区</div>',
+            unsafe_allow_html=True,
+        )
         mode_options = ["新建", "历史"]
         current_mode = st.session_state.get("app_mode", "新建")
         if current_mode == "新建分析":
@@ -147,8 +151,19 @@ def render_sidebar() -> bool:
                 st.session_state.history_page = 1
                 st.rerun()
 
-        st.divider()
-        st.header("⚙️ API 设置")
+        _ws_nav = st.session_state.get("workflow_state")
+        _job_nav = st.session_state.get("run_job")
+        _running_nav: set[int] = set()
+        if _job_nav and _ws_nav:
+            from ui.run_manager import _running_stages_for_job
+
+            _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
+        render_stage_index_nav(_ws_nav, running_stages=_running_nav)
+
+        st.markdown(
+            '<p class="sidebar-section-label">API 设置</p>',
+            unsafe_allow_html=True,
+        )
 
         st.checkbox(
             "使用 LLM 结果缓存（同题同模型可跳过 API）",
@@ -276,20 +291,6 @@ def render_sidebar() -> bool:
         }.get(st.session_state.provider, "OPENAI_API_KEY")
             st.warning(f"请在上方输入 Key，或在 .env 配置 {env_name}")
             return False
-
-        st.divider()
-        st.header("工作流说明")
-        st.markdown(
-            """
-**Stage 1** — 审题结构分析
-
-**Stage 2** — PEEL 写作策略卡与范文
-
-**Stage 3** — 功能句型包 + 话题词汇
-
-**Stage 4** — 教学指南与易错预警
-            """
-        )
 
         # 断点续传状态与清除缓存
         _ws = st.session_state.get("workflow_state")

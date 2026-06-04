@@ -366,8 +366,16 @@ _STAGE_BADGE_TITLES = {
 }
 
 
+def render_stage_scroll_anchor(stage_num: int) -> None:
+    st.markdown(
+        f'<div id="stage-panel-{stage_num}" class="stage-scroll-anchor"></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_one_stage(slot: st.empty, state: WorkflowState, stage_num: int) -> None:
     with slot.container():
+        render_stage_scroll_anchor(stage_num)
         if stage_num > 1:
             st.markdown('<hr class="stage-divider">', unsafe_allow_html=True)
         _STAGE_RENDERERS[stage_num](state)
@@ -375,6 +383,7 @@ def render_one_stage(slot: st.empty, state: WorkflowState, stage_num: int) -> No
 
 def render_stage_placeholder(slot: st.empty, stage_num: int) -> None:
     with slot.container():
+        render_stage_scroll_anchor(stage_num)
         if stage_num > 1:
             st.markdown('<hr class="stage-divider">', unsafe_allow_html=True)
         with st.container(border=True):
@@ -385,6 +394,7 @@ def render_stage_placeholder(slot: st.empty, stage_num: int) -> None:
 def render_stage_in_progress(slot: st.empty, stage_num: int) -> None:
     """后台 API 进行中：保留已完成阶段，当前阶段显示「生成中」。"""
     with slot.container():
+        render_stage_scroll_anchor(stage_num)
         if stage_num > 1:
             st.markdown('<hr class="stage-divider">', unsafe_allow_html=True)
         with st.container(border=True):
