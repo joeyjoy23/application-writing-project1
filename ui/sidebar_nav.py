@@ -64,7 +64,10 @@ def render_stage_index_nav(
         for row in rows:
             row["clickable"] = False
 
-    st.markdown('<p class="sidebar-section-label">内容索引</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="sidebar-section-label sidebar-generated-index-label">已生成内容索引</p>',
+        unsafe_allow_html=True,
+    )
     payload = json.dumps(rows, ensure_ascii=False)
     components.html(
         f"""
@@ -132,7 +135,7 @@ def render_stage_index_nav(
 </style>
 </head>
 <body>
-  <p class="nav-hint">点击跳转到主区对应 Stage</p>
+  <p class="nav-hint">点击跳转到主区已生成 Stage</p>
   <div class="nav-list" id="list"></div>
   <script>
   (function () {{

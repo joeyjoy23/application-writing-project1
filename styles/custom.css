@@ -854,30 +854,77 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   color: var(--c-navy) !important;
 }
 
-/* 侧栏顶栏：「工作区」与收起按钮同一行 */
+/* 侧栏顶栏：「工作区」与 << 收起按钮同一行 */
+[data-testid="stSidebar"] {
+  position: relative !important;
+}
+
 [data-testid="stSidebar"] > div:first-child,
-[data-testid="stSidebar"] [data-testid="stSidebarContent"],
-[data-testid="stSidebar"] section[data-testid="stSidebarUserContent"] {
-  padding-top: 0.35rem !important;
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+  padding-top: 0 !important;
 }
 
-[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
-  top: 0.4rem !important;
-  right: 0.45rem !important;
+[data-testid="stSidebar"] section[data-testid="stSidebarUserContent"],
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+  padding-top: 2.65rem !important;
 }
 
-.sidebar-workspace-header {
-  margin: 0 0 0.35rem;
-  padding: 0.15rem 2.1rem 0 0;
-  min-height: 1.75rem;
+/* 顶栏行高与收起按钮垂直居中（约 2.65rem 行） */
+[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebar"] button[data-testid="baseButton-headerNoPadding"] {
+  top: 0.72rem !important;
+  right: 0.5rem !important;
+  margin: 0 !important;
+}
+
+.sidebar-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  height: 2.65rem;
   display: flex;
   align-items: center;
+  padding: 0 2.85rem 0 1rem;
+  margin: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--c-card) 0%, var(--c-paper) 100%);
+  border-bottom: 1px solid var(--c-border-light);
+}
+
+.sidebar-workspace-title {
   font-family: var(--font-base);
   font-size: 1.02rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--c-navy) !important;
   letter-spacing: 0.02em;
+  pointer-events: auto;
+}
+
+/* 顶栏 HTML 不占文档流高度，避免把「模式」顶下去 */
+[data-testid="stSidebar"] :is(
+  div[data-testid="stElementContainer"],
+  div[data-testid="element-container"]
+):has(.sidebar-topbar) {
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+[data-testid="stSidebar"] :has(.sidebar-topbar) [data-testid="stMarkdownContainer"] {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.sidebar-generated-index-label {
+  margin-top: 0.55rem !important;
+  padding-top: 0.45rem !important;
+  border-top: 1px solid var(--c-border-light);
 }
 
 .sidebar-section-label {

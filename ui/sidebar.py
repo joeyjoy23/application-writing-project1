@@ -74,7 +74,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.03-sidebar-nav"
+UI_BUILD_TAG = "2026.06.04-sidebar-top"
 
 
 def _render_admin_popover_body() -> None:
@@ -117,7 +117,9 @@ def render_sidebar() -> bool:
     """渲染侧边栏；返回 True 表示 API 已配置。"""
     with st.sidebar:
         st.markdown(
-            '<div class="sidebar-workspace-header">📂 工作区</div>',
+            '<div class="sidebar-topbar" aria-hidden="false">'
+            '<span class="sidebar-workspace-title">📂 工作区</span>'
+            "</div>",
             unsafe_allow_html=True,
         )
         mode_options = ["新建", "历史"]
@@ -150,15 +152,6 @@ def render_sidebar() -> bool:
             if st.button("刷新历史列表", use_container_width=True):
                 st.session_state.history_page = 1
                 st.rerun()
-
-        _ws_nav = st.session_state.get("workflow_state")
-        _job_nav = st.session_state.get("run_job")
-        _running_nav: set[int] = set()
-        if _job_nav and _ws_nav:
-            from ui.run_manager import _running_stages_for_job
-
-            _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
-        render_stage_index_nav(_ws_nav, running_stages=_running_nav)
 
         st.markdown(
             '<p class="sidebar-section-label">API 设置</p>',
@@ -316,6 +309,15 @@ def render_sidebar() -> bool:
                     st.rerun()
             else:
                 st.caption("暂无日志文件")
+
+        _ws_nav = st.session_state.get("workflow_state")
+        _job_nav = st.session_state.get("run_job")
+        _running_nav: set[int] = set()
+        if _job_nav and _ws_nav:
+            from ui.run_manager import _running_stages_for_job
+
+            _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
+        render_stage_index_nav(_ws_nav, running_stages=_running_nav)
 
         st.caption(
             f"界面 {UI_BUILD_TAG}",
