@@ -854,12 +854,44 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   color: var(--c-navy) !important;
 }
 
-/* 侧栏顶栏：「工作区」与 << 同一行（按钮由脚本 append 到本行） */
-[data-testid="stSidebar"] > div:first-child,
-[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+/* 侧栏顶栏：「工作区」与 << 同一行；仅保留一层滚动，收紧顶距 */
+[data-testid="stSidebar"] > div:first-child {
+  padding-top: 0 !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+  padding-top: 0 !important;
+  overflow-x: hidden !important;
+}
+
 [data-testid="stSidebar"] section[data-testid="stSidebarUserContent"],
 [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-  padding-top: 0.2rem !important;
+  padding-top: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] .block-container {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+/* 收起按钮已移入工作区行，隐藏空顶栏占位 */
+[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+[data-testid="stSidebar"] :is(
+  [data-testid="stElementContainer"],
+  [data-testid="element-container"]
+):has(.sidebar-workspace-row) {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 .sidebar-workspace-row {
@@ -868,9 +900,9 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 0.35rem;
-  min-height: 2.35rem;
-  margin: 0 0 0.3rem !important;
-  padding: 0 0.15rem 0.35rem 0 !important;
+  min-height: 2rem;
+  margin: 0 0 0.25rem !important;
+  padding: 0 0 0.28rem 0 !important;
   border-bottom: 1px solid var(--c-border-light);
   box-sizing: border-box;
 }
@@ -969,13 +1001,6 @@ a.stage-nav-link:hover {
   letter-spacing: 0.04em;
 }
 
-/* 侧栏紧凑排版，一屏可见（约 100vh） */
-[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-  max-height: calc(100vh - 0.5rem);
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
 div[data-testid="stSidebar"] hr {
   margin: 0.35rem 0 !important;
 }
@@ -1008,13 +1033,16 @@ div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
   padding-bottom: 0.25rem !important;
 }
 
-div[data-testid="stSidebar"] iframe[title="streamlit_components_v1"] {
-  border: none !important;
-  margin: 0 !important;
+[data-testid="stSidebar"] :is(
+  [data-testid="stElementContainer"],
+  [data-testid="element-container"]
+):has(iframe[title="streamlit_components_v1"]) {
+  display: none !important;
   height: 0 !important;
   min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
   overflow: hidden !important;
-  display: block !important;
 }
 
 /* 主区 Stage 锚点（侧栏索引跳转） */

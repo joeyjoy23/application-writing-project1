@@ -196,6 +196,9 @@ def main() -> None:
     from ui.new_page import render_history_page, render_new_analysis
 
     api_ready = render_sidebar()
+    from ui.sidebar_topbar import inject_sidebar_collapse_dock
+
+    inject_sidebar_collapse_dock()
 
     st.markdown(
         '<div class="hero-block">'

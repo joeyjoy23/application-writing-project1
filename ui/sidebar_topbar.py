@@ -7,13 +7,16 @@ import streamlit.components.v1 as components
 
 
 def render_sidebar_workspace_topbar() -> None:
-    """主文档内顶栏行 + 脚本将 << 移入该行右侧。"""
     st.markdown(
         '<div class="sidebar-workspace-row">'
         '<span class="sidebar-workspace-title">📂 工作区</span>'
         "</div>",
         unsafe_allow_html=True,
     )
+
+
+def inject_sidebar_collapse_dock() -> None:
+    """将 << 移入工作区行（脚本放在主区零高 iframe，避免侧栏双滚动条）。"""
     components.html(
         """
 <script>
@@ -31,11 +34,12 @@ def render_sidebar_workspace_topbar() -> None:
       "position:static!important;top:auto!important;right:auto!important;" +
       "left:auto!important;margin:0 0 0 auto!important;flex-shrink:0;" +
       "transform:none!important;height:auto!important;min-height:0!important;";
+    const hdr = d.querySelector('[data-testid="stSidebarHeader"]');
+    if (hdr) hdr.style.display = "none";
   }
   dock();
-  setTimeout(dock, 60);
-  setTimeout(dock, 250);
-  setTimeout(dock, 800);
+  setTimeout(dock, 50);
+  setTimeout(dock, 200);
 })();
 </script>
         """,
