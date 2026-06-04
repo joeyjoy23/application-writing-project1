@@ -873,7 +873,11 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] .block-container {
   padding-top: 1.05rem !important;
-  padding-bottom: 0.55rem !important;
+  padding-bottom: 1.1rem !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] .block-container > div {
+  gap: 0.62rem !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
@@ -900,8 +904,8 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   justify-content: flex-start !important;
   gap: 0.35rem;
   min-height: 2.2rem;
-  margin: 0.35rem 0 0.55rem !important;
-  padding: 0.25rem 0 0.45rem 0 !important;
+  margin: 0.35rem 0 0.72rem !important;
+  padding: 0.28rem 0 0.55rem 0 !important;
   border-bottom: 1px solid var(--c-border-light);
   box-sizing: border-box;
 }
@@ -931,8 +935,8 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 .sidebar-section-label {
   display: block;
   box-sizing: border-box;
-  margin: 0 0 0.45rem !important;
-  padding: 0 0 0.06rem !important;
+  margin: 0 0 0.55rem !important;
+  padding: 0 0 0.1rem !important;
   font-size: 1rem !important;
   font-weight: 600 !important;
   color: var(--c-navy) !important;
@@ -962,10 +966,15 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   display: block;
 }
 
+.sidebar-mode-head {
+  margin-bottom: 0.6rem !important;
+  padding-bottom: 0.12rem !important;
+}
+
 /* 工作区（模式）卡片 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-mode-head) {
-  margin: 0.42rem 0 0.52rem !important;
-  padding: 0.48rem 0.52rem 0.42rem !important;
+  margin: 0.5rem 0 0.88rem !important;
+  padding: 0.58rem 0.58rem 0.52rem !important;
   border: 1px solid var(--c-border-light) !important;
   border-radius: var(--radius-sm) !important;
   background: rgb(254 253 251 / 0.55) !important;
@@ -973,7 +982,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-mode-head)
   [data-testid="stVerticalBlock"] {
-  gap: 0.34rem !important;
+  gap: 0.48rem !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-mode-head)
@@ -988,7 +997,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 /* 工作区（模式/历史）：统一间距 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-  gap: 0.36rem !important;
+  gap: 0.48rem !important;
 }
 
 /* 侧栏下拉框：更小字号与高度 */
@@ -1018,10 +1027,10 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   color: var(--c-ink-muted) !important;
 }
 
-/* API 设置：紧凑卡片 */
+/* API 设置卡片 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head) {
-  margin: 0.45rem 0 0.5rem !important;
-  padding: 0.32rem 0.5rem 0.36rem !important;
+  margin: 0.55rem 0 0.92rem !important;
+  padding: 0.5rem 0.58rem 0.5rem !important;
   border: 1px solid var(--c-border-light) !important;
   border-radius: var(--radius-sm) !important;
   background: rgb(254 253 251 / 0.72) !important;
@@ -1029,12 +1038,12 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   [data-testid="stVerticalBlock"] {
-  gap: 0.1rem !important;
+  gap: 0.4rem !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   [data-testid="stWidgetLabel"] {
-  margin-bottom: 0.04rem !important;
+  margin-bottom: 0.12rem !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
@@ -1054,8 +1063,8 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-api-head)
   [data-testid="stCheckbox"] {
-  margin-top: 0.28rem !important;
-  margin-bottom: 0.14rem !important;
+  margin-top: 0.12rem !important;
+  margin-bottom: 0.22rem !important;
   min-height: 1.45rem !important;
 }
 
@@ -1081,27 +1090,33 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 .sidebar-api-head {
-  margin: 0 0 0.5rem !important;
+  margin: 0 0 0.62rem !important;
 }
 
 [data-testid="stSidebar"] :is(
   [data-testid="stElementContainer"],
   [data-testid="element-container"]
 ):has(.sidebar-build-tag) {
-  margin-top: 0.35rem !important;
+  margin-top: 0.65rem !important;
 }
 
 /* 已生成内容索引：更大、更易点 */
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.sidebar-index-block) {
-  margin: 0.5rem 0 0.75rem !important;
-  padding: 0.5rem 0.55rem 0.55rem !important;
+  margin: 0.6rem 0 0.35rem !important;
+  padding: 0.58rem 0.6rem 0.9rem !important;
   border: 1px solid var(--c-border-light) !important;
   border-radius: var(--radius-md) !important;
   background: var(--c-card) !important;
+  overflow: visible !important;
+}
+
+[data-testid="stSidebar"] :has(.sidebar-index-block) [data-testid="stMarkdownContainer"] {
+  overflow: visible !important;
+  padding-bottom: 0.12rem !important;
 }
 
 .sidebar-generated-index-label {
-  margin: 0 0 0.45rem !important;
+  margin: 0 0 0.55rem !important;
   padding: 0 !important;
   border: none !important;
   font-size: 1rem !important;
@@ -1114,13 +1129,16 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 
 .sidebar-index-block {
   width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 0.2rem;
 }
 
 .stage-nav-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.45rem;
-  margin: 0;
+  gap: 0.55rem;
+  margin: 0 0 0.15rem;
+  padding-bottom: 0.1rem;
 }
 
 .stage-nav-item {
@@ -1130,9 +1148,11 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 .stage-nav-link {
   display: flex;
   flex-direction: column;
-  gap: 0.14rem;
-  padding: 0.5rem 0.52rem;
-  min-height: 3rem;
+  justify-content: center;
+  gap: 0.22rem;
+  padding: 0.62rem 0.55rem;
+  min-height: 3.75rem;
+  box-sizing: border-box;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-md);
   background: var(--c-card);
@@ -1148,9 +1168,11 @@ a.stage-nav-link:hover {
 .stage-nav-link-disabled {
   display: flex;
   flex-direction: column;
-  gap: 0.14rem;
-  padding: 0.5rem 0.52rem;
-  min-height: 3rem;
+  justify-content: center;
+  gap: 0.22rem;
+  padding: 0.62rem 0.55rem;
+  min-height: 3.75rem;
+  box-sizing: border-box;
   border: 1px solid var(--c-border-light);
   border-radius: var(--radius-md);
   background: var(--c-paper-deep);
@@ -1164,22 +1186,23 @@ a.stage-nav-link:hover {
 }
 
 .stage-nav-title {
-  font-size: 0.94rem;
+  font-size: 1.06rem;
   font-weight: 600;
   color: var(--c-navy) !important;
-  line-height: 1.28;
+  line-height: 1.32;
+  letter-spacing: 0.01em;
 }
 
 .stage-nav-sub {
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   color: var(--c-ink-muted) !important;
-  line-height: 1.22;
+  line-height: 1.28;
 }
 
 .sidebar-build-tag {
   display: block;
-  margin: 0.75rem 0 0.2rem !important;
-  padding: 0.55rem 0 0 !important;
+  margin: 0.95rem 0 0.35rem !important;
+  padding: 0.65rem 0 0 !important;
   border-top: 1px solid var(--c-border-light);
   font-size: 0.72rem !important;
   font-weight: 400 !important;
