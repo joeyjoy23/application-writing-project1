@@ -31,7 +31,7 @@ from utils.config import (
 )
 from utils.config import resolve_api_key
 from services.workflow_progress import stage_has_content
-from ui.sidebar_nav import render_stage_index_nav
+from ui.sidebar_nav import render_stage_index_nav, resolve_nav_workflow_state
 from workflow import WorkflowState
 
 
@@ -96,10 +96,13 @@ def api_key_configured() -> bool:
 
 def clear_checkpoint() -> None:
     """清除所有断点续传缓存，回到初始状态。"""
+    from services.workflow_origin import clear_workflow_origin
+
     st.session_state.workflow_state = None
     st.session_state.last_question = ""
     st.session_state.failed_stage = None
     st.session_state._confirm_clear = False
+    clear_workflow_origin()
     st.toast("已清除缓存，可重新开始", icon="🔄")
 
 
@@ -318,7 +321,7 @@ def render_sidebar() -> bool:
                 api_ready = False
 
         with st.container(border=True):
-            _ws_nav = st.session_state.get("workflow_state")
+            _ws_nav = resolve_nav_workflow_state()
             _job_nav = st.session_state.get("run_job")
             _running_nav: set[int] = set()
             if _job_nav and _ws_nav:

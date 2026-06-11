@@ -148,6 +148,9 @@ def init_session() -> None:
         "llm_run_usage": None,
         "student_level": "中等",
         "current_history_record_id": None,
+        "workflow_source_provider": None,
+        "workflow_source_model": None,
+        "history_nav_state": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:

@@ -19,6 +19,7 @@ from db import (
     toggle_star,
     using_postgres,
 )
+from services.workflow_origin import session_llm_mismatch
 from services.workflow_progress import (
     get_next_stage,
     resume_label,
@@ -290,6 +291,7 @@ def render_history_detail(record_id: int) -> None:
     ensure_guest_id()
     record = get_record_by_id(record_id)
     if not record:
+        st.session_state.history_nav_state = None
         st.error("记录不存在或已被删除")
         if st.button("返回列表"):
             st.session_state.history_view_id = None
@@ -299,6 +301,7 @@ def render_history_detail(record_id: int) -> None:
     try:
         data = json.loads(record["full_content"])
     except json.JSONDecodeError:
+        st.session_state.history_nav_state = None
         st.error("记录内容损坏，无法解析")
         if st.button("返回列表", key="hist_bad_back"):
             st.session_state.history_view_id = None
@@ -307,6 +310,7 @@ def render_history_detail(record_id: int) -> None:
 
     raw = resolve_raw_input(record, data)
     state = workflow_state_from_json(record["full_content"], raw_input=raw)
+    st.session_state.history_nav_state = state
     next_stage = get_next_stage(state)
 
     col_back, col_load, col_meta = st.columns([1, 1, 3])
@@ -364,6 +368,7 @@ def render_history_page() -> None:
     if view_id is not None:
         render_history_detail(view_id)
     else:
+        st.session_state.history_nav_state = None
         render_history_list()
 
 
@@ -455,7 +460,7 @@ def render_new_analysis(api_ready: bool) -> None:
             "完整流程",
             type="primary",
             use_container_width=True,
-            help="依次运行 Stage 1→2→3→4，已完成的阶段自动跳过",
+            help="依次运行 Stage 1→2→3→4；同模型下已完成的阶段自动跳过；更换模型后将全部重跑",
         )
     with _f2:
         if st.button(
@@ -493,6 +498,13 @@ def render_new_analysis(api_ready: bool) -> None:
     if not api_ready:
         st.info("请先在左侧边栏填写 API Key")
         return
+
+    if session_llm_mismatch() and st.session_state.workflow_state and st.session_state.workflow_state.stage1:
+        src_model = st.session_state.get("workflow_source_model") or "其他模型"
+        st.info(
+            f"当前结果由 **{src_model}** 生成，与侧边栏所选模型不同。"
+            "点击「完整流程」将用新模型重新生成全部阶段。"
+        )
 
     # ── 断点续传 ──
     _cached = st.session_state.workflow_state

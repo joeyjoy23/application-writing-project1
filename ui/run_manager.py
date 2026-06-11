@@ -40,6 +40,11 @@ from utils.status_log import (
 from utils.parsers import stage1_summary_incomplete
 from workflow import GaokaoWritingWorkflow, WorkflowState
 
+from services.workflow_origin import (
+    ensure_workflow_origin_from_history,
+    session_llm_mismatch,
+    set_workflow_origin_from_job,
+)
 from services.workflow_progress import get_next_stage, stage_has_content
 from ui.history import auto_save_history
 from ui.sidebar import api_key_configured, clear_run_job
@@ -165,9 +170,12 @@ class RunUI:
 
 
 def _sync_cancel_from_settings(job: dict[str, Any]) -> None:
+    cur_model = resolve_model_for_provider(
+        st.session_state.provider, st.session_state.model
+    )
     if (
         st.session_state.provider != job["locked_provider"]
-        or st.session_state.model != job["locked_model"]
+        or cur_model != job["locked_model"]
     ):
         job["cancel_event"].set()
         st.session_state.run_cancelled = True
@@ -686,22 +694,43 @@ def try_start_run_job(mode: str, question: str) -> bool:
     )
     state.question = question
 
-    if mode == "stage2" and not state.stage1:
+    ensure_workflow_origin_from_history()
+    model_changed = session_llm_mismatch() and state.stage1 is not None
+    if model_changed:
+        if mode == "full":
+            state = WorkflowState(question=question)
+            st.session_state.workflow_state = state
+            stages = [1, 2, 3, 4]
+            st.toast("已切换模型，将用新模型重新生成全部阶段", icon="🔄")
+        elif mode == "stage1":
+            state = WorkflowState(question=question)
+            st.session_state.workflow_state = state
+            stages = [1]
+            st.toast("已切换模型，将用新模型重新生成 Stage 1", icon="🔄")
+        else:
+            src_model = st.session_state.get("workflow_source_model") or "其他模型"
+            st.warning(
+                f"当前内容由 **{src_model}** 生成，与侧边栏所选模型不一致。"
+                "请点击「完整流程」或先运行 Stage 1，用新模型重新生成。"
+            )
+            return False
+    elif mode == "stage2" and not state.stage1:
         st.error("请先运行 Stage 1")
         return False
-    if mode == "stage3" and not state.stage1:
+    elif mode == "stage3" and not state.stage1:
         st.error("请先运行 Stage 1")
         return False
-    if mode == "stage4" and (not state.stage1 or not state.stage2 or not state.stage3):
+    elif mode == "stage4" and (not state.stage1 or not state.stage2 or not state.stage3):
         st.error("请先完成 Stage 1、Stage 2 与 Stage 3")
         return False
 
-    skip_completed = (mode == "full")
-    stages = _pipeline_stages_for_mode(
-        mode,
-        skip_completed=skip_completed,
-        state=state if skip_completed or mode == "resume" else None,
-    )
+    if not model_changed:
+        skip_completed = mode == "full"
+        stages = _pipeline_stages_for_mode(
+            mode,
+            skip_completed=skip_completed,
+            state=state if skip_completed or mode == "resume" else None,
+        )
     if not stages:
         st.info("所有阶段已完成，无需重新生成。如需重跑，请先清空结果。")
         return False
@@ -772,6 +801,7 @@ def _finish_job_cancelled(
     st.session_state.workflow_state = state
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = stage_num
+    set_workflow_origin_from_job(job)
     _persist_history_from_job(job, state, notify=True)
     sync_slots_from_state(state, slots)
     clear_run_job()
@@ -797,6 +827,7 @@ def _finish_job_success(
     st.session_state.workflow_state = state
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = None
+    set_workflow_origin_from_job(job)
     logger.info("运行完成 mode=%s", mode)
     _persist_history_from_job(job, state, notify=False)
     clear_run_job()

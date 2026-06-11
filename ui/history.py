@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from db import get_record_by_id, upsert_record
+from services.workflow_origin import set_workflow_origin
 from services.workflow_progress import get_next_stage, resume_label, stage_has_content
 from services.workflow_storage import (
     workflow_content_length,
@@ -116,11 +117,13 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
     st.session_state.app_mode = "新建"
 
     saved_provider = data.get("provider")
-    saved_model = (data.get("model") or "").strip()
+    saved_model = (data.get("model") or record.get("model") or "").strip()
     if saved_provider in PROVIDER_OPTIONS:
         st.session_state["_pending_provider"] = saved_provider
     if saved_model:
         st.session_state["_pending_model"] = saved_model
+    if saved_provider in PROVIDER_OPTIONS and saved_model:
+        set_workflow_origin(saved_provider, saved_model)
 
     return True, ""
 

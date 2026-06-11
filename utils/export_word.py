@@ -13,7 +13,11 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from utils.datetime_util import format_created_at_display, display_tz
-from utils.parsers import sanitize_llm_html_breaks, strip_reader_self_check
+from utils.parsers import (
+    prettify_stage_markdown,
+    sanitize_llm_html_breaks,
+    strip_reader_self_check,
+)
 
 FONT_HEITI = "黑体"
 FONT_SONG = "宋体"
@@ -24,6 +28,7 @@ SIZE_ENGLISH_PT = 12  # 小四号
 COLOR_ENGLISH = RGBColor(0, 0, 0)  # 黑色
 
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+_HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.+)$")
 _ENGLISH_RUN_RE = re.compile(
     r"[A-Za-z](?:[A-Za-z0-9\s\-',.;:!?\"()\[\]/%&@#+*=<>]*[A-Za-z0-9]|[A-Za-z]{2,})",
 )
@@ -162,15 +167,23 @@ def _parse_md_table(lines: list[str]) -> list[list[str]]:
 
 
 def _heading_level(line: str) -> int | None:
-    m = re.match(r"^(#{1,4})\s+(.+)$", line.strip())
+    m = _HEADING_LINE_RE.match(line.strip())
     if m:
         return len(m.group(1))
     return None
 
 
 def _heading_text(line: str) -> str:
-    m = re.match(r"^#{1,4}\s+(.+)$", line.strip())
-    return _strip_inline_md(m.group(1)) if m else _strip_inline_md(line)
+    m = _HEADING_LINE_RE.match(line.strip())
+    return _strip_inline_md(m.group(2)) if m else _strip_inline_md(line)
+
+
+def _strip_leading_heading_marks(text: str) -> str:
+    """兜底：段落行首残留的 Markdown 标题符（如 #####）去掉，只保留正文。"""
+    m = _HEADING_LINE_RE.match(text.strip())
+    if m:
+        return _strip_inline_md(m.group(2))
+    return text
 
 
 def _is_list_item(line: str) -> bool:
@@ -206,7 +219,7 @@ def _iter_markdown_blocks(text: str) -> Iterator[tuple[str, Any]]:
         level = _heading_level(line)
         if level is not None:
             yield from flush_para()
-            yield (f"heading{min(level, 4)}", _heading_text(line))
+            yield (f"heading{min(level, 6)}", _heading_text(line))
             i += 1
             continue
 
@@ -271,12 +284,12 @@ def _add_stage_heading(doc: Document, text: str) -> None:
 
 
 def _add_heading(doc: Document, text: str, level: int) -> None:
-    sizes = {1: 15, 2: 14, 3: 13, 4: 12}
+    sizes = {1: 15, 2: 14, 3: 13, 4: 12, 5: 11, 6: 11}
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(10 if level <= 2 else 6)
     p.paragraph_format.space_after = Pt(4)
     run = p.add_run(text)
-    _set_run_font(run, FONT_HEITI, sizes.get(level, 12), bold=True)
+    _set_run_font(run, FONT_HEITI, sizes.get(level, 11), bold=True)
 
 
 def _add_body(doc: Document, text: str, *, first_line_indent: bool = False) -> None:
@@ -284,7 +297,7 @@ def _add_body(doc: Document, text: str, *, first_line_indent: bool = False) -> N
     if not clean.strip():
         return
     for part in clean.split("\n"):
-        part = part.strip()
+        part = _strip_leading_heading_marks(part.strip())
         if not part:
             continue
         p = doc.add_paragraph()
@@ -340,7 +353,7 @@ def _write_markdown(doc: Document, text: str, *, indent_paragraphs: bool = False
     for block_type, data in _iter_markdown_blocks(text):
         if block_type.startswith("heading"):
             level = int(block_type.replace("heading", "") or "2")
-            _add_heading(doc, data, min(level, 4))
+            _add_heading(doc, data, min(level, 6))
         elif block_type == "paragraph":
             _add_body(doc, data, first_line_indent=indent_paragraphs)
         elif block_type == "code":
@@ -381,21 +394,29 @@ def export_workflow_to_word(
 
     if stage1_summary:
         _add_stage_heading(doc, STAGE_TITLES[1])
-        _write_markdown(doc, strip_reader_self_check(stage1_summary))
+        _write_markdown(
+            doc,
+            prettify_stage_markdown(strip_reader_self_check(stage1_summary)),
+        )
 
     if stage2_raw:
         _add_stage_heading(doc, STAGE_TITLES[2])
         _write_markdown(
-            doc, strip_reader_self_check(stage2_raw), indent_paragraphs=True
+            doc,
+            prettify_stage_markdown(strip_reader_self_check(stage2_raw)),
+            indent_paragraphs=True,
         )
 
     if stage3_raw:
         _add_stage_heading(doc, STAGE_TITLES[3])
-        _write_markdown(doc, sanitize_llm_html_breaks(stage3_raw))
+        _write_markdown(
+            doc,
+            prettify_stage_markdown(sanitize_llm_html_breaks(stage3_raw)),
+        )
 
     if stage4_raw:
         _add_stage_heading(doc, STAGE_TITLES[4])
-        _write_markdown(doc, stage4_raw)
+        _write_markdown(doc, prettify_stage_markdown(stage4_raw))
 
     buffer = io.BytesIO()
     doc.save(buffer)

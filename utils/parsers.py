@@ -68,6 +68,101 @@ def promote_section_headings(text: str) -> str:
     return "\n".join(out)
 
 
+_DIM_NUM = r"[1-9１-９]"
+_DIM_HEAD = re.compile(rf"维度({_DIM_NUM})(?:（可选）)?[：:]\s*")
+_DIM_ARROW = re.compile(
+    r"^(?P<name>[^→\n]+?)"
+    r"\s*→\s*(?P<focus>[^→\n]+?)"
+    r"\s*→\s*适用[：:]\s*(?P<apply>[^→\n]+?)"
+    r"\s*→\s*💡(?:思路发散示例)?[：:]\s*(?P<example>.+)\Z",
+    re.DOTALL,
+)
+_DIM_INLINE_BOUNDARY = re.compile(
+    rf"(?<=[。；!？?])\s*(?=维度{_DIM_NUM}(?:（可选）)?[：:])"
+)
+_DIM_TIGHT_BOUNDARY = re.compile(
+    r"(?<=\S)\s+(?=维度[2-9](?:（可选）)?[：:])"
+)
+
+
+def _split_dimension_chunks(text: str) -> list[tuple[str, str]]:
+    matches = list(_DIM_HEAD.finditer(text))
+    if not matches:
+        return []
+    chunks: list[tuple[str, str]] = []
+    for i, match in enumerate(matches):
+        num = match.group(1)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        chunks.append((num, text[start:end].strip()))
+    return chunks
+
+
+def _format_apply_points(raw: str) -> str:
+    apply = raw.strip()
+    bracket = re.match(r"要点?\[([^\]]+)\]", apply)
+    if bracket:
+        return bracket.group(1).replace(",", "、").replace("，", "、")
+    apply = re.sub(r"^要点[：:]?\s*", "", apply)
+    return apply.strip("[] ")
+
+
+def _format_single_dimension(num: str, body: str) -> str:
+    body = body.strip()
+    matched = _DIM_ARROW.match(body)
+    if matched:
+        name = matched.group("name").strip()
+        focus = matched.group("focus").strip()
+        apply = _format_apply_points(matched.group("apply"))
+        example = matched.group("example").strip()
+        return (
+            f"#### 维度{num} · {name}\n\n"
+            f"- **切入点**：{focus}\n"
+            f"- **适用要点**：{apply}\n"
+            f"- **💡 思路发散**：{example}"
+        )
+
+    parts = [p.strip() for p in body.split("→") if p.strip()]
+    if len(parts) >= 2:
+        name = parts[0]
+        lines = [f"#### 维度{num} · {name}", ""]
+        labels = ("切入点", "适用要点", "💡 思路发散")
+        for idx, part in enumerate(parts[1:], start=0):
+            label = labels[idx] if idx < len(labels) else "补充"
+            if label == "适用要点" or part.startswith("适用"):
+                part = _format_apply_points(part)
+            elif "思路发散" in part:
+                part = re.sub(r"^💡(?:思路发散示例)?[：:]\s*", "", part)
+            lines.append(f"- **{label}**：{part}")
+        return "\n".join(lines)
+
+    return f"#### 维度{num}\n\n- {body}"
+
+
+def format_construction_dimensions(text: str) -> str:
+    """将 §5 构思维度从单行箭头串改为分层 Markdown 块。"""
+    if not text or not re.search(rf"维度{_DIM_NUM}", text):
+        return text
+
+    out: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped or not re.search(rf"维度{_DIM_NUM}", stripped):
+            out.append(line)
+            continue
+
+        body = re.sub(r"^[-*•]\s+", "", stripped)
+        body = _DIM_INLINE_BOUNDARY.sub("\n\n", body)
+        body = _DIM_TIGHT_BOUNDARY.sub("\n\n", body)
+        chunks = _split_dimension_chunks(body)
+        if not chunks:
+            out.append(line)
+            continue
+        out.append("\n\n".join(_format_single_dimension(num, chunk) for num, chunk in chunks))
+
+    return "\n".join(out)
+
+
 _LABEL_LINE = re.compile(
     r"^(\s*)(?:[-*+]\s+)?\*\*[^*]+?\*\*\s*[：:]"
 )
@@ -548,6 +643,7 @@ def prettify_stage_markdown(text: str) -> str:
     if not text or not text.strip():
         return text
     cleaned = promote_section_headings(text.strip())
+    cleaned = format_construction_dimensions(cleaned)
     cleaned = promote_stage4_block_headings(cleaned)
     cleaned = tune_stage_heading_levels(cleaned)
     cleaned = normalize_benti_gaiyiju(cleaned)

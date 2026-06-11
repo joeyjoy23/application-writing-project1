@@ -176,6 +176,35 @@ def test_stage4_error_list_compact():
     assert "B 很长的一句。 续写同一条" in out or "B 很长的一句。\n  续写" not in out
 
 
+def test_format_construction_dimensions_splits_arrow_chain():
+    from utils.parsers import format_construction_dimensions
+
+    raw = (
+        "维度1：因果维度 → 从各要素对大学生活结果的影响入手 → 适用：要点[学习理由,社交理由,睡觉理由] → "
+        "💡思路发散示例：学习不足→挂科/错过机会；社交不足→孤立但可弥补；睡觉不足→短期效率下降但可调整。"
+        "根据每个后果的可逆性排序。维度2：对比维度 → 表面需求 vs. 深层价值 → 适用：要点[总体逻辑] → "
+        "💡思路发散示例：表面看睡觉是基本需求，社交是快乐来源，学习是任务；但深层看学习构建未来能力，"
+        "社交锻炼终身情商，睡觉只是可调控基础——据此排序。"
+    )
+    out = format_construction_dimensions(raw)
+    assert "#### 维度1 · 因果维度" in out
+    assert "- **切入点**：从各要素对大学生活结果的影响入手" in out
+    assert "- **适用要点**：学习理由、社交理由、睡觉理由" in out
+    assert "- **💡 思路发散**：" in out
+    assert "#### 维度2 · 对比维度" in out
+    assert "→ 适用：" not in out
+
+
+def test_prettify_formats_construction_dimensions():
+    raw = (
+        "### 5. 构思维度建议\n\n"
+        "维度1：因果维度 → 切入点A → 适用：要点[甲,乙] → 💡思路发散示例：示例一；示例二。"
+    )
+    out = prettify_stage_markdown(raw)
+    assert "#### 维度1 · 因果维度" in out
+    assert "- **切入点**：切入点A" in out
+
+
 def test_prettify_inserts_blank_line_before_heading():
     raw = "段落\n## 小节"
     out = prettify_stage_markdown(raw)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from services.workflow_progress import stage_has_content
 from workflow import WorkflowState
@@ -22,6 +23,50 @@ def main_area_shows_stage_panels() -> bool:
     if mode in ("历史", "查看历史"):
         return st.session_state.get("history_view_id") is not None
     return False
+
+
+def resolve_nav_workflow_state() -> WorkflowState | None:
+    """主区正在展示 Stage 面板时，返回用于索引高亮/可点击的状态。"""
+    if not main_area_shows_stage_panels():
+        return None
+    mode = st.session_state.get("app_mode", "新建")
+    if mode in ("历史", "查看历史"):
+        return st.session_state.get("history_nav_state")
+    return st.session_state.get("workflow_state")
+
+
+def inject_stage_nav_scroll_handler() -> None:
+    """侧边栏 hash 链无法滚主区时，用 parent.document 平滑滚动到锚点。"""
+    components.html(
+        """
+<script>
+(function () {
+  function doc() {
+    try { return window.parent.document; } catch (e) { return document; }
+  }
+  function bind() {
+    const d = doc();
+    d.querySelectorAll('a.stage-nav-link[href^="#stage-panel-"]').forEach(function (a) {
+      if (a.dataset.navBound) return;
+      a.dataset.navBound = "1";
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        const id = (a.getAttribute("href") || "").slice(1);
+        if (!id) return;
+        const el = d.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+  bind();
+  setTimeout(bind, 80);
+  setTimeout(bind, 350);
+})();
+</script>
+        """,
+        height=0,
+        scrolling=False,
+    )
 
 
 def render_stage_index_nav(
@@ -66,3 +111,7 @@ def render_stage_index_nav(
         + "</div></div>",
         unsafe_allow_html=True,
     )
+    if panels_visible and any(
+        state and stage_has_content(state, num) for num, _, _ in STAGE_NAV_ITEMS
+    ):
+        inject_stage_nav_scroll_handler()
