@@ -42,6 +42,7 @@ from workflow import GaokaoWritingWorkflow, WorkflowState
 
 from services.workflow_origin import (
     ensure_workflow_origin_from_history,
+    job_llm_settings_changed,
     session_llm_mismatch,
     set_workflow_origin_from_job,
 )
@@ -170,12 +171,10 @@ class RunUI:
 
 
 def _sync_cancel_from_settings(job: dict[str, Any]) -> None:
-    cur_model = resolve_model_for_provider(
-        st.session_state.provider, st.session_state.model
-    )
-    if (
-        st.session_state.provider != job["locked_provider"]
-        or cur_model != job["locked_model"]
+    if job_llm_settings_changed(
+        job,
+        current_provider=st.session_state.provider,
+        current_model=st.session_state.model,
     ):
         job["cancel_event"].set()
         st.session_state.run_cancelled = True

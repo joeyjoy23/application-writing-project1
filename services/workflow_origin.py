@@ -29,6 +29,31 @@ def llm_selection_mismatch(
     return source_provider != cp or source_model != cm
 
 
+def job_llm_settings_changed(
+    job: dict[str, Any],
+    *,
+    current_provider: str,
+    current_model: str,
+) -> bool:
+    """run_job 锁定的 LLM 是否与当前侧边栏选择不一致（含模型 ID 规范化）。"""
+    cp, cm = resolved_llm(current_provider, current_model)
+    return cp != job.get("locked_provider") or cm != job.get("locked_model")
+
+
+def origin_fields_from_record(
+    data: dict[str, Any],
+    record: dict[str, Any] | None = None,
+) -> tuple[str | None, str | None]:
+    """从历史 JSON 与记录行提取 (provider, resolved_model)。"""
+    provider = data.get("provider")
+    rec = record or {}
+    model = (data.get("model") or rec.get("model_name") or rec.get("model") or "").strip()
+    if provider in PROVIDER_OPTIONS and model:
+        _, resolved = resolved_llm(provider, model)
+        return provider, resolved
+    return None, None
+
+
 def set_workflow_origin(provider: str, model: str) -> None:
     p, m = resolved_llm(provider, model)
     st.session_state.workflow_source_provider = p
@@ -40,6 +65,22 @@ def set_workflow_origin_from_job(job: dict[str, Any]) -> None:
         str(job.get("locked_provider") or ""),
         str(job.get("locked_model") or ""),
     )
+
+
+def sync_workflow_origin_from_record(
+    data: dict[str, Any],
+    record: dict[str, Any],
+    *,
+    record_id: int | None = None,
+) -> bool:
+    """将历史记录中的 provider/model 写入 session，便于换模型检测。"""
+    provider, model = origin_fields_from_record(data, record)
+    if not provider or not model:
+        return False
+    set_workflow_origin(provider, model)
+    if record_id is not None:
+        st.session_state.current_history_record_id = int(record_id)
+    return True
 
 
 def clear_workflow_origin() -> None:
@@ -79,6 +120,6 @@ def ensure_workflow_origin_from_history() -> None:
     except json.JSONDecodeError:
         return
     provider = data.get("provider")
-    model = (data.get("model") or record.get("model") or "").strip()
+    model = (data.get("model") or record.get("model_name") or record.get("model") or "").strip()
     if provider in PROVIDER_OPTIONS and model:
         set_workflow_origin(provider, model)

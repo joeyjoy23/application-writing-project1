@@ -30,6 +30,7 @@ from utils.config import (
     normalize_zhipu_model_id,
 )
 from utils.config import resolve_api_key
+from services.workflow_origin import job_llm_settings_changed
 from services.workflow_progress import stage_has_content
 from ui.sidebar_nav import render_stage_index_nav, resolve_nav_workflow_state
 from workflow import WorkflowState
@@ -99,6 +100,7 @@ def clear_checkpoint() -> None:
     from services.workflow_origin import clear_workflow_origin
 
     st.session_state.workflow_state = None
+    st.session_state.history_nav_state = None
     st.session_state.last_question = ""
     st.session_state.failed_stage = None
     st.session_state._confirm_clear = False
@@ -114,16 +116,17 @@ def _on_settings_changed() -> None:
     job = st.session_state.get("run_job")
     if not st.session_state.get("is_running") or not job:
         return
-    if (
-        st.session_state.provider != job["locked_provider"]
-        or st.session_state.model != job["locked_model"]
+    if job_llm_settings_changed(
+        job,
+        current_provider=st.session_state.provider,
+        current_model=st.session_state.model,
     ):
         job["cancel_event"].set()
         st.session_state.run_cancelled = True
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.04-index-pad"
+UI_BUILD_TAG = "2026.06.13-origin-nav"
 
 
 def _render_admin_popover_body() -> None:

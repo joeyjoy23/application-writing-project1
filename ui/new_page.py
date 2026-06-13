@@ -499,11 +499,16 @@ def render_new_analysis(api_ready: bool) -> None:
         st.info("请先在左侧边栏填写 API Key")
         return
 
-    if session_llm_mismatch() and st.session_state.workflow_state and st.session_state.workflow_state.stage1:
+    _model_mismatch = (
+        session_llm_mismatch()
+        and st.session_state.workflow_state
+        and st.session_state.workflow_state.stage1
+    )
+    if _model_mismatch:
         src_model = st.session_state.get("workflow_source_model") or "其他模型"
         st.info(
             f"当前结果由 **{src_model}** 生成，与侧边栏所选模型不同。"
-            "点击「完整流程」将用新模型重新生成全部阶段。"
+            "请点击「完整流程」用新模型重新生成全部阶段，或先运行 Stage 1。"
         )
 
     # ── 断点续传 ──
@@ -511,7 +516,7 @@ def render_new_analysis(api_ready: bool) -> None:
     _next_stage = get_next_stage(_cached) if _cached and _cached.stage1 else None
     _failed = st.session_state.failed_stage
 
-    if _next_stage is not None and not running and not st.session_state.run_job:
+    if _next_stage is not None and not running and not st.session_state.run_job and not _model_mismatch:
         _r1, _r2 = st.columns(_RUN_ACTION_COLS)
         with _r1:
             if st.button(
@@ -598,8 +603,11 @@ def render_new_analysis(api_ready: bool) -> None:
             _stage_names = {1: "Stage 1 审题", 2: "Stage 2 PEEL", 3: "Stage 3 句型词汇", 4: "Stage 4 教学指南"}
             for _sn in range(1, 5):
                 with _rerun_cols[_sn - 1]:
-                    if stage_has_content(_ws, _sn):
-                        if st.button(
+                    if not stage_has_content(_ws, _sn):
+                        continue
+                    if _model_mismatch and _sn > 1:
+                        continue
+                    if st.button(
                             f"🔄 {_stage_names[_sn]}",
                             key=f"rerun_stage_{_sn}",
                             use_container_width=True,
