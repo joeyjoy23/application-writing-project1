@@ -26,7 +26,7 @@ alwaysApply: true
 ## 本项目约定
 
 - 改 `prompts/`、`utils/parsers.py`、工作流或 UI 后：跑 `pytest`。
-- 仅用户明确要求时 `git commit` / `push`；提交不含 `logs/`、`.env`、密钥。
+- 重大改动完成后自动 `git commit` + `push`（见 `auto-git-push-major`）；提交不含 `logs/`、`.env`、密钥。
 - 文档与用户规则冲突时，以用户当次指令为准。
 
 ## 禁止

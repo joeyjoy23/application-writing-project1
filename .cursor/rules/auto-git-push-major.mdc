@@ -1,0 +1,31 @@
+---
+description: 重大改动完成后自动 git commit 并 push
+alwaysApply: true
+---
+
+# 重大改动自动提交与推送
+
+完成**重大改动**后，Agent **应主动** `git commit` 并 `git push`，无需用户再口头要求。
+
+## 何谓「重大改动」
+
+- 新功能或行为变更已落地（如侧边栏/API/工作流/UI 批次）
+- 已通过相关验证（如 `pytest` 全绿或用户要求的检查）
+- 涉及多个源文件或架构/UX 设计已确认的实现
+
+不算重大改动：仅问答、单行 typo、未验证的 WIP、用户明确说「先别提交」。
+
+## 提交前
+
+1. 并行查看：`git status`、`git diff`、`git log -3`
+2. **不要**提交：`logs/`、`.env`、密钥、用户曾要求不进的宣传 docx
+3. 写 1–2 句 commit message，说明「为什么」
+
+## 提交后
+
+1. `git push` 到当前跟踪分支（不用 force push main/master）
+2. 向用户简要报告 commit hash 与 push 结果
+
+## 冲突
+
+与用户**当次**「不要提交」指令冲突时，以当次指令为准。

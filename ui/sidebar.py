@@ -32,6 +32,13 @@ from utils.config import (
 from utils.config import resolve_api_key
 from services.workflow_origin import job_llm_settings_changed
 from services.workflow_progress import stage_has_content
+from ui.api_key_browser import (
+    clear_browser_saved_keys,
+    hydrate_session_from_browser,
+    load_provider_key_after_switch,
+    persist_session_to_browser,
+    stash_provider_key_before_switch,
+)
 from ui.sidebar_nav import render_stage_index_nav, resolve_nav_workflow_state
 from workflow import WorkflowState
 
@@ -134,8 +141,28 @@ def _on_settings_changed() -> None:
         st.session_state.run_cancelled = True
 
 
+def _on_provider_changed() -> None:
+    """切换提供商：记住 Key 时暂存旧 provider 并载入新 provider。"""
+    old_provider = st.session_state.get("_prev_provider") or st.session_state.provider
+    stash_provider_key_before_switch(old_provider)
+    _on_settings_changed()
+    load_provider_key_after_switch(st.session_state.provider)
+    st.session_state._prev_provider = st.session_state.provider
+
+
+def _provider_key_label(provider: str) -> str:
+    return {
+        "deepseek": "DeepSeek API Key",
+        "openai": "OpenAI API Key",
+        "gemini": "Gemini API Key",
+        "dashscope": "阿里云百炼 API Key",
+        "mimo": "小米 MiMo API Key",
+        "zhipu": "智谱 API Key",
+    }.get(provider, "API Key")
+
+
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.13-stale-adv-e2e"
+UI_BUILD_TAG = "2026.06.13-api-adv-ls"
 
 
 def _render_admin_popover_body() -> None:
@@ -176,9 +203,13 @@ def _render_admin_popover_trigger() -> None:
 
 def render_sidebar() -> bool:
     """渲染侧边栏；返回 True 表示 API 已配置。"""
+    hydrate_session_from_browser()
+    if "_prev_provider" not in st.session_state:
+        st.session_state._prev_provider = st.session_state.provider
+
     with st.sidebar:
         render_sidebar_workspace_topbar()
-        api_ready = True
+        api_ready = False
 
         with st.container(border=True):
             st.markdown(
@@ -223,14 +254,8 @@ def render_sidebar() -> bool:
         with st.container(border=True):
             st.markdown(
                 '<div class="sidebar-section-label sidebar-api-head" role="heading" '
-                'aria-level="3">API 设置</div>',
+                'aria-level="3">模型</div>',
                 unsafe_allow_html=True,
-            )
-
-            st.checkbox(
-                "使用 LLM 结果缓存（同题同模型可跳过 API）",
-                help="命中缓存时直接载入该阶段结果；修改 prompts 目录后自动失效。",
-                key="use_llm_cache",
             )
 
             if st.session_state.is_running:
@@ -254,7 +279,7 @@ def render_sidebar() -> bool:
                     else "deepseek"
                 ),
                 key="provider",
-                on_change=_on_settings_changed,
+                on_change=_on_provider_changed,
                 help="支持 OpenAI 兼容接口的常用服务；运行中切换会停止当前请求",
             )
 
@@ -293,22 +318,6 @@ def render_sidebar() -> bool:
                 ),
             )
 
-            key_label = {
-                "deepseek": "DeepSeek API Key",
-                "openai": "OpenAI API Key",
-                "gemini": "Gemini API Key",
-                "dashscope": "阿里云百炼 API Key",
-                "mimo": "小米 MiMo API Key",
-                "zhipu": "智谱 API Key",
-            }.get(st.session_state.provider, "API Key")
-
-            st.session_state.api_key = st.text_input(
-                key_label,
-                value=st.session_state.api_key,
-                type="password",
-                help="在上方输入 API Key 后即可使用",
-            )
-
             if api_key_configured():
                 try:
                     s = build_settings(
@@ -316,7 +325,8 @@ def render_sidebar() -> bool:
                         api_key=st.session_state.api_key,
                         model=st.session_state.model,
                     )
-                    st.success(f"API 已配置 · {s.model}")
+                    provider_label = PROVIDER_LABELS.get(st.session_state.provider, st.session_state.provider)
+                    st.caption(f"API 已配置 · {provider_label} · {s.model}")
                     usage = st.session_state.get("llm_run_usage")
                     if usage and isinstance(usage, dict):
                         pt = int(usage.get("prompt_tokens") or 0)
@@ -328,9 +338,8 @@ def render_sidebar() -> bool:
                     msg = str(e)
                     if "未配置" not in msg and "API Key" not in msg:
                         st.error(msg)
-                    api_ready = False
             else:
-                api_ready = False
+                st.caption("API 未配置 · 请在「高级」中填写 Key")
 
         with st.container(border=True):
             _ws_nav = resolve_nav_workflow_state()
@@ -342,9 +351,38 @@ def render_sidebar() -> bool:
                 _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
             render_stage_index_nav(_ws_nav, running_stages=_running_nav)
 
-        # 高级 / 排错（默认折叠，无 API Key 时也可展开）
-        with st.expander("⚙️ 高级", expanded=False):
-            st.caption("仅供排错与部署核对，日常备课无需展开。")
+        # 高级：敏感项 + 排错（API 未配置时自动展开）
+        with st.expander("⚙️ 高级", expanded=not api_ready):
+            st.caption("API Key 与运维选项；日常备课只需在外层选择模型。")
+
+            st.session_state.api_key = st.text_input(
+                _provider_key_label(st.session_state.provider),
+                value=st.session_state.api_key,
+                type="password",
+                help="也可在部署环境的 Secrets / .env 中配置",
+            )
+
+            st.checkbox(
+                "使用 LLM 结果缓存（同题同模型可跳过 API）",
+                help="命中缓存时直接载入该阶段结果；修改 prompts 目录后自动失效。",
+                key="use_llm_cache",
+            )
+
+            st.checkbox(
+                "在本浏览器记住 Key",
+                help="勾选后将 Key 写入本机浏览器 localStorage；默认关闭。",
+                key="remember_api_key",
+            )
+            if st.session_state.get("remember_api_key"):
+                st.caption("⚠️ 勿在公共或共享电脑勾选；Key 仅存于本机浏览器，不会写入历史或导出。")
+
+            if st.button("清除本机已保存的 Key", key="btn_clear_saved_keys", use_container_width=True):
+                clear_browser_saved_keys()
+                st.toast("已清除本机保存的 Key", icon="🗑️")
+                st.rerun()
+
+            persist_session_to_browser()
+
             with st.expander("📋 运行日志", expanded=False):
                 _log_path = Path(__file__).resolve().parent.parent / "logs" / "app.log"
                 if _log_path.is_file():

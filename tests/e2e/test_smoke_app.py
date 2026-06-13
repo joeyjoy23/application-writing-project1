@@ -14,6 +14,7 @@ def _smoke_api_session(at: AppTest) -> None:
     """AppTest 冒烟用：使侧边栏判定 API 已配置。"""
     at.session_state["provider"] = "deepseek"
     at.session_state["api_key"] = "smoke-test-api-key"
+    at.session_state["_browser_keys_hydrated"] = True
 
 
 @pytest.fixture(scope="module")
