@@ -17,7 +17,7 @@ STAGE_NAV_ITEMS: tuple[tuple[int, str, str], ...] = (
 
 
 def main_area_shows_stage_panels() -> bool:
-    mode = st.session_state.get("app_mode", "新建")
+    mode = st.session_state.get("app_mode", "新建分析")
     if mode in ("新建", "新建分析"):
         return True
     if mode in ("历史", "查看历史"):
@@ -25,11 +25,27 @@ def main_area_shows_stage_panels() -> bool:
     return False
 
 
+def stage_nav_disabled_hint() -> str:
+    """索引不可点击时，副标题文案。"""
+    mode = st.session_state.get("app_mode", "新建分析")
+    if mode in ("历史", "查看历史") and not st.session_state.get("history_view_id"):
+        return "请打开记录"
+    return "不可用"
+
+
+def history_list_nav_hint() -> str | None:
+    """历史列表页侧边栏索引下方的说明。"""
+    mode = st.session_state.get("app_mode", "新建分析")
+    if mode in ("历史", "查看历史") and not st.session_state.get("history_view_id"):
+        return "打开某条记录的「只读查看」后，可在此跳转各 Stage"
+    return None
+
+
 def resolve_nav_workflow_state() -> WorkflowState | None:
     """主区正在展示 Stage 面板时，返回用于索引高亮/可点击的状态。"""
     if not main_area_shows_stage_panels():
         return None
-    mode = st.session_state.get("app_mode", "新建")
+    mode = st.session_state.get("app_mode", "新建分析")
     if mode in ("历史", "查看历史"):
         return st.session_state.get("history_nav_state")
     return st.session_state.get("workflow_state")
@@ -80,7 +96,7 @@ def render_stage_index_nav(
         has = bool(state and stage_has_content(state, num))
         is_running = num in running
         if not panels_visible:
-            cls, hint = "stage-nav-item is-disabled", "不可用"
+            cls, hint = "stage-nav-item is-disabled", stage_nav_disabled_hint()
         elif is_running:
             cls, hint = "stage-nav-item is-running", "生成中"
         elif has:
@@ -111,6 +127,9 @@ def render_stage_index_nav(
         + "</div></div>",
         unsafe_allow_html=True,
     )
+    nav_hint = history_list_nav_hint()
+    if nav_hint:
+        st.caption(nav_hint)
     if panels_visible and any(
         state and stage_has_content(state, num) for num, _, _ in STAGE_NAV_ITEMS
     ):

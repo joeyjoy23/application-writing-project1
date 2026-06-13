@@ -122,6 +122,7 @@ def get_all_records(
     *,
     limit: int = 20,
     offset: int = 0,
+    starred_only: bool = False,
 ) -> list[dict[str, Any]]:
     return _backend().get_all_records(
         keyword,
@@ -129,13 +130,23 @@ def get_all_records(
         offset=offset,
         owner_id=scope_owner_id,
         admin=scope_admin,
+        starred_only=starred_only,
     )
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def count_records(keyword: str, scope_owner_id: str, scope_admin: bool) -> int:
+def count_records(
+    keyword: str,
+    scope_owner_id: str,
+    scope_admin: bool,
+    *,
+    starred_only: bool = False,
+) -> int:
     return _backend().count_records(
-        keyword, owner_id=scope_owner_id, admin=scope_admin
+        keyword,
+        owner_id=scope_owner_id,
+        admin=scope_admin,
+        starred_only=starred_only,
     )
 
 

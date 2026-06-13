@@ -51,6 +51,17 @@ def test_workflow_payload_provider_model_required():
     assert payload["model"] == "glm-5.1"
 
 
+def test_workflow_payload_includes_student_level_when_stage4():
+    from workflow import Stage4Result
+
+    state = _sample_state()
+    state.stage4 = Stage4Result(raw="guide")
+    payload = workflow_state_payload(
+        state, provider="deepseek", model="m", student_level="进阶"
+    )
+    assert payload["student_level"] == "进阶"
+
+
 def test_resolve_raw_input_prefers_column():
     record = {
         "raw_input": "  存档题目  ",
@@ -79,6 +90,14 @@ def test_make_export_word_filename_sanitizes_model():
     name = make_export_word_filename('bad<>model', "2026-06-02")
     assert name.endswith("_bad--model.docx")
     assert "2026-06-02" in name
+
+
+def test_make_export_json_filename_matches_word_basename():
+    from services.workflow_storage import make_export_json_filename
+
+    word = make_export_word_filename("glm-5.1", "2026-06-02")
+    json_name = make_export_json_filename("glm-5.1", "2026-06-02")
+    assert json_name == word.replace(".docx", ".json")
 
 
 def test_workflow_content_length():

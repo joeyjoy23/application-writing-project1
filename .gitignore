@@ -22,5 +22,7 @@ nul
 # 本地 Agent 笔记（非应用代码）
 .workbuddy/
 
-# Cursor IDE 本地配置
-.cursor/
+# Cursor IDE 本地配置（项目规则除外，可提交共享）
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**

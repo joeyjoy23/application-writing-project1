@@ -27,6 +27,11 @@ def make_export_word_filename(model: str, date_str: str | None = None) -> str:
     return f"应用文分析_{date_str}_{safe_model}.docx"
 
 
+def make_export_json_filename(model: str, date_str: str | None = None) -> str:
+    """JSON 导出文件名：与 Word 同名规则，扩展名为 .json"""
+    return make_export_word_filename(model, date_str).removesuffix(".docx") + ".json"
+
+
 def workflow_stages_mask(state: WorkflowState) -> str:
     """四位标记：stage1~4 是否已有内容。"""
     return "".join(
@@ -60,10 +65,11 @@ def workflow_state_payload(
     provider: str,
     model: str,
     raw_input: str | None = None,
+    student_level: str | None = None,
 ) -> dict[str, Any]:
     """构造写入数据库的 JSON 对象。"""
     raw = (raw_input if raw_input is not None else state.question or "").strip()
-    return {
+    payload: dict[str, Any] = {
         "raw_input": raw,
         "question": raw,
         "provider": provider,
@@ -75,6 +81,9 @@ def workflow_state_payload(
         "stage4": state.stage4.raw if state.stage4 else None,
         "errors": state.errors,
     }
+    if state.stage4 and student_level:
+        payload["student_level"] = student_level
+    return payload
 
 
 def workflow_state_to_json(
@@ -83,11 +92,16 @@ def workflow_state_to_json(
     provider: str,
     model: str,
     raw_input: str | None = None,
+    student_level: str | None = None,
 ) -> str:
     """将备课包序列化为 JSON 字符串存入数据库。"""
     return json.dumps(
         workflow_state_payload(
-            state, provider=provider, model=model, raw_input=raw_input
+            state,
+            provider=provider,
+            model=model,
+            raw_input=raw_input,
+            student_level=student_level,
         ),
         ensure_ascii=False,
     )

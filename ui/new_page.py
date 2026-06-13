@@ -27,6 +27,7 @@ from services.workflow_progress import (
 )
 from utils.datetime_util import format_created_at_display
 from services.workflow_storage import (
+    make_export_json_filename,
     make_export_word_filename,
     resolve_raw_input,
     workflow_state_from_json,
@@ -42,6 +43,15 @@ from ui.share_controls import ensure_history_record_id, render_share_controls
 from ui.stage_display import render_all_stages, sync_slots_from_state
 
 
+def question_results_stale(question: str) -> bool:
+    """题目已改但本页仍显示上一题生成结果。"""
+    last = (st.session_state.get("last_question") or "").strip()
+    state = st.session_state.get("workflow_state")
+    if not last or not state or not state.stage1:
+        return False
+    return question.strip() != last
+
+
 def maybe_clear_checkpoint_if_question_changed(question: str) -> None:
     """仅在即将开始新的生成时检测题目是否变更。"""
     cached_question = st.session_state.last_question
@@ -50,12 +60,16 @@ def maybe_clear_checkpoint_if_question_changed(question: str) -> None:
         return
     if question.strip() != cached_question.strip():
         clear_checkpoint()
-        st.toast("题目已变更，已清除上次缓存", icon="🔄")
+        st.toast("题目已变更，已清除本页缓存（历史记录保留）", icon="🔄")
 
 
 # ── 导出按钮 ──
 
-# ── 导出按钮 ──
+
+def _completed_stage_count(state: WorkflowState) -> int:
+    from services.workflow_progress import stage_has_content
+
+    return sum(1 for s in range(1, 5) if stage_has_content(state, s))
 
 
 def render_export_buttons(
@@ -68,6 +82,11 @@ def render_export_buttons(
     """导出 JSON / Word（新建页与历史详情共用）。"""
     if not state.stage1:
         return
+    done = _completed_stage_count(state)
+    if done < 4:
+        st.warning(
+            f"当前仅完成 {done}/4 个阶段，导出的 Word / JSON 将缺少未完成阶段内容。"
+        )
     st.markdown(
         '<div class="export-section">'
         '<div class="export-section-title">'
@@ -96,8 +115,10 @@ def render_export_buttons(
             saved_at_utc=created_at,
         )
         word_name = make_export_word_filename(model, created_at)
+        json_name = make_export_json_filename(model, created_at)
     except Exception as e:
         word_bytes = None
+        json_name = make_export_json_filename(model, created_at)
         st.error(f"Word 生成失败: {e}")
 
     if key_prefix.startswith("hist_"):
@@ -111,9 +132,8 @@ def render_export_buttons(
     col_word, col_json = st.columns([3, 2])
     with col_word:
         if word_bytes:
-            word_label = "📥 导出 Word" if key_prefix.startswith("hist_") else "📥 一键导出 Word"
             st.download_button(
-                word_label,
+                "📥 导出 Word",
                 data=word_bytes,
                 file_name=word_name,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -126,7 +146,7 @@ def render_export_buttons(
         st.download_button(
             "📋 下载 JSON",
             data=json.dumps(export, ensure_ascii=False, indent=2),
-            file_name="gaokao_writing_analysis.json",
+            file_name=json_name,
             mime="application/json",
             use_container_width=True,
             key=f"{key_base}_json",
@@ -152,9 +172,9 @@ def render_history_list() -> None:
         "失败或停止后也可在「历史」中载入续跑。"
     )
     keyword = st.text_input(
-        "搜索题目",
+        "搜索题目或模型",
         value=st.session_state.history_search_keyword,
-        placeholder="输入关键词模糊匹配题目摘要…",
+        placeholder="输入关键词模糊匹配题目摘要或模型名…",
         key="history_search_input",
     )
     prev_keyword = st.session_state.get("_history_search_applied", "")
@@ -167,28 +187,27 @@ def render_history_list() -> None:
     starred_only = st.checkbox("只看收藏", key="history_starred_only", value=False)
     
     page_size = int(st.session_state.get("history_page_size") or HISTORY_PAGE_SIZE)
-    total = count_records(keyword or "", owner_id, admin)
+    total = count_records(keyword or "", owner_id, admin, starred_only=starred_only)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = int(st.session_state.get("history_page") or 1)
     page = max(1, min(page, total_pages))
     st.session_state.history_page = page
 
     offset = (page - 1) * page_size
-    # 需要修改 get_all_records 支持 starred_only 参数
-    # 暂时先获取全部，前端筛选
-    all_records = get_all_records(
-        keyword or "", owner_id, admin, limit=page_size, offset=offset
+    records = get_all_records(
+        keyword or "",
+        owner_id,
+        admin,
+        limit=page_size,
+        offset=offset,
+        starred_only=starred_only,
     )
-    if starred_only:
-        records = [r for r in all_records if r.get("is_starred")]
-        if not records and all_records:
-            st.info("当前筛选条件下无收藏记录")
-            return
-    else:
-        records = all_records
 
     if not records and total == 0:
-        st.info("暂无历史记录，请在「新建」模式中生成备课包。")
+        if starred_only:
+            st.info("暂无收藏记录。可在列表中点击 ☆ 标记收藏。")
+        else:
+            st.info("暂无历史记录，请在「新建分析」模式中生成备课包。")
         return
 
     st.caption(
@@ -217,11 +236,21 @@ def render_history_list() -> None:
         cols[3].caption(format_stages_mask(rec.get("stages_mask")))
         cols[4].write(rec.get("word_count", "—"))
         act_view, act_load = cols[5].columns(2)
-        if act_view.button("查看", key=f"hist_view_{rid}", use_container_width=True):
+        if act_view.button(
+            "只读查看",
+            key=f"hist_view_{rid}",
+            use_container_width=True,
+            help="在历史页浏览，不可续跑",
+        ):
             st.session_state.history_view_id = rid
             st.session_state.history_confirm_delete_id = None
             st.rerun()
-        if act_load.button("载入", key=f"hist_load_{rid}", use_container_width=True):
+        if act_load.button(
+            "载入编辑",
+            key=f"hist_load_{rid}",
+            use_container_width=True,
+            help="载入到新建分析页，可续跑或重跑",
+        ):
             ok, err = load_history_into_session(rid)
             if ok:
                 st.toast(history_resume_hint(st.session_state.workflow_state), icon="📂")
@@ -319,7 +348,7 @@ def render_history_detail(record_id: int) -> None:
             st.session_state.history_view_id = None
             st.rerun()
     with col_load:
-        load_label = "📂 载入继续编辑" if next_stage else "📂 载入到新建页"
+        load_label = "📂 载入继续编辑" if next_stage else "📂 载入到新建分析页"
         if st.button(load_label, type="primary", use_container_width=True, key=f"hist_load_detail_{record_id}"):
             ok, err = load_history_into_session(record_id)
             if ok:
@@ -335,7 +364,10 @@ def render_history_detail(record_id: int) -> None:
             f"约 {record.get('word_count', 0)} 字"
         )
         if next_stage:
-            st.caption(f"未完成：可从 Stage {next_stage} 续跑（载入后切到「新建」模式）")
+            st.caption(
+                f"未完成：点击「载入继续编辑」后将自动切换到新建分析页，"
+                f"可从 Stage {next_stage} 续跑。"
+            )
 
     st.markdown("#### 原始题目")
     st.text_area(
@@ -423,6 +455,20 @@ def render_new_analysis(api_ready: bool) -> None:
         ):
             st.session_state.student_level = "进阶"
 
+    _ws_level = st.session_state.workflow_state
+    _s4_level = st.session_state.get("stage4_student_level")
+    _cur_level = st.session_state.get("student_level", "中等")
+    if (
+        _ws_level
+        and _ws_level.stage4
+        and _s4_level
+        and _cur_level != _s4_level
+    ):
+        st.info(
+            f"学生水平已从 **{_s4_level}** 改为 **{_cur_level}**，"
+            "建议重跑 **Stage 4** 以更新教学指南。"
+        )
+
     running = st.session_state.is_running
 
     # ── 按钮区：两行共用 4 列 CSS Grid 对齐（见 custom.css） ──
@@ -460,24 +506,33 @@ def render_new_analysis(api_ready: bool) -> None:
             "完整流程",
             type="primary",
             use_container_width=True,
-            help="依次运行 Stage 1→2→3→4；同模型下已完成的阶段自动跳过；更换模型后将全部重跑",
+            help=(
+                "依次运行 Stage 1→2→3→4；"
+                "同模型下已完成的阶段自动跳过；"
+                "更换模型后将全部重跑"
+            ),
         )
     with _f2:
         if st.button(
             "清空结果",
             key="btn_clear_results",
-            help="清除当前所有阶段的生成结果（保留题目与学生水平）",
+            help="清除当前页 Stage 1–4 输出；题目与学生水平保留；历史记录不删除",
             use_container_width=True,
         ):
             st.session_state._confirm_clear = True
             st.rerun()
+
+    st.caption(
+        "完整流程时 Stage 2 与 Stage 3 将并行生成，可缩短等待时间。"
+    )
 
     # 清空确认
     if st.session_state.get("_confirm_clear"):
         st.markdown(
             '<div class="clear-confirm-box">'
             '<p class="clear-confirm-title">确认清空生成结果？</p>'
-            '<p class="clear-confirm-desc">将清除 Stage 1–4 的全部输出，题目与学生水平设置保留。此操作不可撤销。</p>'
+            '<p class="clear-confirm-desc">将清除本页 Stage 1–4 的全部输出，题目与学生水平设置保留。'
+            "「历史」中已自动保存的备课包<strong>不会</strong>被删除。此操作不可撤销。</p>"
             '</div>',
             unsafe_allow_html=True,
         )
@@ -514,7 +569,23 @@ def render_new_analysis(api_ready: bool) -> None:
     # ── 断点续传 ──
     _cached = st.session_state.workflow_state
     _next_stage = get_next_stage(_cached) if _cached and _cached.stage1 else None
+    _all_done = _cached and _cached.stage1 and _next_stage is None
     _failed = st.session_state.failed_stage
+    _stopped = st.session_state.get("stopped_stage")
+
+    if _all_done and not running and not st.session_state.run_job:
+        st.warning(
+            "四阶段已全部完成。若要重新生成，请先清空结果，或点击下方按钮一键清空并重跑。"
+        )
+        if st.button(
+            "清空并重跑完整流程",
+            type="primary",
+            use_container_width=True,
+            key="btn_clear_rerun_full",
+        ):
+            clear_checkpoint()
+            if try_start_run_job("full", question):
+                st.rerun()
 
     if _next_stage is not None and not running and not st.session_state.run_job and not _model_mismatch:
         _r1, _r2 = st.columns(_RUN_ACTION_COLS)
@@ -548,6 +619,22 @@ def render_new_analysis(api_ready: bool) -> None:
         with _t2:
             st.caption(f"Stage {_failed} 上次生成失败，点击可重新尝试")
 
+    if _stopped is not None and not running and not st.session_state.run_job:
+        _s1, _s2 = st.columns(_RUN_ACTION_COLS)
+        with _s1:
+            if st.button(
+                f"▶ 继续 Stage {_stopped}",
+                type="secondary",
+                use_container_width=True,
+                key="btn_continue_stopped",
+            ):
+                maybe_clear_checkpoint_if_question_changed(question)
+                _mode_map = {1: "stage1", 2: "stage2", 3: "stage3", 4: "stage4"}
+                if try_start_run_job(_mode_map.get(_stopped, "full"), question):
+                    st.rerun()
+        with _s2:
+            st.caption(f"Stage {_stopped} 已停止（如切换模型），点击可继续生成")
+
     clicked_mode: str | None = None
     if btn_full:
         clicked_mode = "full"
@@ -562,6 +649,8 @@ def render_new_analysis(api_ready: bool) -> None:
 
     st.divider()
     st.markdown('<p class="section-label">运行与结果</p>', unsafe_allow_html=True)
+    if question_results_stale(question):
+        st.warning("题目已修改，下方为旧题结果，运行后将重新生成。")
     if running or clicked_mode or st.session_state.run_job:
         st.caption(
             "运行中可在侧边栏切换模型以**自动停止**当前请求；"

@@ -232,13 +232,15 @@ def get_all_records(
     return [dict(row) for row in rows]
 
 
-def count_records(keyword: str, *, owner_id: str, admin: bool) -> int:
+def count_records(keyword: str, *, owner_id: str, admin: bool, starred_only: bool = False) -> int:
     init_db()
     sql = "SELECT COUNT(*) FROM history WHERE 1=1"
     params: list[Any] = []
     owner_sql, owner_params = _owner_filter(owner_id, admin)
     sql += owner_sql
     params.extend(owner_params)
+    if starred_only:
+        sql += " AND is_starred = 1"
     kw = (keyword or "").strip()
     if kw:
         sql += " AND (topic LIKE ? OR model_name LIKE ?)"

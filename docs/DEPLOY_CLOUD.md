@@ -25,7 +25,8 @@
 4. **分享功能**：在 Secrets 增加 `APP_BASE_URL`（与浏览器地址栏一致，如 `https://xxx.streamlit.app`），并配置 `DATABASE_URL`。分享链接形如 `APP_BASE_URL/?share=令牌`，默认 7 天有效。
 
 5. 打开网页，看侧边栏最底部版本号，例如：
-   - `界面 2026.05.20-no-image-ocr` → 已移除图片识题，保留文字输入与四阶段流程
+   - `界面 2026.06.13-origin-nav` → 换模型检测、历史索引、清空不删历史等 UX 更新
+   - 旧标签 `2026.05.20-no-image-ocr` 等表示尚未 Reboot 到最新提交
 
 ### 其它可能
 

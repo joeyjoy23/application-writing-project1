@@ -229,6 +229,8 @@ flowchart TB
 ## 10. 相关文档
 
 - 功能说明：[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)
+- 用户操作（历史、清空、换模型）：[USAGE.md](USAGE.md)
+- 安装与排错：[README.md](../README.md)
 - 云端库：[NEON_SETUP.md](NEON_SETUP.md)
 - 缓存降本：[LLM_CACHE.md](LLM_CACHE.md)
 

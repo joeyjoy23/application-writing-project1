@@ -2,7 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
-from ui.sidebar_nav import main_area_shows_stage_panels, resolve_nav_workflow_state
+from ui.sidebar_nav import (
+    history_list_nav_hint,
+    main_area_shows_stage_panels,
+    resolve_nav_workflow_state,
+    stage_nav_disabled_hint,
+)
 from workflow import Stage1Result, WorkflowState
 
 
@@ -37,3 +42,16 @@ def test_resolve_nav_uses_history_state_on_detail():
         resolved = resolve_nav_workflow_state()
     assert resolved is hist
     assert resolved.stage1 is not None
+
+
+def test_stage_nav_disabled_hint_on_history_list():
+    ss = {"app_mode": "历史", "history_view_id": None}
+    with patch("ui.sidebar_nav.st.session_state", ss):
+        assert stage_nav_disabled_hint() == "请打开记录"
+        assert history_list_nav_hint() is not None
+
+
+def test_stage_nav_disabled_hint_default():
+    ss = {"app_mode": "新建分析"}
+    with patch("ui.sidebar_nav.st.session_state", ss):
+        assert stage_nav_disabled_hint() == "不可用"

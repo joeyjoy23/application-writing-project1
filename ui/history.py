@@ -55,6 +55,7 @@ def auto_save_history(
             provider=actual_provider,
             model=actual_model,
             raw_input=raw,
+            student_level=st.session_state.get("student_level", "中等"),
         )
         fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
         if st.session_state.get("_last_save_fingerprint") == fingerprint:
@@ -108,6 +109,7 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
     st.session_state.workflow_state = state
     st.session_state.last_question = raw
     st.session_state.failed_stage = None
+    st.session_state.stopped_stage = None
     st.session_state.run_job = None
     st.session_state.is_running = False
     st.session_state.run_cancelled = False
@@ -115,8 +117,19 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
     st.session_state._confirm_clear = False
     st.session_state.history_view_id = None
     st.session_state.history_nav_state = None
-    st.session_state.app_mode = "新建"
+    st.session_state.app_mode = "新建分析"
     st.session_state.current_history_record_id = int(record_id)
+
+    saved_level = data.get("student_level")
+    if saved_level in ("基础", "中等", "进阶"):
+        st.session_state.student_level = saved_level
+    if state.stage4:
+        st.session_state.stage4_student_level = (
+            saved_level if saved_level in ("基础", "中等", "进阶")
+            else st.session_state.get("student_level", "中等")
+        )
+    else:
+        st.session_state.stage4_student_level = None
 
     saved_provider = data.get("provider")
     saved_model = (data.get("model") or record.get("model_name") or "").strip()
@@ -132,9 +145,8 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
 def history_resume_hint(state: WorkflowState) -> str:
     nxt = get_next_stage(state)
     if nxt is None:
-        return "四阶段已全部完成，可在新建页查看、导出或清空后重跑。"
+        return "四阶段已全部完成，可在新建分析页查看、导出或清空后重跑。"
     done = sum(1 for s in range(1, 5) if stage_has_content(state, s))
     return (
-        f"已载入断点（{done}/4），切换到「新建」后点击「"
-        f"{resume_label(nxt).replace('▶ ', '')}」即可续跑。"
+        f"已载入到新建分析页（{done}/4），请点击「{resume_label(nxt)}」续跑。"
     )

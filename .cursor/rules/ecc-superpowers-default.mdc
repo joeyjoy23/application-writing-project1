@@ -1,0 +1,35 @@
+---
+description: 本项目默认使用 Superpowers 与 ECC 技能工作流
+alwaysApply: true
+---
+
+# ECC + Superpowers 默认工作流
+
+本仓库所有 Agent 任务**默认**遵循 Superpowers 与 ECC 技能，不得跳过。
+
+## 启动（每条用户消息）
+
+1. 先对照 **using-superpowers**：有 1% 可能适用的技能就必须读取并遵循。
+2. 再选 **ECC** 领域技能（如 `ecc-python`、`ecc-fastapi-patterns`、`ecc-code-review`）。
+
+## 任务类型 → 必用技能
+
+| 类型 | 技能 |
+|------|------|
+| 新功能 / 改行为 / UX | `brainstorming` → `writing-plans` → 实现 → `verification-before-completion` |
+| Bug / 测试失败 | `systematic-debugging` → 修复 → `verification-before-completion` |
+| 多步实现 | `writing-plans` 或 `executing-plans`；独立子任务可用 `subagent-driven-development` |
+| 改 Python | `ecc-python` + `ecc-python-patterns` |
+| 声称完成 / push 前 | `verification-before-completion`（先跑 pytest 等，再下结论） |
+| PR / 合并前 | `requesting-code-review` 或 `ecc-code-review` |
+
+## 本项目约定
+
+- 改 `prompts/`、`utils/parsers.py`、工作流或 UI 后：跑 `pytest`。
+- 仅用户明确要求时 `git commit` / `push`；提交不含 `logs/`、`.env`、密钥。
+- 文档与用户规则冲突时，以用户当次指令为准。
+
+## 禁止
+
+- 未读技能就写代码或给「已完成」结论。
+- 跳过 brainstorming 直接上大改（除非用户明确只要极小补丁）。

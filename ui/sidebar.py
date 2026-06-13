@@ -96,16 +96,25 @@ def api_key_configured() -> bool:
 
 
 def clear_checkpoint() -> None:
-    """清除所有断点续传缓存，回到初始状态。"""
+    """清空当前页面的生成结果与断点（不删除「历史」中的已存记录）。"""
     from services.workflow_origin import clear_workflow_origin
 
     st.session_state.workflow_state = None
     st.session_state.history_nav_state = None
     st.session_state.last_question = ""
     st.session_state.failed_stage = None
+    st.session_state.stopped_stage = None
     st.session_state._confirm_clear = False
+    st.session_state.stage4_student_level = None
     clear_workflow_origin()
-    st.toast("已清除缓存，可重新开始", icon="🔄")
+    st.toast("已清空当前结果；历史记录已保留，可在「历史」中查看", icon="🔄")
+
+
+def request_clear_checkpoint() -> None:
+    """请求清空：由新建页确认框统一二次确认。"""
+    st.session_state._confirm_clear = True
+    if st.session_state.get("app_mode") != "新建分析":
+        st.session_state.app_mode = "新建分析"
 
 
 # ── 侧边栏回调 ──
@@ -126,7 +135,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.13-origin-nav"
+UI_BUILD_TAG = "2026.06.11-ux-batch3"
 
 
 def _render_admin_popover_body() -> None:
@@ -177,10 +186,10 @@ def render_sidebar() -> bool:
                 'aria-level="3">模式</div>',
                 unsafe_allow_html=True,
             )
-            mode_options = ["新建", "历史"]
-            current_mode = st.session_state.get("app_mode", "新建")
-            if current_mode == "新建分析":
-                current_mode = "新建"
+            mode_options = ["新建分析", "历史"]
+            current_mode = st.session_state.get("app_mode", "新建分析")
+            if current_mode == "新建":
+                current_mode = "新建分析"
             if current_mode == "查看历史":
                 current_mode = "历史"
             mode_index = (
@@ -191,7 +200,7 @@ def render_sidebar() -> bool:
                 mode_options,
                 index=mode_index,
                 label_visibility="collapsed",
-                help="新建：输入题目并运行备课流程；历史：查看、搜索、导出已保存的备课包",
+                help="新建分析：输入题目并运行备课流程；历史：查看、搜索、导出已保存的备课包",
             )
             ensure_guest_id()
             owner_id, admin = history_scope()
@@ -346,12 +355,20 @@ def render_sidebar() -> bool:
         if _ws and _ws.stage1:
             _done = sum(1 for s in range(1, 5) if stage_has_content(_ws, s))
             _fail = st.session_state.get("failed_stage")
+            _stopped = st.session_state.get("stopped_stage")
             if _fail:
                 st.caption(f"断点：已完成 {_done}/4（Stage {_fail} 失败）")
+            elif _stopped:
+                st.caption(f"断点：已完成 {_done}/4（Stage {_stopped} 已停止）")
             elif _done < 4:
                 st.caption(f"断点：已完成 {_done}/4，可继续生成")
-            if st.button("🔄 清除缓存，重新开始", use_container_width=True, key="btn_sidebar_clear_cache"):
-                clear_checkpoint()
+            if st.button(
+                "清空当前结果",
+                use_container_width=True,
+                key="btn_sidebar_clear_cache",
+                help="仅清除本页 Stage 1–4 输出与断点；「历史」里已保存的备课包不会删除（需确认）",
+            ):
+                request_clear_checkpoint()
                 st.rerun()
 
         # 运行日志查看器

@@ -623,6 +623,11 @@ def _apply_stage_result(state: WorkflowState, stage_num: int, result: Any) -> No
         state.stage3 = result
     elif stage_num == 4:
         state.stage4 = result
+        job = st.session_state.get("run_job")
+        level = (job or {}).get("student_level") or st.session_state.get(
+            "student_level", "中等"
+        )
+        st.session_state.stage4_student_level = level
 
 
 def _persist_history_from_job(
@@ -731,7 +736,10 @@ def try_start_run_job(mode: str, question: str) -> bool:
             state=state if skip_completed or mode == "resume" else None,
         )
     if not stages:
-        st.info("所有阶段已完成，无需重新生成。如需重跑，请先清空结果。")
+        st.warning(
+            "四阶段已全部完成，无需重新生成。"
+            "如需重跑，请点击下方 **清空并重跑完整流程**，或先 **清空结果**。"
+        )
         return False
 
     st.session_state.workflow_state = state
@@ -778,6 +786,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
     st.session_state.run_cancelled = False
     st.session_state.is_running = True
     st.session_state.failed_stage = None
+    st.session_state.stopped_stage = None
     logger.info("运行启动 mode=%s stages=%s model=%s", mode, stages, locked_model)
     return True
 
@@ -799,7 +808,8 @@ def _finish_job_cancelled(
     ui.persist_logs(job)
     st.session_state.workflow_state = state
     st.session_state.last_question = job["question"]
-    st.session_state.failed_stage = stage_num
+    st.session_state.failed_stage = None
+    st.session_state.stopped_stage = stage_num
     set_workflow_origin_from_job(job)
     _persist_history_from_job(job, state, notify=True)
     sync_slots_from_state(state, slots)
@@ -826,6 +836,7 @@ def _finish_job_success(
     st.session_state.workflow_state = state
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = None
+    st.session_state.stopped_stage = None
     set_workflow_origin_from_job(job)
     logger.info("运行完成 mode=%s", mode)
     _persist_history_from_job(job, state, notify=False)
@@ -959,6 +970,7 @@ def advance_run_job(
                 st.session_state.workflow_state = state
                 st.session_state.last_question = job["question"]
                 st.session_state.failed_stage = stage_num
+                st.session_state.stopped_stage = None
                 ui.persist_logs(job)
                 _persist_history_from_job(job, state, notify=True)
                 st.warning(msg)
@@ -986,6 +998,7 @@ def advance_run_job(
                 st.session_state.workflow_state = state
                 st.session_state.last_question = job["question"]
                 st.session_state.failed_stage = stage_num
+                st.session_state.stopped_stage = None
                 _persist_history_from_job(job, state, notify=True)
                 sync_slots_from_state(state, slots)
                 clear_run_job()

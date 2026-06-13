@@ -41,7 +41,11 @@ def render_share_controls(history_id: int | None, *, key_prefix: str = "share") 
         unsafe_allow_html=True,
     )
     if not using_postgres():
-        st.caption("分享功能需在 Streamlit Cloud 配置 DATABASE_URL（Neon）后使用。")
+        st.info(
+            "本地模式暂不支持分享链接，并非功能故障。"
+            "部署到 Streamlit Cloud 并配置 **DATABASE_URL**（Neon）与 **APP_BASE_URL** 后，"
+            "可生成微信只读分享链接。"
+        )
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
