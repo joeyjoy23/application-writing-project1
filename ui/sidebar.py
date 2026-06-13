@@ -135,7 +135,7 @@ def _on_settings_changed() -> None:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.11-ux-batch3"
+UI_BUILD_TAG = "2026.06.13-stale-adv-e2e"
 
 
 def _render_admin_popover_body() -> None:
@@ -342,12 +342,27 @@ def render_sidebar() -> bool:
                 _running_nav = _running_stages_for_job(_job_nav, _ws_nav)
             render_stage_index_nav(_ws_nav, running_stages=_running_nav)
 
+        # 高级 / 排错（默认折叠，无 API Key 时也可展开）
+        with st.expander("⚙️ 高级", expanded=False):
+            st.caption("仅供排错与部署核对，日常备课无需展开。")
+            with st.expander("📋 运行日志", expanded=False):
+                _log_path = Path(__file__).resolve().parent.parent / "logs" / "app.log"
+                if _log_path.is_file():
+                    _lines = _log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                    _tail = _lines[-30:] if len(_lines) >= 30 else _lines
+                    st.text("\n".join(_tail))
+                    if st.button("刷新日志", key="btn_refresh_log"):
+                        st.rerun()
+                else:
+                    st.caption("暂无日志文件")
+
+        st.markdown(
+            f'<p class="sidebar-build-tag" title="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app">'
+            f"界面 {UI_BUILD_TAG}</p>",
+            unsafe_allow_html=True,
+        )
+
         if not api_ready:
-            st.markdown(
-                f'<p class="sidebar-build-tag" title="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app">'
-                f"界面 {UI_BUILD_TAG}</p>",
-                unsafe_allow_html=True,
-            )
             return False
 
         # 断点续传状态与清除缓存
@@ -370,23 +385,5 @@ def render_sidebar() -> bool:
             ):
                 request_clear_checkpoint()
                 st.rerun()
-
-        # 运行日志查看器
-        with st.expander("📋 运行日志"):
-            _log_path = Path(__file__).resolve().parent.parent / "logs" / "app.log"
-            if _log_path.is_file():
-                _lines = _log_path.read_text(encoding="utf-8", errors="replace").splitlines()
-                _tail = _lines[-30:] if len(_lines) >= 30 else _lines
-                st.text("\n".join(_tail))
-                if st.button("刷新日志", key="btn_refresh_log"):
-                    st.rerun()
-            else:
-                st.caption("暂无日志文件")
-
-        st.markdown(
-            f'<p class="sidebar-build-tag" title="若与最新部署不一致，请在 Streamlit Cloud 执行 Reboot app">'
-            f"界面 {UI_BUILD_TAG}</p>",
-            unsafe_allow_html=True,
-        )
 
     return True

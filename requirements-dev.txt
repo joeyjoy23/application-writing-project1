@@ -1,1 +1,3 @@
 pytest>=8.0.0
+
+# AppTest 冒烟（随 streamlit 自带，无需 playwright）

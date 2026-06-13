@@ -43,13 +43,11 @@ from ui.share_controls import ensure_history_record_id, render_share_controls
 from ui.stage_display import render_all_stages, sync_slots_from_state
 
 
-def question_results_stale(question: str) -> bool:
-    """题目已改但本页仍显示上一题生成结果。"""
-    last = (st.session_state.get("last_question") or "").strip()
-    state = st.session_state.get("workflow_state")
-    if not last or not state or not state.stage1:
-        return False
-    return question.strip() != last
+from ui.stale_results import (
+    inject_stale_results_styles,
+    question_results_stale,
+    render_stale_results_warning,
+)
 
 
 def maybe_clear_checkpoint_if_question_changed(question: str) -> None:
@@ -552,7 +550,11 @@ def render_new_analysis(api_ready: bool) -> None:
 
     if not api_ready:
         st.info("请先在左侧边栏填写 API Key")
-        return
+        if not (
+            st.session_state.workflow_state
+            and st.session_state.workflow_state.stage1
+        ):
+            return
 
     _model_mismatch = (
         session_llm_mismatch()
@@ -649,37 +651,43 @@ def render_new_analysis(api_ready: bool) -> None:
 
     st.divider()
     st.markdown('<p class="section-label">运行与结果</p>', unsafe_allow_html=True)
-    if question_results_stale(question):
-        st.warning("题目已修改，下方为旧题结果，运行后将重新生成。")
-    if running or clicked_mode or st.session_state.run_job:
-        st.caption(
-            "运行中可在侧边栏切换模型以**自动停止**当前请求；"
-            "停止后请重新点击 Stage。生成内容会逐块显示在下方。"
-        )
+    _stale_results = question_results_stale(question)
+    if _stale_results:
+        render_stale_results_warning()
 
-    # 导出按钮提前显示
+    # 导出与 Stage 结果（换题后灰显区域）
     _early_state = st.session_state.workflow_state
-    if _early_state and _early_state.stage1:
-        render_export_buttons(_early_state)
-        _hist_id = ensure_history_record_id(_early_state)
-        render_share_controls(_hist_id, key_prefix="new_share")
+    with st.container(border=_stale_results and bool(_early_state and _early_state.stage1)):
+        if _stale_results and _early_state and _early_state.stage1:
+            inject_stale_results_styles()
 
-    stage_slot1 = st.empty()
-    stage_slot2 = st.empty()
-    stage_slot3 = st.empty()
-    stage_slot4 = st.empty()
-    stage_slots = (stage_slot1, stage_slot2, stage_slot3, stage_slot4)
+        if running or clicked_mode or st.session_state.run_job:
+            st.caption(
+                "运行中可在侧边栏切换模型以**自动停止**当前请求；"
+                "停止后请重新点击 Stage。生成内容会逐块显示在下方。"
+            )
 
-    if st.session_state.run_job:
-        advance_run_job(question, stage_slots)
-    elif clicked_mode:
-        maybe_clear_checkpoint_if_question_changed(question)
-        if try_start_run_job(clicked_mode, question):
-            st.rerun()
-    else:
-        cached = st.session_state.workflow_state
-        if cached:
-            render_all_stages(cached, stage_slots)
+        if _early_state and _early_state.stage1:
+            render_export_buttons(_early_state)
+            _hist_id = ensure_history_record_id(_early_state)
+            render_share_controls(_hist_id, key_prefix="new_share")
+
+        stage_slot1 = st.empty()
+        stage_slot2 = st.empty()
+        stage_slot3 = st.empty()
+        stage_slot4 = st.empty()
+        stage_slots = (stage_slot1, stage_slot2, stage_slot3, stage_slot4)
+
+        if st.session_state.run_job:
+            advance_run_job(question, stage_slots)
+        elif clicked_mode:
+            maybe_clear_checkpoint_if_question_changed(question)
+            if try_start_run_job(clicked_mode, question):
+                st.rerun()
+        else:
+            cached = st.session_state.workflow_state
+            if cached:
+                render_all_stages(cached, stage_slots)
 
     # 单独重跑已完成的 Stage
     if not running and not st.session_state.run_job:

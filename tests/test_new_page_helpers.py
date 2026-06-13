@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from ui.new_page import question_results_stale
+from ui.stale_results import question_results_stale
 from workflow import Stage1Result, WorkflowState
 
 
@@ -13,12 +13,12 @@ def test_question_results_stale_when_question_changed():
         "last_question": "旧题目",
         "workflow_state": state,
     }
-    with patch("ui.new_page.st.session_state", ss):
+    with patch("ui.stale_results.st.session_state", ss):
         assert question_results_stale("新题目") is True
         assert question_results_stale("旧题目") is False
 
 
 def test_question_results_stale_false_without_results():
     ss = {"last_question": "题", "workflow_state": None}
-    with patch("ui.new_page.st.session_state", ss):
+    with patch("ui.stale_results.st.session_state", ss):
         assert question_results_stale("另一题") is False
