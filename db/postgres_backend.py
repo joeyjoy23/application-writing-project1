@@ -292,7 +292,7 @@ def get_all_records(
     if kw:
         sql += " AND (topic ILIKE %s OR model_name ILIKE %s)"
         params.extend([f"%{kw}%", f"%{kw}%"])
-    sql += " ORDER BY id DESC LIMIT %s OFFSET %s"
+    sql += " ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
     with _connect() as conn:
         rows = conn.execute(sql, params).fetchall()
