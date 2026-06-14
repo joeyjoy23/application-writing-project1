@@ -162,7 +162,7 @@ def _provider_key_label(provider: str) -> str:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.13-api-adv-ls"
+UI_BUILD_TAG = "2026.06.14-remember-model"
 
 
 def _render_admin_popover_body() -> None:
@@ -341,6 +341,8 @@ def render_sidebar() -> bool:
             else:
                 st.caption("API 未配置 · 请在「高级」中填写 Key")
 
+            st.caption("模型选择会自动保存在本浏览器；Key 在「高级」中填写后默认记住。")
+
         with st.container(border=True):
             _ws_nav = resolve_nav_workflow_state()
             _job_nav = st.session_state.get("run_job")
@@ -370,18 +372,16 @@ def render_sidebar() -> bool:
 
             st.checkbox(
                 "在本浏览器记住 Key",
-                help="勾选后将 Key 写入本机浏览器 localStorage；默认关闭。",
+                help="默认开启；公共或共享电脑请取消勾选。",
                 key="remember_api_key",
             )
             if st.session_state.get("remember_api_key"):
-                st.caption("⚠️ 勿在公共或共享电脑勾选；Key 仅存于本机浏览器，不会写入历史或导出。")
+                st.caption("⚠️ Key 仅存于本机浏览器，不会写入历史或导出。")
 
             if st.button("清除本机已保存的 Key", key="btn_clear_saved_keys", use_container_width=True):
                 clear_browser_saved_keys()
                 st.toast("已清除本机保存的 Key", icon="🗑️")
                 st.rerun()
-
-            persist_session_to_browser()
 
             with st.expander("📋 运行日志", expanded=False):
                 _log_path = Path(__file__).resolve().parent.parent / "logs" / "app.log"
@@ -399,6 +399,8 @@ def render_sidebar() -> bool:
             f"界面 {UI_BUILD_TAG}</p>",
             unsafe_allow_html=True,
         )
+
+        persist_session_to_browser()
 
         if not api_ready:
             return False

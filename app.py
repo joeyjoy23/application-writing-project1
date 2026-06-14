@@ -129,7 +129,7 @@ def init_session() -> None:
         "provider": os.getenv("LLM_PROVIDER", "deepseek"),
         "model": os.getenv("LLM_MODEL", ""),
         "api_key": "",
-        "remember_api_key": False,
+        "remember_api_key": True,
         "_stored_api_keys": {},
         "_browser_keys_hydrated": False,
         "_browser_ls_tried": False,

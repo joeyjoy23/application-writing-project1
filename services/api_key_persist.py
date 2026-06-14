@@ -1,43 +1,66 @@
-"""API Key localStorage 载荷编解码（无 Streamlit 依赖）。"""
+"""浏览器 localStorage 偏好（模型 + API Key）编解码。"""
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 STORAGE_KEY = "awp_api_keys_v1"
 
 
-def parse_storage_payload(raw: str | None) -> tuple[bool, dict[str, str]]:
-    """解析 localStorage JSON，返回 (remember, keys_by_provider)。"""
+@dataclass(frozen=True)
+class BrowserPrefs:
+    remember: bool
+    keys: dict[str, str]
+    provider: str
+    model: str
+
+
+def parse_storage_payload(raw: str | None) -> BrowserPrefs:
+    """解析 localStorage JSON。"""
     if not raw or not str(raw).strip():
-        return False, {}
+        return BrowserPrefs(False, {}, "", "")
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError, ValueError):
-        return False, {}
+        return BrowserPrefs(False, {}, "", "")
     if not isinstance(data, dict):
-        return False, {}
+        return BrowserPrefs(False, {}, "", "")
+
     remember = bool(data.get("remember", False))
     keys_raw = data.get("keys")
-    if not isinstance(keys_raw, dict):
-        return remember, {}
-    keys = {
-        str(provider): str(key).strip()
-        for provider, key in keys_raw.items()
-        if key and str(key).strip()
-    }
-    return remember, keys
+    keys: dict[str, str] = {}
+    if isinstance(keys_raw, dict):
+        keys = {
+            str(provider): str(key).strip()
+            for provider, key in keys_raw.items()
+            if key and str(key).strip()
+        }
+    provider = str(data.get("provider") or "").strip()
+    model = str(data.get("model") or "").strip()
+    return BrowserPrefs(remember=remember, keys=keys, provider=provider, model=model)
 
 
-def build_storage_payload(remember: bool, keys: dict[str, str]) -> str:
+def build_storage_payload(
+    *,
+    remember: bool,
+    keys: dict[str, str],
+    provider: str = "",
+    model: str = "",
+) -> str:
     """序列化为 localStorage JSON。"""
     cleaned = {
-        str(provider): str(key).strip()
-        for provider, key in keys.items()
+        str(p): str(key).strip()
+        for p, key in keys.items()
         if key and str(key).strip()
     }
-    payload: dict[str, Any] = {"remember": bool(remember), "keys": cleaned}
+    payload: dict[str, Any] = {
+        "remember": bool(remember),
+        "keys": cleaned,
+        "provider": (provider or "").strip(),
+        "model": (model or "").strip(),
+    }
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -60,3 +83,7 @@ def merge_provider_key(
 
 def key_for_provider(keys: dict[str, str], provider: str) -> str:
     return keys.get(provider, "")
+
+
+def prefs_has_content(prefs: BrowserPrefs) -> bool:
+    return bool(prefs.keys or prefs.provider or prefs.model)
