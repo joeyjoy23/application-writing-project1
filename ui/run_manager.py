@@ -201,6 +201,26 @@ def _running_stages_for_job(job: dict[str, Any], state: WorkflowState) -> set[in
     return set()
 
 
+def _slot_paint_plan(
+    state: WorkflowState,
+    running: set[int],
+    *,
+    incremental: bool,
+) -> list[str | None]:
+    """各 Stage 占位更新计划：content / in_progress / placeholder / None(跳过)。"""
+    plan: list[str | None] = []
+    for n in range(1, 5):
+        if n in running:
+            plan.append("in_progress")
+        elif stage_has_content(state, n):
+            plan.append(None if incremental else "content")
+        elif incremental:
+            plan.append(None)
+        else:
+            plan.append("placeholder")
+    return plan
+
+
 def _sync_visible_stage_slots(
     state: WorkflowState,
     slots: tuple[st.empty, st.empty, st.empty, st.empty],
@@ -211,20 +231,22 @@ def _sync_visible_stage_slots(
     """恢复 Stage 占位。
 
     每次整页 rerun 会重建 st.empty()，已完成阶段必须重绘。
-    incremental 仅用于跳过「未开始」阶段的占位，减轻轮询时占位闪烁。
+    incremental 时仅刷新「进行中」阶段，已完成阶段保持不重绘以防闪烁。
     """
     running = _running_stages_for_job(job, state) if job else set()
     if not any(stage_has_content(state, n) for n in range(1, 5)) and not running:
         return
 
     incremental = paint_mode == "incremental"
+    actions = _slot_paint_plan(state, running, incremental=incremental)
 
     for n, slot in enumerate(slots, start=1):
-        if stage_has_content(state, n):
+        action = actions[n - 1]
+        if action == "content":
             render_one_stage(slot, state, n)
-        elif n in running:
+        elif action == "in_progress":
             render_stage_in_progress(slot, n)
-        elif not incremental:
+        elif action == "placeholder":
             render_stage_placeholder(slot, n)
 
 
@@ -860,38 +882,6 @@ def _finish_job_success(
 
 
 
-def _poll_run_progress(
-    question: str,
-) -> bool:
-    """轮询 API 线程进度（纯判断，不渲染任何 UI）。
-
-    返回 True 表示线程仍在运行（应继续轮询），
-    返回 False 表示已进入需要整页 rerun 的状态（调用方应 st.rerun()）。
-    """
-    job = st.session_state.run_job
-    if not job or job["phase"] != "api":
-        return False
-
-    _sync_cancel_from_settings(job)
-    thread = job.get("thread")
-
-    # 还没启动线程 → 需要整页 rerun 来启动
-    if thread is None:
-        return False
-
-    if not thread.is_alive():
-        return False  # 线程结束，交给主流程处理状态转换
-
-    # 检查取消
-    if job["cancel_event"].is_set():
-        return False  # 已取消，需整页处理
-
-    # 线程仍在运行 → 刷新等待
-    time.sleep(_POLL_INTERVAL_SLOW)
-    st.rerun()
-    return True  # 不可达（rerun 抛出异常），但类型检查需要
-
-
 def advance_run_job(
     question: str,
     slots: tuple[st.empty, st.empty, st.empty, st.empty],
@@ -940,7 +930,6 @@ def advance_run_job(
         ui.persist_logs(job)
 
         if thread.is_alive():
-            # 检查取消
             if job["cancel_event"].is_set():
                 _stop_api_thread(thread, job["cancel_event"])
                 _finish_job_cancelled(
@@ -954,11 +943,7 @@ def advance_run_job(
                 st.rerun()
                 return
 
-            # ★ 线程仍在运行 → 进入 fragment 局部轮询
-            _poll_run_progress(question)
-            # fragment 返回后（线程结束/取消），重新进入主流程
-            time.sleep(_POLL_INTERVAL_FAST)
-            st.rerun()
+            # fragment run_every 轮询：勿整页 rerun，避免 Stage 1 等已完成阶段闪烁
             return
 
         # ── 线程结束，处理结果 ──
