@@ -67,6 +67,16 @@ Secrets 配置 `DATABASE_URL` 与 `ADMIN_PASSWORD` 后，历史与 LLM 缓存可
 
 侧边栏「使用 LLM 结果缓存」：同题同模型同 prompt 版本可跳过 API。Stage 2/3 全流程并行。详见 [docs/LLM_CACHE.md](docs/LLM_CACHE.md)。
 
+### API 重试与容错
+
+API 调用失败时自动重试（最多 3 次，指数退避 2s→4s→8s）。超时、连接失败、限流（429）会自动重试；401/400/404 不重试（配置错误）。可在 `.env` 中配置：
+- `LLM_MAX_RETRIES=3`（重试次数）
+- `LLM_RETRY_BASE_DELAY=2`（基础延迟秒数）
+
+### Token 用量追踪
+
+每次运行的 token 用量（输入/输出/缓存命中）会自动记录到历史数据库，可在历史列表和详情页查看，便于回溯成本和优化 prompt。
+
 ### 若卡在 Calling API 或 Connection error
 
 1. 看运行日志是否出现 **「正在接收… 已收到约 N 字」**——有数字在涨说明正常，只是模型慢。
@@ -79,10 +89,12 @@ Secrets 配置 `DATABASE_URL` 与 `ADMIN_PASSWORD` 后，历史与 LLM 缓存可
 
 | 阶段 | 输入 | 输出 |
 |------|------|------|
-| Stage1 | 原题 | 审题总结 + STRUCTURED_JSON |
-| Stage2 | 原题 + Stage1 JSON | PEEL、三版范文（105–125 词）、对比分析 |
-| Stage3 | 原题 + Stage1 JSON | 功能句型包、话题词汇锦囊 |
+| Stage1 | 原题 | **题目类型识别** + 审题总结 + STRUCTURED_JSON |
+| Stage2 | 原题 + Stage1 JSON | PEEL、三版范文（105–125 词）、对比分析（根据题目类型差异化） |
+| Stage3 | 原题 + Stage1 JSON | 功能句型包、话题词汇锦囊（根据题目类型差异化） |
 | Stage4 | Stage1 JSON + Stage2 + Stage3 | 教学指南（受学生水平影响） |
+
+**题目类型识别**：Stage1 会自动识别题目类型（活动记录类 / 观点理由类 / 混合类型），并根据类型给出差异化的分析重点、高分要点和构思维度推荐。
 
 Prompt 存放在 `prompts/`，由 `workflow.py` 读取，不在 `app.py` 中硬编码。
 

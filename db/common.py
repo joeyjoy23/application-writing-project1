@@ -22,3 +22,28 @@ def format_stages_mask(mask: str | None) -> str:
     for i, ch in enumerate(m, start=1):
         parts.append(f"S{i}{'✓' if ch == '1' else '·'}")
     return " ".join(parts)
+
+
+def format_usage_total(record: dict[str, object]) -> str:
+    """格式化 token 总量用于列表展示，如 '12.3k'。"""
+    pt = int(record.get("prompt_tokens") or 0)
+    ct = int(record.get("completion_tokens") or 0)
+    total = pt + ct
+    if total == 0:
+        return "—"
+    if total >= 1000:
+        return f"{total / 1000:.1f}k"
+    return str(total)
+
+
+def format_usage_detail(record: dict[str, object]) -> str:
+    """格式化 token 详情用于详情页展示。"""
+    pt = int(record.get("prompt_tokens") or 0)
+    ct = int(record.get("completion_tokens") or 0)
+    cat = int(record.get("cached_tokens") or 0)
+    if pt == 0 and ct == 0:
+        return "无用量记录"
+    parts = [f"输入 {pt:,}", f"输出 {ct:,}"]
+    if cat:
+        parts.append(f"缓存命中 {cat:,}")
+    return " · ".join(parts)

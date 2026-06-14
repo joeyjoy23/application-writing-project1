@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from collections.abc import Callable
@@ -9,9 +10,32 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, 
 from llm.usage import ChatResponse, ChatUsage
 from utils.config import Settings, get_settings, resolve_model_for_provider
 
+_logger = logging.getLogger("app.llm")
+
 
 class RunCancelled(RuntimeError):
     """用户切换模型/提供商或主动取消当前 API 请求。"""
+
+
+# ── 重试配置 ──
+
+def _max_retries() -> int:
+    """API 调用最大重试次数（不含首次尝试），可通过 LLM_MAX_RETRIES 环境变量覆盖。"""
+    return max(0, int(os.getenv("LLM_MAX_RETRIES", "3")))
+
+
+def _retry_base_delay() -> float:
+    """重试基础延迟（秒），实际延迟 = base * 2^attempt，可通过 LLM_RETRY_BASE_DELAY 覆盖。"""
+    return max(0.5, float(os.getenv("LLM_RETRY_BASE_DELAY", "2")))
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """判断异常是否值得重试。"""
+    if isinstance(exc, (APITimeoutError, APIConnectionError, RateLimitError)):
+        return True
+    if isinstance(exc, APIStatusError) and exc.status_code == 429:
+        return True
+    return False
 
 
 def _api_timeout() -> httpx.Timeout:
@@ -74,7 +98,7 @@ class LLMClient:
         self._client = OpenAI(
             api_key=self.settings.api_key,
             base_url=self.settings.base_url.rstrip("/"),
-            max_retries=1,
+            max_retries=0,
             http_client=self._http,
         )
         self.last_usage: ChatUsage = ChatUsage()
@@ -103,26 +127,44 @@ class LLMClient:
             else self.settings.max_tokens,
         )
 
-        try:
-            if stream:
-                text, usage = self._chat_stream(kwargs, on_stream, should_cancel)
-            else:
-                response = self._client.chat.completions.create(**kwargs)
-                content = response.choices[0].message.content
-                if not content:
-                    raise RuntimeError("模型返回空内容")
-                text = content.strip()
-                usage = parse_usage_from_response(response)
-            self.last_usage = usage
-            return ChatResponse(text=text, usage=usage)
-        except UnicodeEncodeError as e:
-            raise RuntimeError(
-                "请求编码失败：请确认 API Key、Base URL、模型名均为纯英文/数字，"
-                ".env 中不要与中文写在同一行。原始错误: "
-                f"{e}"
-            ) from e
-        except (APITimeoutError, APIConnectionError, APIStatusError, RateLimitError) as e:
-            raise RuntimeError(format_api_error(e)) from e
+        retries = _max_retries()
+        base_delay = _retry_base_delay()
+
+        for attempt in range(retries + 1):
+            # 每次尝试前检查取消信号
+            if should_cancel and should_cancel():
+                raise RunCancelled("已切换模型或提供商，当前请求已停止。")
+
+            try:
+                if stream:
+                    text, usage = self._chat_stream(kwargs, on_stream, should_cancel)
+                else:
+                    response = self._client.chat.completions.create(**kwargs)
+                    content = response.choices[0].message.content
+                    if not content:
+                        raise RuntimeError("模型返回空内容")
+                    text = content.strip()
+                    usage = parse_usage_from_response(response)
+                self.last_usage = usage
+                return ChatResponse(text=text, usage=usage)
+            except RunCancelled:
+                raise
+            except UnicodeEncodeError as e:
+                raise RuntimeError(
+                    "请求编码失败：请确认 API Key、Base URL、模型名均为纯英文/数字，"
+                    ".env 中不要与中文写在同一行。原始错误: "
+                    f"{e}"
+                ) from e
+            except (APITimeoutError, APIConnectionError, APIStatusError, RateLimitError) as e:
+                if _is_retryable(e) and attempt < retries:
+                    delay = base_delay * (2 ** attempt)
+                    _logger.warning(
+                        "API 调用失败（%s），%d/%d 次重试，%.1f 秒后重试…",
+                        type(e).__name__, attempt + 1, retries, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise RuntimeError(format_api_error(e)) from e
 
     def chat(
         self,

@@ -93,7 +93,6 @@ def render_share_page() -> None:
         )
 
     st.divider()
-    st.markdown('<p class="section-label">备课包内容</p>', unsafe_allow_html=True)
     s1, s2, s3, s4 = st.empty(), st.empty(), st.empty(), st.empty()
     render_all_stages(state, (s1, s2, s3, s4))
 

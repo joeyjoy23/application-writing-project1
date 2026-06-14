@@ -640,6 +640,14 @@ def _persist_history_from_job(
     """将当前 workflow 写入历史（至少需已完成 Stage 1）。"""
     if not job or not state.stage1:
         return
+    usage_total = job.get("usage_total")
+    usage_dict = None
+    if usage_total and hasattr(usage_total, "prompt_tokens"):
+        usage_dict = {
+            "prompt_tokens": usage_total.prompt_tokens,
+            "completion_tokens": usage_total.completion_tokens,
+            "cached_tokens": usage_total.cached_tokens,
+        }
     auto_save_history(
         state,
         provider=job.get("locked_provider"),
@@ -647,6 +655,7 @@ def _persist_history_from_job(
         raw_input=job.get("question"),
         notify=notify,
         notify_updates=notify_updates,
+        usage=usage_dict,
     )
 
 

@@ -381,6 +381,8 @@ def export_workflow_to_word(
     stage3_raw: str | None = None,
     stage4_raw: str | None = None,
     saved_at_utc: str | None = None,
+    question_type: str | None = None,
+    question_type_label: str | None = None,
 ) -> bytes:
     """生成 .docx 字节流。"""
     doc = Document()
@@ -391,6 +393,14 @@ def export_workflow_to_word(
 
     _add_stage_heading(doc, "题目原文")
     _add_body(doc, question.strip() or "（未填写）")
+
+    # 题目类型信息
+    if question_type_label:
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(6)
+        p.paragraph_format.space_after = Pt(6)
+        run = p.add_run(f"题目类型：{question_type_label}")
+        _set_run_font(run, FONT_HEITI, 12, bold=True, color=RGBColor(0x33, 0x66, 0x99))
 
     if stage1_summary:
         _add_stage_heading(doc, STAGE_TITLES[1])

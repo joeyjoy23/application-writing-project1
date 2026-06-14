@@ -13,6 +13,8 @@ from db import (
     delete_record,
     ensure_guest_id,
     format_stages_mask,
+    format_usage_detail,
+    format_usage_total,
     get_all_records,
     get_record_by_id,
     history_scope,
@@ -25,7 +27,7 @@ from services.workflow_progress import (
     resume_label,
     stage_has_content,
 )
-from utils.datetime_util import format_created_at_display
+from utils.datetime_util import format_created_at_display, format_created_at_list
 from services.workflow_storage import (
     make_export_json_filename,
     make_export_word_filename,
@@ -41,6 +43,7 @@ from ui.run_manager import advance_run_job, try_start_run_job
 from ui.sidebar import api_key_configured, clear_checkpoint
 from ui.share_controls import ensure_history_record_id, render_share_controls
 from ui.stage_display import render_all_stages, sync_slots_from_state
+from streamlit import fragment
 
 
 from ui.stale_results import (
@@ -103,6 +106,12 @@ def render_export_buttons(
         "stage4": state.stage4.raw if state.stage4 else None,
     }
     model = model_name or st.session_state.model
+    # 从 Stage1 JSON 中提取题目类型
+    question_type = None
+    question_type_label = None
+    if state.stage1 and state.stage1.structured_json:
+        question_type = state.stage1.structured_json.get("question_type")
+        question_type_label = state.stage1.structured_json.get("question_type_label")
     try:
         word_bytes = export_workflow_to_word(
             question=state.question,
@@ -111,6 +120,8 @@ def render_export_buttons(
             stage3_raw=state.stage3.raw if state.stage3 else None,
             stage4_raw=state.stage4.raw if state.stage4 else None,
             saved_at_utc=created_at,
+            question_type=question_type,
+            question_type_label=question_type_label,
         )
         word_name = make_export_word_filename(model, created_at)
         json_name = make_export_json_filename(model, created_at)
@@ -212,20 +223,21 @@ def render_history_list() -> None:
         f"共 {total} 条 · 第 {page}/{total_pages} 页（每页 {page_size} 条，支持按题目或模型搜索）"
     )
 
-    header = st.columns([2, 3, 2, 2, 1, 2, 0.5, 0.5])
+    header = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
     header[0].markdown("**生成时间**")
     header[1].markdown("**题目摘要**")
     header[2].markdown("**模型**")
     header[3].markdown("**阶段**")
     header[4].markdown("**字数**")
-    header[5].markdown("**操作**")
-    header[6].markdown("**收藏**")
-    header[7].markdown("**删除**")
+    header[5].markdown("**Token**")
+    header[6].markdown("**操作**")
+    header[7].markdown("**收藏**")
+    header[8].markdown("**删除**")
 
     for rec in records:
         rid = rec["id"]
-        cols = st.columns([2, 3, 2, 2, 1, 2, 0.5, 0.5])
-        cols[0].write(format_created_at_display(rec["created_at"]))
+        cols = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
+        cols[0].write(format_created_at_list(rec["created_at"]))
         topic_show = rec["topic"]
         if len(topic_show) > 50:
             topic_show = topic_show[:50] + "…"
@@ -233,7 +245,8 @@ def render_history_list() -> None:
         cols[2].write(rec["model_name"])
         cols[3].caption(format_stages_mask(rec.get("stages_mask")))
         cols[4].write(rec.get("word_count", "—"))
-        act_view, act_load = cols[5].columns(2)
+        cols[5].caption(format_usage_total(rec))
+        act_view, act_load = cols[6].columns(2)
         if act_view.button(
             "只读查看",
             key=f"hist_view_{rid}",
@@ -359,7 +372,8 @@ def render_history_detail(record_id: int) -> None:
             f"生成时间：{format_created_at_display(record['created_at'])}（北京时间） · "
             f"模型：{record['model_name']} · "
             f"阶段：{format_stages_mask(record.get('stages_mask'))} · "
-            f"约 {record.get('word_count', 0)} 字"
+            f"约 {record.get('word_count', 0)} 字 · "
+            f"Token：{format_usage_detail(record)}"
         )
         if next_stage:
             st.caption(
@@ -378,7 +392,6 @@ def render_history_detail(record_id: int) -> None:
     )
 
     st.divider()
-    st.markdown('<p class="section-label">备课包内容</p>', unsafe_allow_html=True)
     slot1, slot2, slot3, slot4 = st.empty(), st.empty(), st.empty(), st.empty()
     render_all_stages(state, (slot1, slot2, slot3, slot4))
 
@@ -409,6 +422,22 @@ _RUN_STAGE_COLS = 4
 _RUN_ACTION_COLS = 2
 
 
+
+@fragment(run_every="0.5s" if st.session_state.get("run_job") else None)
+def _render_stage_fragment(stage_slots):
+    """Render stages in a fragment to avoid flickering."""
+    job = st.session_state.get("run_job")
+    if job:
+        advance_run_job(question, stage_slots)
+    else:
+        cached = st.session_state.workflow_state
+        if cached:
+            render_all_stages(cached, stage_slots)
+
+
+
+
+@fragment(run_every="0.5s" if st.session_state.get("run_job") else None)
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
     st.markdown('<p class="section-label">题目输入</p>', unsafe_allow_html=True)
@@ -678,16 +707,11 @@ def render_new_analysis(api_ready: bool) -> None:
         stage_slot4 = st.empty()
         stage_slots = (stage_slot1, stage_slot2, stage_slot3, stage_slot4)
 
-        if st.session_state.run_job:
-            advance_run_job(question, stage_slots)
-        elif clicked_mode:
+        if clicked_mode:
             maybe_clear_checkpoint_if_question_changed(question)
             if try_start_run_job(clicked_mode, question):
                 st.rerun()
-        else:
-            cached = st.session_state.workflow_state
-            if cached:
-                render_all_stages(cached, stage_slots)
+        _render_stage_fragment(stage_slots)
 
     # 单独重跑已完成的 Stage
     if not running and not st.session_state.run_job:

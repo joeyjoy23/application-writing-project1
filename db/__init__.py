@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-from db.common import format_stages_mask, make_question_hash
+from db.common import format_stages_mask, format_usage_detail, format_usage_total, make_question_hash
 from db.identity import (
     admin_password_configured,
     ensure_guest_id,
@@ -30,6 +30,8 @@ __all__ = [
     "delete_record",
     "toggle_star",
     "format_stages_mask",
+    "format_usage_total",
+    "format_usage_detail",
     "make_question_hash",
     "ensure_guest_id",
     "is_history_admin",
@@ -80,6 +82,7 @@ def save_record(
     raw_input: str | None = None,
     word_count: int | None = None,
     stages_mask: str = "0000",
+    usage: dict[str, int] | None = None,
 ) -> int:
     return _backend().save_record(
         topic,
@@ -88,6 +91,7 @@ def save_record(
         raw_input=raw_input,
         word_count=word_count,
         stages_mask=stages_mask,
+        usage=usage,
         **_scope_kwargs(),
     )
 
@@ -100,6 +104,7 @@ def upsert_record(
     raw_input: str | None = None,
     word_count: int | None = None,
     stages_mask: str = "0000",
+    usage: dict[str, int] | None = None,
 ) -> tuple[int, bool]:
     result = _backend().upsert_record(
         question,
@@ -108,6 +113,7 @@ def upsert_record(
         raw_input=raw_input,
         word_count=word_count,
         stages_mask=stages_mask,
+        usage=usage,
         owner_id=history_scope()[0],
     )
     invalidate_history_cache()

@@ -30,6 +30,7 @@ def auto_save_history(
     raw_input: str | None = None,
     notify: bool = True,
     notify_updates: bool = False,
+    usage: dict[str, int] | None = None,
 ) -> int | None:
     """
     写入历史：同题同模型合并为一条；换模型则另存一条。
@@ -57,7 +58,9 @@ def auto_save_history(
             raw_input=raw,
             student_level=st.session_state.get("student_level", "中等"),
         )
-        fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        # Include usage data in fingerprint to ensure token data is saved
+        usage_str = json.dumps(usage or {}, sort_keys=True)
+        fingerprint = hashlib.sha256((content + usage_str).encode("utf-8")).hexdigest()
         if st.session_state.get("_last_save_fingerprint") == fingerprint:
             return None
         record_id, is_new = upsert_record(
@@ -67,6 +70,7 @@ def auto_save_history(
             raw_input=raw,
             word_count=workflow_content_length(state),
             stages_mask=workflow_stages_mask(state),
+            usage=usage,
         )
         st.session_state.current_history_record_id = int(record_id)
         st.session_state._last_save_fingerprint = fingerprint

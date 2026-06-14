@@ -42,6 +42,9 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_history_owner_created ON history (owner_id, id DESC)",
     "CREATE INDEX IF NOT EXISTS idx_history_created_at ON history (created_at DESC)",
     "ALTER TABLE history ADD COLUMN IF NOT EXISTS is_starred INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE history ADD COLUMN IF NOT EXISTS prompt_tokens INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE history ADD COLUMN IF NOT EXISTS completion_tokens INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE history ADD COLUMN IF NOT EXISTS cached_tokens INTEGER NOT NULL DEFAULT 0",
     """
     CREATE TABLE IF NOT EXISTS llm_cache (
         cache_key TEXT PRIMARY KEY,
@@ -156,6 +159,7 @@ def save_record(
     raw_input: str | None = None,
     word_count: int | None = None,
     stages_mask: str = "0000",
+    usage: dict[str, int] | None = None,
 ) -> int:
     init_db()
     created_at = utc_now_str()
@@ -163,14 +167,18 @@ def save_record(
     mask = stages_mask if len(stages_mask) == 4 else "0000"
     raw = (raw_input if raw_input is not None else topic).strip()
     q_hash = make_question_hash(raw)
+    pt = int((usage or {}).get("prompt_tokens") or 0)
+    ct = int((usage or {}).get("completion_tokens") or 0)
+    cat = int((usage or {}).get("cached_tokens") or 0)
     with _connect() as conn:
         row = conn.execute(
             """
             INSERT INTO history (
                 created_at, topic, model_name, full_content, word_count, stages_mask,
-                question_hash, raw_input, owner_id
+                question_hash, raw_input, owner_id,
+                prompt_tokens, completion_tokens, cached_tokens
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -183,6 +191,7 @@ def save_record(
                 q_hash,
                 raw,
                 owner_id,
+                pt, ct, cat,
             ),
         ).fetchone()
         conn.commit()
@@ -200,6 +209,7 @@ def upsert_record(
     raw_input: str | None = None,
     word_count: int | None = None,
     stages_mask: str = "0000",
+    usage: dict[str, int] | None = None,
 ) -> tuple[int, bool]:
     init_db()
     raw = (raw_input if raw_input is not None else question).strip()
@@ -209,6 +219,9 @@ def upsert_record(
     wc = word_count if word_count is not None else len(content)
     mask = stages_mask if len(stages_mask) == 4 else "0000"
     now = utc_now_str()
+    pt = int((usage or {}).get("prompt_tokens") or 0)
+    ct = int((usage or {}).get("completion_tokens") or 0)
+    cat = int((usage or {}).get("cached_tokens") or 0)
 
     with _connect() as conn:
         existing = conn.execute(
@@ -226,10 +239,11 @@ def upsert_record(
                 """
                 UPDATE history
                 SET created_at = %s, topic = %s, full_content = %s, word_count = %s,
-                    stages_mask = %s, question_hash = %s, raw_input = %s
+                    stages_mask = %s, question_hash = %s, raw_input = %s,
+                    prompt_tokens = %s, completion_tokens = %s, cached_tokens = %s
                 WHERE id = %s AND owner_id = %s
                 """,
-                (now, topic, content, wc, mask, q_hash, raw, record_id, owner_id),
+                (now, topic, content, wc, mask, q_hash, raw, pt, ct, cat, record_id, owner_id),
             )
             conn.commit()
             logger.info("备课包已更新 #%d", record_id)
@@ -239,12 +253,13 @@ def upsert_record(
             """
             INSERT INTO history (
                 created_at, topic, model_name, full_content, word_count, stages_mask,
-                question_hash, raw_input, owner_id
+                question_hash, raw_input, owner_id,
+                prompt_tokens, completion_tokens, cached_tokens
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (now, topic, model_name, content, wc, mask, q_hash, raw, owner_id),
+            (now, topic, model_name, content, wc, mask, q_hash, raw, owner_id, pt, ct, cat),
         ).fetchone()
         conn.commit()
         record_id = int(row["id"])
@@ -263,7 +278,8 @@ def get_all_records(
 ) -> list[dict[str, Any]]:
     init_db()
     sql = (
-        "SELECT id, created_at, topic, model_name, word_count, stages_mask, owner_id, is_starred "
+        "SELECT id, created_at, topic, model_name, word_count, stages_mask, owner_id, is_starred, "
+        "prompt_tokens, completion_tokens, cached_tokens "
         "FROM history WHERE 1=1"
     )
     params: list[Any] = []
