@@ -1,6 +1,10 @@
 """运行中 Stage 占位逻辑（无 Streamlit）。"""
 
-from ui.run_manager import _running_stages_for_job, _slot_paint_plan
+from ui.run_manager import (
+    _resolve_paint_mode,
+    _running_stages_for_job,
+    _slot_paint_plan,
+)
 from ui.run_cache import should_parallel_stage23
 from workflow import Stage1Result, WorkflowState
 
@@ -48,6 +52,25 @@ def test_slot_paint_plan_full_repaints_completed():
     plan = _slot_paint_plan(state, {2}, incremental=False)
     assert plan[0] == "content"
     assert plan[1] == "in_progress"
+
+
+def test_resolve_paint_mode_full_after_slot_recreation():
+    job: dict = {}
+    slots_a = (_Slot(), _Slot(), _Slot(), _Slot())
+    assert _resolve_paint_mode(slots_a, job, "incremental") == "incremental"
+    slots_b = (_Slot(), _Slot(), _Slot(), _Slot())
+    assert _resolve_paint_mode(slots_b, job, "incremental") == "full"
+
+
+def test_resolve_paint_mode_incremental_same_slots():
+    job: dict = {}
+    slots = (_Slot(), _Slot(), _Slot(), _Slot())
+    assert _resolve_paint_mode(slots, job, "incremental") == "incremental"
+    assert _resolve_paint_mode(slots, job, "incremental") == "incremental"
+
+
+class _Slot:
+    pass
 
 
 class _AliveThread:

@@ -201,6 +201,28 @@ def _running_stages_for_job(job: dict[str, Any], state: WorkflowState) -> set[in
     return set()
 
 
+def _stage_slot_signature(
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+) -> tuple[int, ...]:
+    return tuple(id(s) for s in slots)
+
+
+def _resolve_paint_mode(
+    slots: tuple[st.empty, st.empty, st.empty, st.empty],
+    job: dict[str, Any] | None,
+    requested: str,
+) -> str:
+    """整页 rerun 会重建 st.empty()；此时必须 full 重绘已完成阶段，不能 incremental 跳过。"""
+    if requested != "incremental" or job is None:
+        return requested
+    sig = _stage_slot_signature(slots)
+    prev = job.get("_stage_slot_sig")
+    job["_stage_slot_sig"] = sig
+    if prev is not None and prev != sig:
+        return "full"
+    return "incremental"
+
+
 def _slot_paint_plan(
     state: WorkflowState,
     running: set[int],
@@ -918,13 +940,15 @@ def advance_run_job(
     stage_num = job["stages"][job["stage_index"]]
     thread = job.get("thread")
     thread_alive = thread is not None and thread.is_alive()
+    paint_mode = _resolve_paint_mode(slots, job, "incremental")
     if job["phase"] != "flush":
         if thread_alive or (job["phase"] == "api" and thread is None):
-            _sync_visible_stage_slots(state, slots, job, paint_mode="incremental")
+            _sync_visible_stage_slots(state, slots, job, paint_mode=paint_mode)
 
     if job["phase"] == "api":
         if job.get("thread") is None:
             need_full_rerun = False
+            started_thread = False
             with _ensure_job_lock(job):
                 if job.get("thread") is None:
                     if _begin_cached_or_api(job, state, ui, stage_num):
@@ -937,10 +961,13 @@ def advance_run_job(
                             _start_parallel_23_thread(job, state)
                         else:
                             _start_api_thread(job, stage_num, state)
-                        need_full_rerun = True
+                        started_thread = True
             if need_full_rerun:
                 time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
+                return
+            if started_thread:
+                _sync_visible_stage_slots(state, slots, job, paint_mode=paint_mode)
             return
 
         thread = job["thread"]
