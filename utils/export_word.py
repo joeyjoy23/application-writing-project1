@@ -13,11 +13,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from utils.datetime_util import format_created_at_display, display_tz
-from utils.parsers import (
-    prettify_stage_markdown,
-    sanitize_llm_html_breaks,
-    strip_reader_self_check,
-)
+from utils.stage_format import prepare_stage_text
 
 FONT_HEITI = "黑体"
 FONT_SONG = "宋体"
@@ -404,29 +400,23 @@ def export_workflow_to_word(
 
     if stage1_summary:
         _add_stage_heading(doc, STAGE_TITLES[1])
-        _write_markdown(
-            doc,
-            prettify_stage_markdown(strip_reader_self_check(stage1_summary)),
-        )
+        _write_markdown(doc, prepare_stage_text(1, stage1_summary, target="word"))
 
     if stage2_raw:
         _add_stage_heading(doc, STAGE_TITLES[2])
         _write_markdown(
             doc,
-            prettify_stage_markdown(strip_reader_self_check(stage2_raw)),
+            prepare_stage_text(2, stage2_raw, target="word"),
             indent_paragraphs=True,
         )
 
     if stage3_raw:
         _add_stage_heading(doc, STAGE_TITLES[3])
-        _write_markdown(
-            doc,
-            prettify_stage_markdown(sanitize_llm_html_breaks(stage3_raw)),
-        )
+        _write_markdown(doc, prepare_stage_text(3, stage3_raw, target="word"))
 
     if stage4_raw:
         _add_stage_heading(doc, STAGE_TITLES[4])
-        _write_markdown(doc, prettify_stage_markdown(stage4_raw))
+        _write_markdown(doc, prepare_stage_text(4, stage4_raw, target="word"))
 
     buffer = io.BytesIO()
     doc.save(buffer)

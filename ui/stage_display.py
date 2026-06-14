@@ -9,11 +9,11 @@ import re
 import streamlit as st
 
 from services.workflow_progress import stage_has_content
+from utils.stage_format import prepare_stage_text
 from utils.parsers import (
     normalize_vertical_spacing,
-    prettify_stage_markdown,
-    sanitize_llm_html_breaks,
-    strip_reader_self_check,
+    merge_list_item_continuations,
+    normalize_list_spacing,
 )
 from workflow import WorkflowState
 
@@ -38,18 +38,18 @@ _VOCAB_ITEM_ZH_RE = re.compile(
 _COLON_LABEL_RE = re.compile(r"[：:]")
 
 
-def render_stage_markdown(text: str) -> None:
+def render_stage_markdown(text: str, *, stage: int) -> None:
     """Stage 分析正文（统一排版预处理）。"""
     if not text or not text.strip():
         return
-    st.markdown(_format_stage_body(text))
+    st.markdown(_format_stage_body(text, stage=stage))
 
 
-def render_foldable_markdown(text: str, *, expanded: bool = False) -> None:
+def render_foldable_markdown(text: str, *, stage: int, expanded: bool = False) -> None:
     """超过阈值时折叠：外侧预览 + expander 内全文；expanded=True 时默认展开。"""
     if not text or not text.strip():
         return
-    body = _format_stage_body(text)
+    body = _format_stage_body(text, stage=stage)
     if len(text) <= FOLD_CHAR_THRESHOLD:
         st.markdown(body)
         return
@@ -185,11 +185,9 @@ def _bold_label_in_line(line: str) -> str:
     return f"{prefix}**{core}**{rest}{colon}{after}"
 
 
-def _format_stage_body(text: str) -> str:
-    """展示前：Markdown 整理 → 加粗标签 → 列表合并/去空行 → 段落空行。"""
-    from utils.parsers import merge_list_item_continuations, normalize_list_spacing
-
-    body = prettify_stage_markdown(text)
+def _format_stage_body(text: str, *, stage: int) -> str:
+    """展示前：统一 prepare → 加粗标签 → 列表合并/去空行 → 段落空行。"""
+    body = prepare_stage_text(stage, text, target="ui")
     body = bold_labels_before_colon(body)
     body = merge_list_item_continuations(body)
     body = normalize_list_spacing(body)
@@ -284,13 +282,12 @@ def render_stage1(state: WorkflowState) -> None:
             st.info("尚未运行 Stage 1")
             return
         s1 = state.stage1
-        reader_summary = strip_reader_self_check(s1.human_summary)
-        if reader_summary.strip():
-            render_foldable_markdown(reader_summary)
+        if s1.human_summary.strip():
+            render_foldable_markdown(s1.human_summary, stage=1)
         else:
             st.info("暂无审题总结内容")
-        if reader_summary.strip():
-            render_copy_button(reader_summary)
+        if s1.human_summary.strip():
+            render_copy_button(s1.human_summary)
 
 
 def render_stage2(state: WorkflowState) -> None:
@@ -303,7 +300,8 @@ def render_stage2(state: WorkflowState) -> None:
         if not state.stage2:
             st.info("尚未运行 Stage 2（需先完成 Stage 1）")
             return
-        render_stage_markdown(strip_reader_self_check(state.stage2.raw or ""))
+        render_stage_markdown(state.stage2.raw or "", stage=2)
+        render_copy_button(state.stage2.raw or "")
 
 
 def render_stage3(state: WorkflowState) -> None:
@@ -316,18 +314,18 @@ def render_stage3(state: WorkflowState) -> None:
         if not state.stage3:
             st.info("尚未运行 Stage 3（需先完成 Stage 1）")
             return
-        raw = sanitize_llm_html_breaks(state.stage3.raw or "")
+        raw = prepare_stage_text(3, state.stage3.raw or "", target="ui")
         phrases_part, vocab_part = _split_stage3_vocab_section(raw)
         if phrases_part:
-            render_stage_markdown(phrases_part)
+            render_stage_markdown(phrases_part, stage=3)
         if vocab_part:
             vocab_body = _strip_vocab_section_heading(vocab_part)
             st.markdown("### 二、话题词汇锦囊")
             if not _render_vocab_tier_tables(vocab_body):
-                render_stage_markdown(vocab_body)
+                render_stage_markdown(vocab_body, stage=3)
         elif not phrases_part:
-            render_stage_markdown(raw)
-        render_copy_button(raw)
+            render_stage_markdown(raw, stage=3)
+        render_copy_button(state.stage3.raw or "")
 
 
 def render_stage4(state: WorkflowState) -> None:
@@ -340,8 +338,8 @@ def render_stage4(state: WorkflowState) -> None:
         if not state.stage4:
             st.info("尚未运行 Stage 4（需先完成 Stage 2 与 Stage 3）")
             return
-        render_stage_markdown(state.stage4.raw or "")
-        render_copy_button(state.stage4.raw)
+        render_stage_markdown(state.stage4.raw or "", stage=4)
+        render_copy_button(state.stage4.raw or "")
 
 
 _STAGE_RENDERERS = {

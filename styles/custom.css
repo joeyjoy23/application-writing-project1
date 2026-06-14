@@ -1513,3 +1513,26 @@ footer {
 .main:has(.share-preview-hero) .stTextArea textarea {
   user-select: text;
 }
+
+/* 历史列表：表头不换行，收藏/删除列留足宽度 */
+.history-th {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+  max-width: 9.75rem;
+}
+
+.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(8),
+.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(9) {
+  min-width: 2.75rem !important;
+  flex: 0.65 0 auto !important;
+}
+
+.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(8) .stButton > button,
+.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(9) .stButton > button {
+  min-width: 2.5rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+}

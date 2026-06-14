@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 _STAMP_FMT = "%Y-%m-%d %H:%M:%S"
+_LIST_FMT = "%Y-%m-%d %H:%M"
 _STAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
 
 
@@ -36,6 +37,17 @@ def format_created_at_display(stored: str | None) -> str:
         return raw
     dt_utc = datetime.strptime(raw, _STAMP_FMT).replace(tzinfo=timezone.utc)
     return dt_utc.astimezone(display_tz()).strftime(_STAMP_FMT)
+
+
+def format_created_at_list(stored: str | None) -> str:
+    """历史列表用：展示到分钟，不含秒。"""
+    raw = (stored or "").strip()
+    if not raw:
+        return "—"
+    if not _STAMP_RE.match(raw):
+        return raw[:16] if len(raw) >= 16 else raw
+    dt_utc = datetime.strptime(raw, _STAMP_FMT).replace(tzinfo=timezone.utc)
+    return dt_utc.astimezone(display_tz()).strftime(_LIST_FMT)
 
 
 def created_at_date_part(stored: str | None) -> str:

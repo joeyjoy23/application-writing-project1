@@ -167,6 +167,18 @@ def render_export_buttons(
 
 
 HISTORY_PAGE_SIZE = 20
+HISTORY_COL_WEIGHTS = [1.4, 3, 2, 2, 1, 1, 2, 1.1, 1.1]
+_HISTORY_HEADERS = (
+    "生成时间",
+    "题目摘要",
+    "模型",
+    "阶段",
+    "字数",
+    "Token",
+    "操作",
+    "收藏",
+    "删除",
+)
 
 
 def render_history_list() -> None:
@@ -223,20 +235,17 @@ def render_history_list() -> None:
         f"共 {total} 条 · 第 {page}/{total_pages} 页（每页 {page_size} 条，支持按题目或模型搜索）"
     )
 
-    header = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
-    header[0].markdown("**生成时间**")
-    header[1].markdown("**题目摘要**")
-    header[2].markdown("**模型**")
-    header[3].markdown("**阶段**")
-    header[4].markdown("**字数**")
-    header[5].markdown("**Token**")
-    header[6].markdown("**操作**")
-    header[7].markdown("**收藏**")
-    header[8].markdown("**删除**")
+    st.markdown('<div class="history-table-start"></div>', unsafe_allow_html=True)
+    header = st.columns(HISTORY_COL_WEIGHTS)
+    for i, label in enumerate(_HISTORY_HEADERS):
+        header[i].markdown(
+            f'<span class="history-th">{label}</span>',
+            unsafe_allow_html=True,
+        )
 
     for rec in records:
         rid = rec["id"]
-        cols = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
+        cols = st.columns(HISTORY_COL_WEIGHTS)
         cols[0].write(format_created_at_list(rec["created_at"]))
         topic_show = rec["topic"]
         if len(topic_show) > 50:
@@ -271,7 +280,7 @@ def render_history_list() -> None:
         # 收藏切换按钮
         is_starred = rec.get("is_starred", 0)
         star_label = "⭐" if is_starred else "☆"
-        if cols[6].button(
+        if cols[7].button(
             star_label,
             key=f"hist_star_{rid}",
             use_container_width=True,
@@ -279,7 +288,7 @@ def render_history_list() -> None:
         ):
             toggle_star(rid, not is_starred, owner_id=owner_id, admin=admin)
             st.rerun()
-        if cols[7].button("🗑", key=f"hist_del_{rid}", use_container_width=True):
+        if cols[8].button("🗑", key=f"hist_del_{rid}", use_container_width=True):
             st.session_state.history_confirm_delete_id = rid
             st.rerun()
 
