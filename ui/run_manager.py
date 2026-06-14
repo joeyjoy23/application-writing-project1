@@ -503,6 +503,7 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
         job["stream_total"] = 0
         job["stream_preview"] = ""
         job["stream_stage"] = stage_num
+        job["_api_dispatching"] = False
         job["thread"].start()
 
 
@@ -517,6 +518,9 @@ def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None
         errors: dict[int, tuple[str, str]] = {}
 
         def run_one(stage_num: int) -> None:
+            if stage_num == 3:
+                # 错开并行请求，降低同提供商限流导致「首字超时」的概率
+                time.sleep(3)
             if cancel_event.is_set():
                 errors[stage_num] = ("cancelled", "已切换模型或提供商，当前请求已停止。")
                 return
@@ -535,7 +539,13 @@ def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None
                 )
             except Exception as e:
                 logger.exception("并行 Stage %d 失败", stage_num)
-                errors[stage_num] = ("error", str(e))
+                msg = str(e)
+                kind = (
+                    "timeout"
+                    if "未收到模型任何输出" in msg or "生成超时" in msg
+                    else "error"
+                )
+                errors[stage_num] = (kind, msg)
 
         t2 = threading.Thread(target=lambda: run_one(2), daemon=True)
         t3 = threading.Thread(target=lambda: run_one(3), daemon=True)
@@ -553,6 +563,9 @@ def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None
             if errors:
                 sn = min(errors.keys())
                 job["thread_error"] = errors[sn]
+                job["_parallel_failed_stage"] = sn
+                if results:
+                    job["parallel_results"] = results
             elif len(results) < 2:
                 job["thread_error"] = (
                     "error",
@@ -574,6 +587,7 @@ def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None
         job["stream_preview"] = ""
         job["stream_stage"] = 2
         job["logs"].append("并行运行 Stage 2 与 Stage 3…")
+        job["_api_dispatching"] = False
         job["thread"].start()
 
 
@@ -910,22 +924,26 @@ def advance_run_job(
 
     if job["phase"] == "api":
         if job.get("thread") is None:
-            # ── 启动阶段 ──
-            if _begin_cached_or_api(job, state, ui, stage_num):
+            need_full_rerun = False
+            with _ensure_job_lock(job):
+                if job.get("thread") is None:
+                    if _begin_cached_or_api(job, state, ui, stage_num):
+                        need_full_rerun = True
+                    elif not job.get("_api_dispatching"):
+                        job["_api_dispatching"] = True
+                        _prepare_stage_api_logs(ui, stage_num)
+                        ui.persist_logs(job)
+                        if should_parallel_stage23(job):
+                            _start_parallel_23_thread(job, state)
+                        else:
+                            _start_api_thread(job, stage_num, state)
+                        need_full_rerun = True
+            if need_full_rerun:
                 time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
-                return
-            _prepare_stage_api_logs(ui, stage_num)
-            ui.persist_logs(job)
-            if should_parallel_stage23(job):
-                _start_parallel_23_thread(job, state)
-            else:
-                _start_api_thread(job, stage_num, state)
-            time.sleep(_POLL_INTERVAL_FAST)
-            st.rerun()
             return
 
-        thread: threading.Thread = job["thread"]
+        thread = job["thread"]
         ui.sync_stream_from_job(job)
         ui.persist_logs(job)
 
@@ -951,19 +969,32 @@ def advance_run_job(
             err = job.get("thread_error")
             thread_result = job.get("thread_result")
         if err:
+            if job.get("_error_handled"):
+                return
+            job["_error_handled"] = True
+
+            parallel_partial = job.get("parallel_results")
+            if parallel_partial:
+                for sn, res in parallel_partial.items():
+                    _apply_stage_result(state, int(sn), res)
+                    save_stage_cache(job, int(sn), state, res)
+                st.session_state.workflow_state = state
+                _persist_history_from_job(job, state, notify=True, notify_updates=False)
+
             kind, msg = err
+            failed_stage = int(job.get("_parallel_failed_stage") or stage_num)
             if kind == "cancelled":
                 _finish_job_cancelled(ui, job, msg, state, slots)
                 time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
             if kind == "timeout":
-                ui.status.update(label=f"Stage {stage_num} 超时，跳过", state="error")
+                ui.status.update(label=f"Stage {failed_stage} 超时", state="error")
                 ui.log(f"⏱️ {msg}")
                 state.errors.append(msg)
                 st.session_state.workflow_state = state
                 st.session_state.last_question = job["question"]
-                st.session_state.failed_stage = stage_num
+                st.session_state.failed_stage = failed_stage
                 st.session_state.stopped_stage = None
                 ui.persist_logs(job)
                 _persist_history_from_job(job, state, notify=True)
@@ -991,7 +1022,7 @@ def advance_run_job(
                 ui.persist_logs(job)
                 st.session_state.workflow_state = state
                 st.session_state.last_question = job["question"]
-                st.session_state.failed_stage = stage_num
+                st.session_state.failed_stage = failed_stage
                 st.session_state.stopped_stage = None
                 _persist_history_from_job(job, state, notify=True)
                 sync_slots_from_state(state, slots)
