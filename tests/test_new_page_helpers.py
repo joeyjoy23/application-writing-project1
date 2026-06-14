@@ -2,8 +2,24 @@
 
 from unittest.mock import patch
 
+from ui.new_page import _current_question_text
 from ui.stale_results import question_results_stale
 from workflow import Stage1Result, WorkflowState
+
+
+def test_current_question_text_prefers_run_job() -> None:
+    ss = {
+        "run_job": {"question": "  from job  "},
+        "question": "from session",
+    }
+    with patch("ui.new_page.st.session_state", ss):
+        assert _current_question_text() == "from job"
+
+
+def test_current_question_text_falls_back_to_editor() -> None:
+    ss = {"question_editor": "editor text", "question": ""}
+    with patch("ui.new_page.st.session_state", ss):
+        assert _current_question_text() == "editor text"
 
 
 def test_question_results_stale_when_question_changed():

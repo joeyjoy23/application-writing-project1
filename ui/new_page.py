@@ -431,13 +431,27 @@ _RUN_STAGE_COLS = 4
 _RUN_ACTION_COLS = 2
 
 
+def _current_question_text() -> str:
+    """运行区 fragment 与整页 rerun 共用：优先 run_job / 编辑器 / session。"""
+    job = st.session_state.get("run_job")
+    if job and job.get("question"):
+        return str(job["question"]).strip()
+    for key in ("question", "question_editor"):
+        val = st.session_state.get(key)
+        if val and str(val).strip():
+            return str(val).strip()
+    ws = st.session_state.get("workflow_state")
+    if ws and getattr(ws, "question", None):
+        return str(ws.question).strip()
+    return ""
+
 
 @fragment(run_every="0.5s" if st.session_state.get("run_job") else None)
 def _render_stage_fragment(stage_slots):
     """Render stages in a fragment to avoid flickering."""
     job = st.session_state.get("run_job")
     if job:
-        advance_run_job(st.session_state.get("question") or "", stage_slots)
+        advance_run_job(_current_question_text(), stage_slots)
     else:
         cached = st.session_state.workflow_state
         if cached:
@@ -446,7 +460,6 @@ def _render_stage_fragment(stage_slots):
 
 
 
-@fragment(run_every="0.5s" if st.session_state.get("run_job") else None)
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
     st.markdown('<p class="section-label">题目输入</p>', unsafe_allow_html=True)
