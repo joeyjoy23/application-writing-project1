@@ -437,7 +437,7 @@ def _render_stage_fragment(stage_slots):
     """Render stages in a fragment to avoid flickering."""
     job = st.session_state.get("run_job")
     if job:
-        advance_run_job(question, stage_slots)
+        advance_run_job(st.session_state.get("question") or "", stage_slots)
     else:
         cached = st.session_state.workflow_state
         if cached:
