@@ -167,44 +167,6 @@ def render_export_buttons(
 
 
 HISTORY_PAGE_SIZE = 20
-HISTORY_COL_WEIGHTS = [1.4, 3, 2, 2, 1, 1, 2, 1.1, 1.1]
-_HISTORY_HEADERS = (
-    "生成时间",
-    "题目摘要",
-    "模型",
-    "阶段",
-    "字数",
-    "Token",
-    "操作",
-    "收藏",
-    "删除",
-)
-
-
-@st.dialog("确认删除")
-def _history_delete_dialog(record_id: int, topic: str) -> None:
-    """弹窗确认，避免确认条在列表底部不可见。"""
-    label = (topic or "").strip() or f"记录 #{record_id}"
-    if len(label) > 80:
-        label = label[:80] + "…"
-    st.markdown(f"确定删除记录 **#{record_id}**？")
-    st.caption(label)
-    st.caption("此操作不可撤销。")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("确认删除", type="primary", use_container_width=True, key="hist_del_confirm"):
-            ok = delete_record(record_id)
-            if ok:
-                if st.session_state.get("history_view_id") == record_id:
-                    st.session_state.history_view_id = None
-                st.session_state.history_confirm_delete_id = None
-                st.rerun()
-            else:
-                st.error("删除失败，请重试或检查是否有权限。")
-    with c2:
-        if st.button("取消", use_container_width=True, key="hist_del_cancel"):
-            st.session_state.history_confirm_delete_id = None
-            st.rerun()
 
 
 def render_history_list() -> None:
@@ -261,17 +223,20 @@ def render_history_list() -> None:
         f"共 {total} 条 · 第 {page}/{total_pages} 页（每页 {page_size} 条，支持按题目或模型搜索）"
     )
 
-    st.markdown('<div class="history-table-start"></div>', unsafe_allow_html=True)
-    header = st.columns(HISTORY_COL_WEIGHTS)
-    for i, label in enumerate(_HISTORY_HEADERS):
-        header[i].markdown(
-            f'<span class="history-th">{label}</span>',
-            unsafe_allow_html=True,
-        )
+    header = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
+    header[0].markdown("**生成时间**")
+    header[1].markdown("**题目摘要**")
+    header[2].markdown("**模型**")
+    header[3].markdown("**阶段**")
+    header[4].markdown("**字数**")
+    header[5].markdown("**Token**")
+    header[6].markdown("**操作**")
+    header[7].markdown("**收藏**")
+    header[8].markdown("**删除**")
 
     for rec in records:
         rid = rec["id"]
-        cols = st.columns(HISTORY_COL_WEIGHTS)
+        cols = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
         cols[0].write(format_created_at_list(rec["created_at"]))
         topic_show = rec["topic"]
         if len(topic_show) > 50:
@@ -290,7 +255,6 @@ def render_history_list() -> None:
         ):
             st.session_state.history_view_id = rid
             st.session_state.history_confirm_delete_id = None
-            st.rerun()
         if act_load.button(
             "载入编辑",
             key=f"hist_load_{rid}",
@@ -300,7 +264,6 @@ def render_history_list() -> None:
             ok, err = load_history_into_session(rid)
             if ok:
                 st.toast(history_resume_hint(st.session_state.workflow_state), icon="📂")
-                st.rerun()
             else:
                 st.error(err)
         # 收藏切换按钮
@@ -313,14 +276,25 @@ def render_history_list() -> None:
             help="点击切换收藏状态",
         ):
             toggle_star(rid, not is_starred, owner_id=owner_id, admin=admin)
+        if cols[8].button("🗑", key=f"hist_del_{rid}", use_container_width=True):
+            st.session_state.history_confirm_delete_id = rid
+
+    confirm_id = st.session_state.history_confirm_delete_id
+    if confirm_id is not None:
+        target = get_record_by_id(confirm_id)
+        label = (target or {}).get("topic", "")[:40] if target else str(confirm_id)
+        st.warning(f"确认删除记录 #{confirm_id}？\n\n{label}")
+        c1, c2 = st.columns(2)
+        if c1.button("确认删除", type="primary", key="hist_del_confirm"):
+            delete_record(confirm_id)
+            st.session_state.history_confirm_delete_id = None
+            if st.session_state.history_view_id == confirm_id:
+                st.session_state.history_view_id = None
+            st.success("已删除")
             st.rerun()
-        if cols[8].button(
-            "🗑",
-            key=f"hist_del_{rid}",
-            use_container_width=True,
-            help="删除此条历史",
-        ):
-            _history_delete_dialog(rid, rec.get("topic") or topic_show)
+        if c2.button("取消", key="hist_del_cancel"):
+            st.session_state.history_confirm_delete_id = None
+            st.rerun()
 
     nav_prev, nav_info, nav_next = st.columns([1, 2, 1])
     with nav_prev:
