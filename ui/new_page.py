@@ -38,7 +38,12 @@ from utils.config import resolve_api_key
 from utils.export_word import export_workflow_to_word
 from workflow import WorkflowState
 
-from ui.history import auto_save_history, history_resume_hint, load_history_into_session
+from ui.history import (
+    auto_save_history,
+    history_resume_hint,
+    load_history_into_session,
+    mark_history_deleted,
+)
 from ui.run_manager import advance_run_job, try_start_run_job
 from ui.sidebar import api_key_configured, clear_checkpoint
 from ui.share_controls import ensure_history_record_id, render_share_controls
@@ -293,6 +298,8 @@ def render_history_list() -> None:
         st.warning(f"确认删除记录 #{confirm_id}？\n\n{label}")
         c1, c2 = st.columns(2)
         if c1.button("确认删除", type="primary", key="hist_del_confirm"):
+            if target:
+                mark_history_deleted(target)
             delete_record(confirm_id)
             st.session_state.history_confirm_delete_id = None
             if st.session_state.history_view_id == confirm_id:

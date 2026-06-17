@@ -21,6 +21,31 @@ from services.workflow_storage import (
 from utils.config import PROVIDER_OPTIONS
 from workflow import WorkflowState
 
+_BLOCKED_SIG_KEY = "_history_save_blocked_sig"
+
+
+def history_record_signature(question: str, model: str) -> str:
+    """题目 + 模型的稳定签名，用于删除后阻止误写回历史。"""
+    raw = f"{question.strip()}\n{model.strip()}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def is_history_save_blocked(question: str, model: str) -> bool:
+    blocked = st.session_state.get(_BLOCKED_SIG_KEY)
+    if not blocked:
+        return False
+    return blocked == history_record_signature(question, model)
+
+
+def mark_history_deleted(record: dict[str, Any]) -> None:
+    """删除历史后清理会话并阻止同题同模型被 auto_save 写回。"""
+    raw = (record.get("raw_input") or record.get("topic") or "").strip()
+    model = (record.get("model_name") or "").strip()
+    st.session_state["current_history_record_id"] = None
+    st.session_state["_last_save_fingerprint"] = None
+    if raw and model:
+        st.session_state[_BLOCKED_SIG_KEY] = history_record_signature(raw, model)
+
 
 def auto_save_history(
     state: WorkflowState,
@@ -51,6 +76,8 @@ def auto_save_history(
             state.question = raw
         actual_provider = provider or st.session_state.provider
         actual_model = model or st.session_state.model
+        if is_history_save_blocked(raw or state.question, actual_model):
+            return None
         content = workflow_state_to_json(
             state,
             provider=actual_provider,
@@ -151,9 +178,12 @@ def allow_history_save(question: str, model: str) -> None:
     在启动运行前调用，标记当前 question+model 组合允许保存历史。
     设置 session_state._history_save_allowed 标志，供 auto_save_history 检查。
     """
-    st.session_state._history_save_allowed = True
-    st.session_state._history_save_question = question
-    st.session_state._history_save_model = model
+    st.session_state["_history_save_allowed"] = True
+    st.session_state["_history_save_question"] = question
+    st.session_state["_history_save_model"] = model
+    sig = history_record_signature(question, model)
+    if st.session_state.get(_BLOCKED_SIG_KEY) == sig:
+        st.session_state.pop(_BLOCKED_SIG_KEY, None)
 
 
 def history_resume_hint(state: WorkflowState) -> str:
