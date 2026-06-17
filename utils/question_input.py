@@ -7,8 +7,6 @@ import io
 from dataclasses import dataclass
 from typing import Any
 
-from PIL import Image
-
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 MAX_EDGE_PX = 1280
 JPEG_QUALITY = 85
@@ -50,6 +48,12 @@ def format_image_question_for_history(structured: dict[str, Any]) -> str:
 
 
 def compress_uploaded_image(raw_bytes: bytes, *, filename: str = "upload.jpg") -> QuestionImage:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise ImportError(
+            "图片压缩需要 Pillow 库。请确认 requirements.txt 已包含 Pillow 并已重新部署应用。"
+        ) from exc
     if len(raw_bytes) > MAX_UPLOAD_BYTES:
         raise ValueError(f"图片超过 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB 限制")
     img = Image.open(io.BytesIO(raw_bytes))
