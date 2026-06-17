@@ -43,7 +43,7 @@ def build_stage4_user_sections(
     stage3_output: str,
 ) -> tuple[str, str, str]:
     """返回 (json_block, stage2_section, stage3_section) 供 Stage4 user 拼接。"""
-    json_block = json.dumps(stage1_json, ensure_ascii=False, indent=2)
+    json_block = json.dumps(stage1_json, ensure_ascii=False, indent=2, sort_keys=True)
     s2 = summarize_stage_output(stage2_output, "Stage2")
     s3 = summarize_stage_output(stage3_output, "Stage3")
     return json_block, s2, s3

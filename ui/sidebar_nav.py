@@ -103,17 +103,27 @@ def render_stage_index_nav(
             cls, hint = "stage-nav-item is-ready", subtitle
         else:
             cls, hint = "stage-nav-item is-disabled", "暂无"
+        # 状态徽章
+        if is_running:
+            badge = '<span class="nav-badge nav-badge-running" title="生成中"></span>'
+        elif has:
+            badge = '<span class="nav-badge nav-badge-ready" title="已完成"></span>'
+        else:
+            badge = '<span class="nav-badge nav-badge-empty" title="未运行"></span>'
+
         if panels_visible and (has or is_running):
             inner = (
                 f'<a class="stage-nav-link" href="#stage-panel-{num}" '
                 f'target="_self" title="跳转到{title}">'
                 f"<span class=\"stage-nav-title\">{title}</span>"
+                f'{badge}'
                 f'<span class="stage-nav-sub">{hint}</span></a>'
             )
         else:
             inner = (
                 f'<span class="stage-nav-link stage-nav-link-disabled">'
                 f"<span class=\"stage-nav-title\">{title}</span>"
+                f'{badge}'
                 f'<span class="stage-nav-sub">{hint}</span></span>'
             )
         items.append(f'<div class="{cls}">{inner}</div>')

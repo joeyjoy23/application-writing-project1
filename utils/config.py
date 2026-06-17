@@ -15,6 +15,7 @@ PROVIDER_OPTIONS = [
     "gemini",
     "dashscope",
     "mimo",
+    "agnes",
 ]
 
 PROVIDER_LABELS = {
@@ -24,6 +25,7 @@ PROVIDER_LABELS = {
     "gemini": "Google Gemini",
     "dashscope": "阿里云百炼",
     "mimo": "小米 MiMo（OpenAI 兼容）",
+    "agnes": "Agnes AI（Sapiens）",
 }
 
 PROVIDER_API_KEY_ENV = {
@@ -33,6 +35,7 @@ PROVIDER_API_KEY_ENV = {
     "gemini": "GEMINI_API_KEY",
     "dashscope": "DASHSCOPE_API_KEY",
     "mimo": "MIMO_API_KEY",
+    "agnes": "AGNES_API_KEY",
 }
 
 PROVIDER_BASE_URL = {
@@ -54,6 +57,10 @@ PROVIDER_BASE_URL = {
         "ZHIPU_BASE_URL",
         "https://open.bigmodel.cn/api/paas/v4",
     ),
+    "agnes": (
+        "AGNES_BASE_URL",
+        "https://apihub.agnes-ai.com/v1",
+    ),
 }
 
 PROVIDER_DEFAULT_MODEL = {
@@ -63,6 +70,7 @@ PROVIDER_DEFAULT_MODEL = {
     "gemini": "gemini-2.0-flash",
     "dashscope": "qwen-plus",
     "mimo": "mimo-v2.5-pro",
+    "agnes": "agnes-2.0-flash",
 }
 
 # API 模型 ID 须小写连字符，见 https://platform.xiaomimimo.com/docs/zh-CN/tokenplan/quick-access
@@ -83,6 +91,7 @@ MIMO_MODEL_ALIASES: dict[str, str] = {
 # DeepSeek 官方 API（https://api.deepseek.com）模型 ID
 DEEPSEEK_MODEL_LABELS: dict[str, str] = {
     "deepseek-v4-pro": "deepseek-v4-pro · DeepSeek 官方旗舰",
+    "deepseek-v4-flash": "deepseek-v4-flash · DeepSeek 高效",
 }
 
 # 2026-07-24 起弃用 chat/reasoner；旧 .env 与缓存 session 自动映射到 v4-pro
@@ -105,7 +114,6 @@ def normalize_deepseek_model_id(model: str) -> str:
     for api_id in DEEPSEEK_MODEL_LABELS:
         if api_id.lower() == lower:
             return api_id
-    # 仅保留 v4-pro；含 deepseek-v4-flash 等其它官方 ID 也回落到 pro
     if lower.startswith("deepseek-"):
         return PROVIDER_DEFAULT_MODEL["deepseek"]
     return PROVIDER_DEFAULT_MODEL["deepseek"]
@@ -113,11 +121,13 @@ def normalize_deepseek_model_id(model: str) -> str:
 
 # 智谱开放平台 https://open.bigmodel.cn （OpenAI 兼容 v4）
 ZHIPU_MODEL_LABELS: dict[str, str] = {
+    "glm-5.2": "glm-5.2 · 最新旗舰",
     "glm-5.1": "glm-5.1 · 旗舰",
     "glm-4.7": "glm-4.7 · 高性价比",
 }
 
 ZHIPU_MODEL_ALIASES: dict[str, str] = {
+    "GLM-5.2": "glm-5.2",
     "GLM-5.1": "glm-5.1",
     "GLM-4.7": "glm-4.7",
     "GLM-5V-Turbo": "glm-5.1",
@@ -170,6 +180,46 @@ def normalize_mimo_model_id(model: str) -> str:
     return PROVIDER_DEFAULT_MODEL["mimo"]
 
 
+# Agnes AI https://apihub.agnes-ai.com/v1 — OpenAI 兼容 chat/completions
+AGNES_API_MODEL = "agnes-2.0-flash"
+
+AGNES_MODEL_LABELS: dict[str, str] = {
+    "agnes-2.0-flash": "agnes-2.0-flash · 核心（快速）",
+    "agnes-2.0-flash-thinking": "agnes-2.0-flash · Brainstorming（Thinking）",
+}
+
+AGNES_THINKING_MODELS: frozenset[str] = frozenset({"agnes-2.0-flash-thinking"})
+
+
+def normalize_agnes_model_id(model: str) -> str:
+    """规范为 Agnes 侧边栏 / 缓存模型 ID。"""
+    m = (model or "").strip()
+    if not m:
+        return PROVIDER_DEFAULT_MODEL["agnes"]
+    if m in AGNES_MODEL_LABELS:
+        return m
+    lower = m.lower()
+    for api_id in AGNES_MODEL_LABELS:
+        if api_id.lower() == lower:
+            return api_id
+    if "thinking" in lower or "brainstorm" in lower:
+        return "agnes-2.0-flash-thinking"
+    if lower.startswith("agnes-"):
+        return AGNES_API_MODEL
+    return PROVIDER_DEFAULT_MODEL["agnes"]
+
+
+def agnes_api_model_id(model: str) -> str:
+    """Agnes API model 字段（thinking 变体映射到 agnes-2.0-flash）。"""
+    normalize_agnes_model_id(model)
+    return AGNES_API_MODEL
+
+
+def agnes_enable_thinking(model: str) -> bool:
+    """Brainstorming 模式：chat_template_kwargs.enable_thinking=true。"""
+    return normalize_agnes_model_id(model) in AGNES_THINKING_MODELS
+
+
 def resolve_model_for_provider(provider: str, model: str) -> str:
     """按提供商规范化模型 ID（调用 API 前最后一道校验）。"""
     p = (provider or "").lower()
@@ -180,6 +230,8 @@ def resolve_model_for_provider(provider: str, model: str) -> str:
         return normalize_deepseek_model_id(m)
     if p == "zhipu":
         return normalize_zhipu_model_id(m)
+    if p == "agnes":
+        return normalize_agnes_model_id(m)
     return m or PROVIDER_DEFAULT_MODEL.get(p, "gpt-4o-mini")
 
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称；须与百炼 OpenAI 兼容接口 model 字段一致）
@@ -197,11 +249,12 @@ DASHSCOPE_MODEL_LABELS: dict[str, str] = {
 
 PROVIDER_MODELS: dict[str, list[str]] = {
     "deepseek": list(DEEPSEEK_MODEL_LABELS.keys()),
-    "zhipu": ["glm-5.1", "glm-4.7"],
+    "zhipu": ["glm-5.2", "glm-5.1", "glm-4.7"],
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     "gemini": ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"],
     "dashscope": list(DASHSCOPE_MODEL_LABELS.keys()),
     "mimo": list(MIMO_MODEL_LABELS.keys()),
+    "agnes": list(AGNES_MODEL_LABELS.keys()),
 }
 
 
@@ -215,6 +268,8 @@ def format_model_label(provider: str, model_id: str) -> str:
         return DEEPSEEK_MODEL_LABELS.get(model_id, model_id)
     if provider == "zhipu":
         return ZHIPU_MODEL_LABELS.get(model_id, model_id)
+    if provider == "agnes":
+        return AGNES_MODEL_LABELS.get(model_id, model_id)
     return model_id
 
 
@@ -291,7 +346,7 @@ def build_settings(
     model: str = "",
     temperature: float | None = None,
     max_tokens: int | None = None,
-    _settings_rev: str = "20260526-zhipu-ds4pro",
+    _settings_rev: str = "20260615-agnes",
 ) -> Settings:
     """根据网页选择的提供商与 Key 构建 API 配置（可缓存，参数须为可序列化值）。"""
     p = provider.lower()
@@ -361,7 +416,9 @@ def sync_session_llm_selection() -> None:
         prov = "deepseek"
         st.session_state.provider = prov
 
-    raw_model = st.session_state.get("model") or _config_value("LLM_MODEL", "")
+    raw_model = (st.session_state.get("model") or "").strip()
+    if not raw_model and not st.session_state.get("_browser_keys_hydrated"):
+        raw_model = _config_value("LLM_MODEL", "")
     fixed = resolve_model_for_provider(prov, raw_model)
     prev = st.session_state.get("model")
     if fixed != prev:
@@ -370,7 +427,7 @@ def sync_session_llm_selection() -> None:
             build_settings.clear()
         except Exception:
             pass
-        if prev and prev != fixed and prov in ("mimo", "deepseek", "zhipu"):
+        if prev and prev != fixed and prov in ("mimo", "deepseek", "zhipu", "agnes"):
             try:
                 st.toast(f"网页端已自动将模型改为 {fixed}", icon="ℹ️")
             except Exception:

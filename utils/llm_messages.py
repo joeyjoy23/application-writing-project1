@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -14,18 +15,28 @@ def prompt_cache_layout_enabled() -> bool:
     )
 
 
+def format_stage1_json(stage1_json: dict[str, Any]) -> str:
+    return json.dumps(stage1_json, ensure_ascii=False, indent=2, sort_keys=True)
+
+
 def build_chat_messages(
     *,
     system_base: str,
     stage_prompt: str,
     user_parts: list[str],
+    tail_instruction: str = "",
 ) -> list[dict[str, Any]]:
     """
-    稳定前缀在前：system 仅放通用教研规则；stage 说明与可变内容放在 user 消息末尾。
+    缓存友好顺序（ENABLE_PROMPT_CACHE_LAYOUT=1）：
+    system → user(stage_prompt) → user(可变…) → user(tail)
+
     关闭 ENABLE_PROMPT_CACHE_LAYOUT 时回退为单 system + 单 user。
     """
     if not prompt_cache_layout_enabled():
-        user_body = "\n\n".join(p for p in user_parts if p.strip())
+        chunks = [p for p in user_parts if p.strip()]
+        if tail_instruction.strip():
+            chunks.append(tail_instruction.strip())
+        user_body = "\n\n".join(chunks)
         return [
             {
                 "role": "system",
@@ -34,12 +45,7 @@ def build_chat_messages(
             {"role": "user", "content": user_body},
         ]
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system_base},
-    ]
-    for part in user_parts:
-        if part.strip():
-            messages.append({"role": "user", "content": part.strip()})
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system_base}]
     if stage_prompt.strip():
         messages.append(
             {
@@ -47,6 +53,11 @@ def build_chat_messages(
                 "content": f"【本阶段任务说明】\n\n{stage_prompt.strip()}",
             }
         )
+    for part in user_parts:
+        if part.strip():
+            messages.append({"role": "user", "content": part.strip()})
+    if tail_instruction.strip():
+        messages.append({"role": "user", "content": tail_instruction.strip()})
     return messages
 
 

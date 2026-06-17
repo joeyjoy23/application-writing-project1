@@ -7,6 +7,7 @@ import html as html_module
 import re
 
 import streamlit as st
+from annotated_text import annotated_text
 
 from services.workflow_progress import stage_has_content
 from utils.stage_format import prepare_stage_text
@@ -133,20 +134,30 @@ def _parse_vocab_tiers(vocab_text: str) -> dict[str, list[tuple[str, str | None]
     return tiers
 
 
+_TIER_COLORS = {
+    "必备级": ("#10b981", "#d1fae5"),   # 绿色
+    "进阶级": ("#2563eb", "#eff6ff"),   # 蓝色
+    "亮点级": ("#ec4899", "#fdf2f8"),   # 粉色
+}
+
+
 def _render_vocab_tier_table(
     title: str, rows: list[tuple[str, str | None]]
 ) -> None:
     if not rows:
         return
+    color, bg = _TIER_COLORS.get(title, ("#64748b", "#f1f5f9"))
     st.markdown(f"#### {title}")
-    has_zh = any(zh for _, zh in rows if zh)
-    if has_zh:
-        table_data = [["英文词块", "中文释义"]]
-        table_data.extend([[eng, zh or ""] for eng, zh in rows])
-    else:
-        table_data = [["英文词块"]]
-        table_data.extend([[eng] for eng, _ in rows])
-    st.table(table_data)
+    for eng, zh in rows:
+        if zh:
+            annotated_text(
+                (eng, title, bg, color),
+                "  ",
+                (zh, "释义", "#f1f5f9", "#64748b"),
+            )
+        else:
+            annotated_text((eng, title, bg, color))
+        st.markdown("")  # 条目间留白
 
 
 def _render_vocab_tier_tables(vocab_text: str) -> bool:
@@ -280,14 +291,14 @@ def render_stage1(state: WorkflowState) -> None:
         )
         if not state.stage1:
             st.info("尚未运行 Stage 1")
-            return
-        s1 = state.stage1
-        if s1.human_summary.strip():
-            render_foldable_markdown(s1.human_summary, stage=1)
         else:
-            st.info("暂无审题总结内容")
-        if s1.human_summary.strip():
-            render_copy_button(s1.human_summary)
+            s1 = state.stage1
+            if s1.human_summary.strip():
+                render_foldable_markdown(s1.human_summary, stage=1)
+            else:
+                st.info("暂无审题总结内容")
+            if s1.human_summary.strip():
+                render_copy_button(s1.human_summary)
 
 
 def render_stage2(state: WorkflowState) -> None:
@@ -299,9 +310,9 @@ def render_stage2(state: WorkflowState) -> None:
         )
         if not state.stage2:
             st.info("尚未运行 Stage 2（需先完成 Stage 1）")
-            return
-        render_stage_markdown(state.stage2.raw or "", stage=2)
-        render_copy_button(state.stage2.raw or "")
+        else:
+            render_stage_markdown(state.stage2.raw or "", stage=2)
+            render_copy_button(state.stage2.raw or "")
 
 
 def render_stage3(state: WorkflowState) -> None:
@@ -313,19 +324,19 @@ def render_stage3(state: WorkflowState) -> None:
         )
         if not state.stage3:
             st.info("尚未运行 Stage 3（需先完成 Stage 1）")
-            return
-        raw = prepare_stage_text(3, state.stage3.raw or "", target="ui")
-        phrases_part, vocab_part = _split_stage3_vocab_section(raw)
-        if phrases_part:
-            render_stage_markdown(phrases_part, stage=3)
-        if vocab_part:
-            vocab_body = _strip_vocab_section_heading(vocab_part)
-            st.markdown("### 二、话题词汇锦囊")
-            if not _render_vocab_tier_tables(vocab_body):
-                render_stage_markdown(vocab_body, stage=3)
-        elif not phrases_part:
-            render_stage_markdown(raw, stage=3)
-        render_copy_button(state.stage3.raw or "")
+        else:
+            raw = prepare_stage_text(3, state.stage3.raw or "", target="ui")
+            phrases_part, vocab_part = _split_stage3_vocab_section(raw)
+            if phrases_part:
+                render_stage_markdown(phrases_part, stage=3)
+            if vocab_part:
+                vocab_body = _strip_vocab_section_heading(vocab_part)
+                st.markdown("### 二、话题词汇锦囊")
+                if not _render_vocab_tier_tables(vocab_body):
+                    render_stage_markdown(vocab_body, stage=3)
+            elif not phrases_part:
+                render_stage_markdown(raw, stage=3)
+            render_copy_button(state.stage3.raw or "")
 
 
 def render_stage4(state: WorkflowState) -> None:
@@ -337,9 +348,9 @@ def render_stage4(state: WorkflowState) -> None:
         )
         if not state.stage4:
             st.info("尚未运行 Stage 4（需先完成 Stage 2 与 Stage 3）")
-            return
-        render_stage_markdown(state.stage4.raw or "", stage=4)
-        render_copy_button(state.stage4.raw or "")
+        else:
+            render_stage_markdown(state.stage4.raw or "", stage=4)
+            render_copy_button(state.stage4.raw or "")
 
 
 _STAGE_RENDERERS = {

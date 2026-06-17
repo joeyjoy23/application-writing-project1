@@ -1,9 +1,8 @@
-"""运行期 LLM 缓存与 Stage2/3 并行辅助。"""
+"""运行期 LLM 结果缓存辅助。"""
 
 from __future__ import annotations
 
 import logging
-import threading
 from typing import Any
 
 import streamlit as st
@@ -67,21 +66,3 @@ def merge_job_usage(job: dict[str, Any], usage: ChatUsage) -> None:
         "completion_tokens": total.completion_tokens,
         "cached_tokens": total.cached_tokens,
     }
-
-
-def should_parallel_stage23(job: dict[str, Any]) -> bool:
-    if job.get("mode") not in ("full", "resume"):
-        return False
-    stages = job["stages"]
-    i = job["stage_index"]
-    return i + 1 < len(stages) and stages[i] == 2 and stages[i + 1] == 3
-
-
-def try_load_parallel_cache(
-    job: dict[str, Any], state: WorkflowState
-) -> dict[int, Any] | None:
-    r2 = try_load_cached_stage(job, 2, state)
-    r3 = try_load_cached_stage(job, 3, state)
-    if r2 is not None and r3 is not None:
-        return {2: r2, 3: r3}
-    return None

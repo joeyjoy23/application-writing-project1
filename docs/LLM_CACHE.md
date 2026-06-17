@@ -13,8 +13,14 @@
 ## 2. 厂商 Prompt / 前缀缓存
 
 - **开关**：环境变量 `ENABLE_PROMPT_CACHE_LAYOUT=1`（默认开启）
-- **做法**：`system` 仅放 `system_prompt.md`；原题 + Stage1 JSON 等稳定内容在前面的 `user` 消息；阶段说明在最后一条 `user`
-- **观测**：流式结束时解析 `usage`；侧边栏显示「缓存命中 xxx」（字段因平台而异）
+- **做法**（缓存布局开启时）：
+  ```text
+  system: system_prompt.md
+  user:   【本阶段任务说明】+ stage{n}_prompt.md   ← 跨题稳定
+  user:   可变内容（原题 / Stage1 JSON / …）
+  user:   固定短指令
+  ```
+- **观测**：流式结束时解析 `usage`；历史详情页显示「缓存命中 xxx」
 
 | 提供商 | 典型模型 | usage 中缓存字段 | 说明 |
 |--------|----------|------------------|------|
@@ -27,11 +33,13 @@
 
 流式 usage：`ENABLE_STREAM_USAGE=1`（默认开启，需 `stream_options.include_usage`）
 
-## 3. Stage2 / Stage3 并行
+Stage1 JSON 序列化使用 `sort_keys=True`，避免键序抖动导致前缀失效。
 
-- **条件**：全流程 / 断点续跑且连续执行 Stage 2 与 3
-- **效果**：墙钟时间约 `max(T2,T3)`，**不减少 token**
-- **注意**：并行后 Stage2→3 的「先后前缀缓存」不再生效；仍可享受统一 system 前缀缓存
+## 3. Stage2 → Stage3 串行
+
+- **行为**：全流程 / 断点续跑时，Stage 2 **完成后**再发起 Stage 3 API
+- **目的**：利于 DeepSeek 在同一 session 内链式命中前缀缓存（best-effort）
+- **代价**：Stage 2+3 段墙钟时间约为 `T2 + T3`（不再并行）
 
 ## 4. Stage4 输入压缩
 
@@ -49,8 +57,8 @@
 ## 验证
 
 1. 同一真题跑满四阶段 → 再点全流程：Stage 1–4 应 toast「已从缓存加载」
-2. 侧边栏查看「上次运行 token」与「缓存命中」
-3. 全流程对比并行前后总耗时（Cloud 日志）
+2. 同一模型连跑多道不同题的 Stage 1：第 2 题起历史详情 `cached_tokens` 应高于第 1 题
+3. 全流程 Stage 3 在 Stage 2 完成之后发起（运行日志无并行文案）
 
 ## 5. 与历史记录的关系
 

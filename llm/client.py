@@ -8,7 +8,13 @@ import httpx
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
 from llm.usage import ChatResponse, ChatUsage
-from utils.config import Settings, get_settings, resolve_model_for_provider
+from utils.config import (
+    Settings,
+    agnes_api_model_id,
+    agnes_enable_thinking,
+    get_settings,
+    resolve_model_for_provider,
+)
 
 _logger = logging.getLogger("app.llm")
 
@@ -89,6 +95,11 @@ def parse_usage_from_response(obj: Any) -> ChatUsage:
     )
 
 
+_STREAM_USAGE_PROVIDERS = frozenset(
+    {"deepseek", "openai", "gemini", "dashscope", "mimo", "zhipu"}
+)
+
+
 class LLMClient:
     """OpenAI 兼容 API 客户端（默认流式，保持 Streamlit 连接活跃）。"""
 
@@ -116,6 +127,8 @@ class LLMClient:
         api_model = resolve_model_for_provider(
             self.settings.provider, self.settings.model
         )
+        if self.settings.provider == "agnes":
+            api_model = agnes_api_model_id(self.settings.model)
         kwargs: dict[str, Any] = dict(
             model=api_model,
             messages=messages,
@@ -126,6 +139,12 @@ class LLMClient:
             if max_tokens is not None
             else self.settings.max_tokens,
         )
+        if self.settings.provider == "agnes" and agnes_enable_thinking(
+            self.settings.model
+        ):
+            kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": True},
+            }
 
         retries = _max_retries()
         base_delay = _retry_base_delay()
@@ -200,7 +219,10 @@ class LLMClient:
         first_chunk_limit = float(os.getenv("STREAM_FIRST_CHUNK_TIMEOUT_SECONDS", "120"))
         report_every = int(os.getenv("STREAM_UI_UPDATE_CHARS", "40"))
         stream_kwargs = {**kwargs, "stream": True}
-        if os.getenv("ENABLE_STREAM_USAGE", "1").strip().lower() not in ("0", "false"):
+        if (
+            os.getenv("ENABLE_STREAM_USAGE", "1").strip().lower() not in ("0", "false")
+            and self.settings.provider in _STREAM_USAGE_PROVIDERS
+        ):
             stream_kwargs["stream_options"] = {"include_usage": True}
 
         stream_resp = self._client.chat.completions.create(**stream_kwargs)

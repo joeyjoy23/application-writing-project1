@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-APP_START = "Running app.py…"
-PREPARING = "Preparing workflow…"
-LOADING_PROMPT = "Analyzing text… (加载提示词)"
 CALLING_API = "Calling API…"
-PARSING_RESPONSE = "Parsing response…"
+PARSING_RESPONSE = "正在解析模型输出…"
 GENERATING_DISPLAY = "Generating report… (渲染结果)"
-PIPELINE_DONE = "All 4 stages completed."
+PIPELINE_FULL = "正在运行完整流程（4 个阶段）…"
+PIPELINE_RESUME = "断点续传：从 Stage {n} 继续生成…"
+PIPELINE_SKIP = "断点续传：跳过已完成阶段，从 Stage {n} 继续…"
 
 STAGE_LABELS = {
     1: "Stage 1 · 审题结构分析",
@@ -18,13 +17,13 @@ STAGE_LABELS = {
 }
 
 
-def stage_load_prompt(n: int) -> str:
-    return f"Analyzing text… (加载 {STAGE_LABELS[n]})"
-
-
 def stage_call_api(n: int) -> str:
-    return f"Calling API… ({STAGE_LABELS[n]})"
+    return f"正在调用 API · {STAGE_LABELS[n]}"
 
 
 def stage_complete(n: int) -> str:
     return f"✅ {STAGE_LABELS[n]} — 完成"
+
+
+def pipeline_done() -> str:
+    return "四阶段全部完成"

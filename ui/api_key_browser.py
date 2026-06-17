@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 import streamlit as st
-from streamlit_js_eval import get_local_storage, remove_local_storage, set_local_storage
+from streamlit_js_eval import (
+    get_local_storage,
+    remove_local_storage,
+    streamlit_js_eval,
+)
 
 from services.api_key_persist import (
     STORAGE_KEY,
@@ -17,6 +23,7 @@ from services.api_key_persist import (
 from utils.config import (
     PROVIDER_MODELS,
     PROVIDER_OPTIONS,
+    normalize_agnes_model_id,
     normalize_deepseek_model_id,
     normalize_mimo_model_id,
     normalize_zhipu_model_id,
@@ -32,6 +39,8 @@ def _normalize_model_for_provider(provider: str, model: str) -> str:
         return normalize_zhipu_model_id(m)
     if p == "mimo":
         return normalize_mimo_model_id(m)
+    if p == "agnes":
+        return normalize_agnes_model_id(m)
     return m
 
 
@@ -50,15 +59,31 @@ def _apply_provider_model(provider: str, model: str) -> None:
         st.session_state.model = options[0]
 
 
+def _safe_set_local_storage(key: str, value: str, *, component_key: str) -> None:
+    """写入 localStorage（JSON 转义，避免 Key 含引号时破坏 JS）。"""
+    js_ex = f"localStorage.setItem({json.dumps(key)}, {json.dumps(value)})"
+    streamlit_js_eval(js_expressions=js_ex, key=component_key)
+
+
+def _normalize_ls_raw(raw: str | None) -> str | None:
+    """区分「组件尚未返回」与「localStorage 无此项」。"""
+    if raw is None:
+        return None
+    if raw == "null":
+        return ""
+    return raw
+
+
 def hydrate_session_from_browser() -> None:
     """首次加载：恢复上次 provider / model / Key。"""
     if st.session_state.get("_browser_keys_hydrated"):
         return
 
-    raw = get_local_storage(STORAGE_KEY, component_key="awp_ls_hydrate")
+    raw = _normalize_ls_raw(get_local_storage(STORAGE_KEY, component_key="awp_ls_hydrate"))
     if raw is None:
-        if not st.session_state.get("_browser_ls_tried"):
-            st.session_state._browser_ls_tried = True
+        attempts = int(st.session_state.get("_browser_ls_attempts") or 0) + 1
+        st.session_state._browser_ls_attempts = attempts
+        if attempts < 4:
             return
         raw = ""
 
@@ -77,6 +102,9 @@ def hydrate_session_from_browser() -> None:
 
 def persist_session_to_browser() -> None:
     """同步 provider / model / Key 到 localStorage。"""
+    if not st.session_state.get("_browser_keys_hydrated"):
+        return
+
     remember = bool(st.session_state.get("remember_api_key"))
     keys = dict(st.session_state.get("_stored_api_keys") or {})
     provider = st.session_state.provider
@@ -96,7 +124,7 @@ def persist_session_to_browser() -> None:
         remove_local_storage(STORAGE_KEY, component_key="awp_ls_remove")
         return
 
-    set_local_storage(
+    _safe_set_local_storage(
         STORAGE_KEY,
         build_storage_payload(
             remember=remember,
@@ -130,7 +158,7 @@ def clear_browser_saved_keys() -> None:
     st.session_state._stored_api_keys = {}
     st.session_state.remember_api_key = True
     st.session_state._browser_keys_hydrated = True
-    set_local_storage(
+    _safe_set_local_storage(
         STORAGE_KEY,
         build_storage_payload(
             remember=True,

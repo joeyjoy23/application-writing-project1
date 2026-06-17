@@ -167,6 +167,8 @@ def render_export_buttons(
 
 
 HISTORY_PAGE_SIZE = 20
+# 时间 | 题目 | 模型 | 元数据 | 查看 | 载入 | 收藏 | 删除（后四列平铺，避免嵌套列过窄）
+HISTORY_COL_WEIGHTS = [1.0, 3.0, 1.0, 1.3, 0.65, 0.65, 0.5, 0.5]
 
 
 def render_history_list() -> None:
@@ -223,40 +225,41 @@ def render_history_list() -> None:
         f"共 {total} 条 · 第 {page}/{total_pages} 页（每页 {page_size} 条，支持按题目或模型搜索）"
     )
 
-    header = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
-    header[0].markdown("**生成时间**")
-    header[1].markdown("**题目摘要**")
-    header[2].markdown("**模型**")
-    header[3].markdown("**阶段**")
-    header[4].markdown("**字数**")
-    header[5].markdown("**Token**")
-    header[6].markdown("**操作**")
-    header[7].markdown("**收藏**")
-    header[8].markdown("**删除**")
-
     for rec in records:
         rid = rec["id"]
-        cols = st.columns([1.5, 3, 2, 2, 1, 1, 2, 1, 1])
+
+        # 主行：时间 + 题目 + 模型 + 元数据 + 操作按钮（平铺 8 列）
+        st.markdown(
+            '<span class="hist-row-marker" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
+        cols = st.columns(HISTORY_COL_WEIGHTS)
         cols[0].write(format_created_at_list(rec["created_at"]))
+
         topic_show = rec["topic"]
         if len(topic_show) > 50:
             topic_show = topic_show[:50] + "…"
         cols[1].write(topic_show)
         cols[2].write(rec["model_name"])
-        cols[3].caption(format_stages_mask(rec.get("stages_mask")))
-        cols[4].write(rec.get("word_count", "—"))
-        cols[5].caption(format_usage_total(rec))
-        act_view, act_load = cols[6].columns(2)
-        if act_view.button(
-            "只读查看",
+
+        # 元数据：阶段 + 字数 + Token
+        meta_parts = [
+            format_stages_mask(rec.get("stages_mask")),
+            f"{rec.get('word_count', '—')}字",
+            format_usage_total(rec),
+        ]
+        cols[3].caption(" | ".join(p for p in meta_parts if p))
+
+        if cols[4].button(
+            "查看",
             key=f"hist_view_{rid}",
             use_container_width=True,
             help="在历史页浏览，不可续跑",
         ):
             st.session_state.history_view_id = rid
             st.session_state.history_confirm_delete_id = None
-        if act_load.button(
-            "载入编辑",
+        if cols[5].button(
+            "载入",
             key=f"hist_load_{rid}",
             use_container_width=True,
             help="载入到新建分析页，可续跑或重跑",
@@ -266,17 +269,21 @@ def render_history_list() -> None:
                 st.toast(history_resume_hint(st.session_state.workflow_state), icon="📂")
             else:
                 st.error(err)
-        # 收藏切换按钮
         is_starred = rec.get("is_starred", 0)
-        star_label = "⭐" if is_starred else "☆"
-        if cols[7].button(
+        star_label = "★" if is_starred else "☆"
+        if cols[6].button(
             star_label,
             key=f"hist_star_{rid}",
             use_container_width=True,
             help="点击切换收藏状态",
         ):
             toggle_star(rid, not is_starred, owner_id=owner_id, admin=admin)
-        if cols[8].button("🗑", key=f"hist_del_{rid}", use_container_width=True):
+        if cols[7].button(
+            "✕",
+            key=f"hist_del_{rid}",
+            use_container_width=True,
+            help="删除此条记录",
+        ):
             st.session_state.history_confirm_delete_id = rid
 
     confirm_id = st.session_state.history_confirm_delete_id
@@ -308,7 +315,8 @@ def render_history_list() -> None:
             st.rerun()
     with nav_info:
         st.markdown(
-            f"<div style='text-align:center;padding:0.4rem 0'>第 **{page}** / **{total_pages}** 页</div>",
+            f"<div style='text-align:center;padding:0.4rem 0'>"
+            f"第 <strong>{page}</strong> / <strong>{total_pages}</strong> 页</div>",
             unsafe_allow_html=True,
         )
     with nav_next:

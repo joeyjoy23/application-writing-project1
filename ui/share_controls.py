@@ -15,12 +15,24 @@ from utils.share_util import build_share_url, share_ttl_days
 
 def ensure_history_record_id(state) -> int | None:
     """返回当前备课包对应的历史 ID（必要时静默保存）。"""
-    from ui.history import auto_save_history
+    from ui.history import auto_save_history, is_history_save_blocked
 
     rid = st.session_state.get("current_history_record_id")
     if rid:
-        return int(rid)
+        existing = get_record_by_id(int(rid))
+        if existing:
+            return int(rid)
+        st.session_state.current_history_record_id = None
     if not state or not getattr(state, "stage1", None):
+        return None
+    raw = (
+        state.question
+        or st.session_state.get("last_question")
+        or st.session_state.get("question")
+        or ""
+    ).strip()
+    model = (st.session_state.get("model") or "").strip()
+    if is_history_save_blocked(raw, model):
         return None
     new_id = auto_save_history(state, notify=False)
     if new_id:

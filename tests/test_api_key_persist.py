@@ -49,6 +49,11 @@ def test_merge_provider_key_remember_on() -> None:
     assert keys == {"deepseek": "sk-x"}
 
 
+def test_merge_provider_key_remember_on_keeps_existing_when_input_empty() -> None:
+    keys = merge_provider_key({"deepseek": "sk-x"}, "deepseek", "", remember=True)
+    assert keys == {"deepseek": "sk-x"}
+
+
 def test_merge_provider_key_remember_off_removes() -> None:
     keys = merge_provider_key({"deepseek": "sk-x"}, "deepseek", "sk-x", remember=False)
     assert keys == {}

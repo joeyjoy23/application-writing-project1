@@ -5,7 +5,6 @@ Prompt 从 prompts/ 目录动态加载。
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -17,6 +16,7 @@ from llm.usage import ChatUsage
 from utils.config import get_project_root
 from utils.llm_messages import (
     build_chat_messages,
+    format_stage1_json,
     shared_question_context,
 )
 from utils.parsers import parse_stage1_output
@@ -104,21 +104,23 @@ class GaokaoWritingWorkflow:
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
         should_cancel: CancelFn = None,
-        progress_label: str = "Calling API",
+        progress_label: str = "正在调用 API",
     ) -> str:
         if on_progress:
             on_progress(
-                f"{progress_label} (model: {self.client.settings.model})…"
+                f"{progress_label}（{self.client.settings.model}）…"
             )
 
         def _stream(_d: str, total: int, full: str) -> None:
             if on_stream:
                 on_stream(_d, total, full)
 
+        use_stream = self.client.settings.provider != "agnes"
         resp = self.client.chat_with_messages(
             messages,
             max_tokens=max_tokens,
-            on_stream=_stream,
+            stream=use_stream,
+            on_stream=_stream if use_stream else None,
             should_cancel=should_cancel,
         )
         self.last_usage = resp.usage
@@ -135,11 +137,11 @@ class GaokaoWritingWorkflow:
         messages = build_chat_messages(
             system_base=self._system,
             stage_prompt=stage_prompt,
-            user_parts=[
-                f"【应用文原题】\n\n{question.strip()}",
+            user_parts=[f"【应用文原题】\n\n{question.strip()}"],
+            tail_instruction=(
                 "请按 stage1 任务说明输出 STRUCTURED_JSON 与 HUMAN_READABLE_SUMMARY。"
-                "JSON 从简（短句/短语）；PART B 六节必须写全，§6 须完整输出至「结尾段」。",
-            ],
+                "JSON 从简（短句/短语）；PART B 六节必须写全，§6 须完整输出至「结尾段」。"
+            ),
         )
         raw = self._call(
             messages,
@@ -160,14 +162,14 @@ class GaokaoWritingWorkflow:
         should_cancel: CancelFn = None,
     ) -> Stage2Result:
         stage_prompt = load_prompt("stage2_prompt.md")
-        json_text = json.dumps(stage1_json, ensure_ascii=False, indent=2)
+        json_text = format_stage1_json(stage1_json)
         messages = build_chat_messages(
             system_base=self._system,
             stage_prompt=stage_prompt,
-            user_parts=[
-                shared_question_context(question, json_text),
-                "请按 stage2 任务说明完成 PEEL 写作策略卡与多版范文（不含句型包与词汇锦囊）。",
-            ],
+            user_parts=[shared_question_context(question, json_text)],
+            tail_instruction=(
+                "请按 stage2 任务说明完成 PEEL 写作策略卡与多版范文（不含句型包与词汇锦囊）。"
+            ),
         )
         raw = self._call(
             messages,
@@ -188,14 +190,12 @@ class GaokaoWritingWorkflow:
         should_cancel: CancelFn = None,
     ) -> Stage3Result:
         stage_prompt = load_prompt("stage3_prompt.md")
-        json_text = json.dumps(stage1_json, ensure_ascii=False, indent=2)
+        json_text = format_stage1_json(stage1_json)
         messages = build_chat_messages(
             system_base=self._system,
             stage_prompt=stage_prompt,
-            user_parts=[
-                shared_question_context(question, json_text),
-                "请按 stage3 任务说明输出功能句型包与话题词汇锦囊。",
-            ],
+            user_parts=[shared_question_context(question, json_text)],
+            tail_instruction="请按 stage3 任务说明输出功能句型包与话题词汇锦囊。",
         )
         raw = self._call(
             messages,
@@ -238,8 +238,8 @@ class GaokaoWritingWorkflow:
                 f"【Stage1 JSON】\n\n```json\n{json_block}\n```",
                 f"【Stage2 输出（PEEL 与范文）】\n\n{s2}",
                 f"【Stage3 输出（句型与词汇）】\n\n{s3}",
-                "请按 stage4 任务说明输出教学指南与易错预警。",
             ],
+            tail_instruction="请按 stage4 任务说明输出教学指南与易错预警。",
         )
         raw = self._call(
             messages,
@@ -254,8 +254,6 @@ class GaokaoWritingWorkflow:
     def run_full_pipeline(
         self, question: str, *, student_level: str = "中等"
     ) -> WorkflowState:
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         state = WorkflowState(question=question)
         try:
             state.stage1 = self.run_stage1(question)
@@ -264,23 +262,8 @@ class GaokaoWritingWorkflow:
             return state
 
         try:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                f2 = pool.submit(
-                    self.run_stage2, question, state.stage1.structured_json
-                )
-                f3 = pool.submit(
-                    self.run_stage3, question, state.stage1.structured_json
-                )
-                done, _ = wait([f2, f3])
-                errors = []
-                for fut in done:
-                    exc = fut.exception()
-                    if exc:
-                        errors.append(exc)
-                if errors:
-                    raise RuntimeError(f"Stage2/3 共 {len(errors)} 个阶段失败") from errors[0]
-                state.stage2 = f2.result()
-                state.stage3 = f3.result()
+            state.stage2 = self.run_stage2(question, state.stage1.structured_json)
+            state.stage3 = self.run_stage3(question, state.stage1.structured_json)
         except Exception as e:
             state.errors.append(f"Stage2/3 失败: {e}")
             return state

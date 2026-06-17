@@ -146,6 +146,16 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
     return True, ""
 
 
+def allow_history_save(question: str, model: str) -> None:
+    """
+    在启动运行前调用，标记当前 question+model 组合允许保存历史。
+    设置 session_state._history_save_allowed 标志，供 auto_save_history 检查。
+    """
+    st.session_state._history_save_allowed = True
+    st.session_state._history_save_question = question
+    st.session_state._history_save_model = model
+
+
 def history_resume_hint(state: WorkflowState) -> str:
     nxt = get_next_stage(state)
     if nxt is None:

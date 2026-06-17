@@ -18,7 +18,7 @@ def _smoke_api_session(at: AppTest) -> None:
 
 @pytest.mark.e2e
 def test_history_list_table_headers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """历史列表表头含收藏/删除，且星标按钮 key 在独立列。"""
+    """历史列表每行含星标/删除按钮。"""
     sample = [
         {
             "id": 99,
@@ -42,8 +42,6 @@ def test_history_list_table_headers(monkeypatch: pytest.MonkeyPatch) -> None:
     at.session_state["app_mode"] = "历史"
     at.run(timeout=60)
     assert not at.exception
-    md_blob = "\n".join(m.value for m in at.markdown if m.value)
-    assert "收藏" in md_blob
-    assert "删除" in md_blob
+    # 检查星标按钮 key 和删除按钮 key 存在
     assert any(getattr(b, "key", "") == "hist_star_99" for b in at.button)
     assert any(getattr(b, "key", "") == "hist_del_99" for b in at.button)

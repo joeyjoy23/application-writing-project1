@@ -19,6 +19,7 @@ from utils.config import (
     get_project_root,
     sync_session_llm_selection,
 )
+from utils.ui_assets import lily_decor_css, render_hero_block
 
 # ── 日志配置 ──
 
@@ -92,8 +93,12 @@ def load_css() -> None:
     css_path = str(CSS_PATH)
     file_hash = hashlib.sha256(Path(css_path).read_bytes()).hexdigest() if Path(css_path).is_file() else ""
     css_text = _read_css_text(css_path, file_hash)
-    if css_text:
-        st.markdown(f"<style>{css_text}</style>", unsafe_allow_html=True)
+    lily_vars = lily_decor_css()
+    if css_text or lily_vars:
+        combined = css_text
+        if lily_vars:
+            combined = f"{combined}\n{lily_vars}" if combined else lily_vars
+        st.markdown(f"<style>{combined}</style>", unsafe_allow_html=True)
 
 
 def ensure_sidebar_expanded_on_first_load() -> None:
@@ -154,6 +159,7 @@ def init_session() -> None:
         "student_level": "中等",
         "stage4_student_level": None,
         "current_history_record_id": None,
+        "history_deleted_keys": set(),
         "workflow_source_provider": None,
         "workflow_source_model": None,
         "history_nav_state": None,
@@ -175,6 +181,10 @@ def main() -> None:
     )
     init_session()
     load_css()
+
+    from ui.api_key_browser import hydrate_session_from_browser
+
+    hydrate_session_from_browser()
 
     _share_param = st.query_params.get("share")
     if _share_param:
@@ -198,23 +208,15 @@ def main() -> None:
                 "历史库连接异常（可能是短暂并发冲突）。请刷新页面重试；"
                 "若仍失败，请在 Streamlit Cloud 中 Reboot app。"
             )
-    _logger.info("应用启动")
-
-    # 延迟导入，避免循环依赖
     from ui.new_page import render_history_page, render_new_analysis
-    from ui.sidebar import inject_sidebar_collapse_dock, render_sidebar
+    from ui.sidebar import UI_BUILD_TAG, inject_sidebar_collapse_dock, render_sidebar
+
+    _logger.info("应用启动 build=%s", UI_BUILD_TAG)
 
     api_ready = render_sidebar()
     inject_sidebar_collapse_dock()
 
-    st.markdown(
-        '<div class="hero-block">'
-        '<div class="hero-title">高考英语应用文 AI 分析系统</div>'
-        '<div class="hero-subtitle">四阶段备课工作流 · 审题 · 范文 · 语言 · 教学</div>'
-        '<div class="hero-underline"></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(render_hero_block(), unsafe_allow_html=True)
 
     # 面包屑/模式提示
     if st.session_state.app_mode == "历史":

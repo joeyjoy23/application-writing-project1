@@ -31,3 +31,29 @@ def test_build_chat_messages_legacy_layout(monkeypatch):
 def test_prompt_cache_layout_disabled_values(monkeypatch):
     monkeypatch.setenv("ENABLE_PROMPT_CACHE_LAYOUT", "false")
     assert not prompt_cache_layout_enabled()
+
+
+def test_build_chat_messages_stage_prompt_before_variable_parts(monkeypatch):
+    monkeypatch.setenv("ENABLE_PROMPT_CACHE_LAYOUT", "1")
+    msgs = build_chat_messages(
+        system_base="SYS",
+        stage_prompt="STAGE_PROMPT",
+        user_parts=["VAR_A", "VAR_B"],
+        tail_instruction="TAIL",
+    )
+    assert msgs[0] == {"role": "system", "content": "SYS"}
+    assert msgs[1]["role"] == "user"
+    assert "STAGE_PROMPT" in msgs[1]["content"]
+    assert "VAR_A" not in msgs[1]["content"]
+    assert msgs[2]["content"] == "VAR_A"
+    assert msgs[3]["content"] == "VAR_B"
+    assert msgs[4]["content"] == "TAIL"
+
+
+def test_format_stage1_json_sort_keys():
+    from utils.llm_messages import format_stage1_json
+
+    a = format_stage1_json({"z": 1, "a": 2})
+    b = format_stage1_json({"a": 2, "z": 1})
+    assert a == b
+    assert '"a"' in a and a.index('"a"') < a.index('"z"')

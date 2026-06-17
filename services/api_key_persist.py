@@ -74,8 +74,10 @@ def merge_provider_key(
     """按 remember 开关合并某 provider 的 Key。"""
     updated = dict(keys)
     trimmed = api_key.strip()
-    if remember and trimmed:
-        updated[provider] = trimmed
+    if remember:
+        if trimmed:
+            updated[provider] = trimmed
+        # 输入框暂空时不删除已记住的 Key（避免加载顺序导致误清）
     else:
         updated.pop(provider, None)
     return updated

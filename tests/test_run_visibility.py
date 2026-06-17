@@ -5,22 +5,7 @@ from ui.run_manager import (
     _running_stages_for_job,
     _slot_paint_plan,
 )
-from ui.run_cache import should_parallel_stage23
 from workflow import Stage1Result, WorkflowState
-
-
-def test_running_stages_parallel_23():
-    state = WorkflowState()
-    state.stage1 = Stage1Result(raw="", structured_json={}, human_summary="ok")
-    job = {
-        "phase": "api",
-        "thread": _AliveThread(),
-        "mode": "full",
-        "stages": [1, 2, 3, 4],
-        "stage_index": 1,
-    }
-    assert should_parallel_stage23(job)
-    assert _running_stages_for_job(job, state) == {2, 3}
 
 
 def test_running_stages_single_stage2():
@@ -36,11 +21,24 @@ def test_running_stages_single_stage2():
     assert _running_stages_for_job(job, state) == {2}
 
 
-def test_slot_paint_plan_incremental_skips_completed_stage1():
+def test_running_stages_only_one_at_a_time():
+    state = WorkflowState()
+    state.stage1 = Stage1Result(raw="", structured_json={}, human_summary="ok")
+    job = {
+        "phase": "api",
+        "thread": _AliveThread(),
+        "mode": "full",
+        "stages": [1, 2, 3, 4],
+        "stage_index": 2,
+    }
+    assert _running_stages_for_job(job, state) == {3}
+
+
+def test_slot_paint_plan_incremental_keeps_completed_stage1_visible():
     state = WorkflowState()
     state.stage1 = Stage1Result(raw="", structured_json={}, human_summary="ok")
     plan = _slot_paint_plan(state, {2, 3}, incremental=True)
-    assert plan[0] is None
+    assert plan[0] == "content"
     assert plan[1] == "in_progress"
     assert plan[2] == "in_progress"
     assert plan[3] is None

@@ -22,20 +22,16 @@ from utils.config import build_settings, resolve_model_for_provider
 from ui.run_cache import (
     merge_job_usage,
     save_stage_cache,
-    should_parallel_stage23,
     try_load_cached_stage,
-    try_load_parallel_cache,
 )
 from utils.status_log import (
-    APP_START,
-    CALLING_API,
-    LOADING_PROMPT,
     PARSING_RESPONSE,
-    PIPELINE_DONE,
-    PREPARING,
+    PIPELINE_FULL,
+    PIPELINE_RESUME,
+    PIPELINE_SKIP,
+    pipeline_done,
     stage_call_api,
     stage_complete,
-    stage_load_prompt,
 )
 from utils.parsers import stage1_summary_incomplete
 from workflow import GaokaoWritingWorkflow, WorkflowState
@@ -47,7 +43,7 @@ from services.workflow_origin import (
     set_workflow_origin_from_job,
 )
 from services.workflow_progress import get_next_stage, stage_has_content
-from ui.history import auto_save_history
+from ui.history import auto_save_history, allow_history_save
 from ui.sidebar import api_key_configured, clear_run_job
 from ui.stage_display import (
     render_one_stage,
@@ -102,8 +98,16 @@ def get_workflow_from_job(job: dict[str, Any]) -> GaokaoWritingWorkflow:
 class RunUI:
     """运行过程 UI：步骤列表（不刷屏）+ 单行字数 + 实时预览。"""
 
-    def __init__(self, steps: list[str] | None = None) -> None:
-        self.progress = st.progress(0, text="等待开始…")
+    def __init__(
+        self,
+        steps: list[str] | None = None,
+        *,
+        job: dict[str, Any] | None = None,
+    ) -> None:
+        self._job = job
+        progress_val = int((job or {}).get("ui_progress") or 0)
+        progress_text = str((job or {}).get("ui_progress_text") or "等待开始…")
+        self.progress = st.progress(progress_val, text=progress_text)
         self.status = st.status("运行状态", expanded=True)
         self._steps: list[str] = list(steps) if steps else []
         self._step_area = self.status.empty()
@@ -149,17 +153,36 @@ class RunUI:
             show = "…（仅显示最后 2500 字）\n" + show
         self._preview_body.text(show)
 
+    def show_connecting_wait(self, stage: int, model: str, elapsed: int) -> None:
+        """API 已发出、尚未收到首字时刷新等待提示（fragment 每轮重建 UI）。"""
+        self._live_line.markdown(
+            f"**Stage {stage}** 等待模型响应 · 已 **{elapsed}** 秒"
+            f"（模型：**{model}**）"
+        )
+        self.set_progress(
+            min(8 + stage * 18, 28),
+            text=f"Stage {stage} · 等待响应（{elapsed}s）…",
+        )
+
     def clear_stream_preview(self) -> None:
         self._live_line.empty()
         self._preview_title.empty()
         self._preview_body.empty()
 
     def set_progress(self, value: int, text: str) -> None:
-        self.progress.progress(min(max(value, 0), 100), text=text)
+        value = min(max(value, 0), 100)
+        self.progress.progress(value, text=text)
+        if self._job is not None:
+            self._job["ui_progress"] = value
+            self._job["ui_progress_text"] = text
 
     def sync_stream_from_job(self, job: dict[str, Any]) -> None:
         stage, total, preview = _read_job_stream(job)
         if total <= 0:
+            started = float(job.get("_api_started_at") or time.time())
+            elapsed = max(0, int(time.time() - started))
+            model = job.get("locked_model", st.session_state.get("model", ""))
+            self.show_connecting_wait(stage, model, elapsed)
             return
         self.update_stream(stage, total, preview)
 
@@ -187,13 +210,6 @@ def _running_stages_for_job(job: dict[str, Any], state: WorkflowState) -> set[in
     thread = job.get("thread")
     if thread is None or not thread.is_alive():
         return set()
-    if should_parallel_stage23(job):
-        out: set[int] = set()
-        if not state.stage2:
-            out.add(2)
-        if not state.stage3:
-            out.add(3)
-        return out
     idx = job["stage_index"]
     stages = job.get("stages") or []
     if idx < len(stages):
@@ -235,7 +251,7 @@ def _slot_paint_plan(
         if n in running:
             plan.append("in_progress")
         elif stage_has_content(state, n):
-            plan.append(None if incremental else "content")
+            plan.append("content")
         elif incremental:
             plan.append(None)
         else:
@@ -253,7 +269,7 @@ def _sync_visible_stage_slots(
     """恢复 Stage 占位。
 
     每次整页 rerun 会重建 st.empty()，已完成阶段必须重绘。
-    incremental 时仅刷新「进行中」阶段，已完成阶段保持不重绘以防闪烁。
+    incremental 时仍重绘已完成阶段（否则 fragment 轮询时 st.empty 内容会被清空）。
     """
     running = _running_stages_for_job(job, state) if job else set()
     if not any(stage_has_content(state, n) for n in range(1, 5)) and not running:
@@ -520,95 +536,9 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
         job["thread_done"] = False
         job["thread_error"] = None
         job["thread_result"] = None
-        job["parallel_mode"] = False
-        job["parallel_results"] = None
         job["stream_total"] = 0
         job["stream_preview"] = ""
         job["stream_stage"] = stage_num
-        job["_api_dispatching"] = False
-        job["thread"].start()
-
-
-def _start_parallel_23_thread(job: dict[str, Any], state: WorkflowState) -> None:
-    """Stage2 与 Stage3 并行（仅依赖 Stage1）。"""
-    cancel_event: threading.Event = job["cancel_event"]
-    _ensure_job_lock(job)
-
-    def worker() -> None:
-        lock = _ensure_job_lock(job)
-        results: dict[int, Any] = {}
-        errors: dict[int, tuple[str, str]] = {}
-
-        def run_one(stage_num: int) -> None:
-            if stage_num == 3:
-                # 错开并行请求，降低同提供商限流导致「首字超时」的概率
-                time.sleep(3)
-            if cancel_event.is_set():
-                errors[stage_num] = ("cancelled", "已切换模型或提供商，当前请求已停止。")
-                return
-            try:
-                cached = try_load_cached_stage(job, stage_num, state)
-                if cached is not None:
-                    results[stage_num] = cached
-                    return
-                results[stage_num] = _execute_stage_api(
-                    job, stage_num, state, cancel_event
-                )
-            except RunCancelled:
-                errors[stage_num] = (
-                    "cancelled",
-                    "已切换模型或提供商，当前请求已停止。",
-                )
-            except Exception as e:
-                logger.exception("并行 Stage %d 失败", stage_num)
-                msg = str(e)
-                kind = (
-                    "timeout"
-                    if "未收到模型任何输出" in msg or "生成超时" in msg
-                    else "error"
-                )
-                errors[stage_num] = (kind, msg)
-
-        t2 = threading.Thread(target=lambda: run_one(2), daemon=True)
-        t3 = threading.Thread(target=lambda: run_one(3), daemon=True)
-        t2.start()
-        t3.start()
-        timeout = _stage_timeout_seconds()
-        t2.join(timeout=timeout)
-        t3.join(timeout=timeout)
-        if t2.is_alive():
-            _stop_api_thread(t2, cancel_event)
-        if t3.is_alive():
-            _stop_api_thread(t3, cancel_event)
-
-        with lock:
-            if errors:
-                sn = min(errors.keys())
-                job["thread_error"] = errors[sn]
-                job["_parallel_failed_stage"] = sn
-                if results:
-                    job["parallel_results"] = results
-            elif len(results) < 2:
-                job["thread_error"] = (
-                    "error",
-                    "Stage 2/3 并行未完成，请重试。",
-                )
-            else:
-                job["parallel_results"] = results
-            job["thread_done"] = True
-            job["parallel_mode"] = True
-
-    with _ensure_job_lock(job):
-        job["thread"] = threading.Thread(target=worker, daemon=True)
-        job["thread_done"] = False
-        job["thread_error"] = None
-        job["thread_result"] = None
-        job["parallel_results"] = None
-        job["parallel_mode"] = True
-        job["stream_total"] = 0
-        job["stream_preview"] = ""
-        job["stream_stage"] = 2
-        job["logs"].append("并行运行 Stage 2 与 Stage 3…")
         job["_api_dispatching"] = False
         job["thread"].start()
 
@@ -622,25 +552,6 @@ def _begin_cached_or_api(
     """
     若命中缓存则写入 state 并进入 flush；若已启动线程返回 True；否则返回 False 由调用方启动线程。
     """
-    if should_parallel_stage23(job):
-        hit = try_load_parallel_cache(job, state)
-        if hit:
-            _apply_stage_result(state, 2, hit[2])
-            _apply_stage_result(state, 3, hit[3])
-            st.session_state.workflow_state = state
-            job["pending_flushes"] = [2, 3]
-            job["_flush_queue_idx"] = 0
-            job["phase"] = "flush"
-            job["thread"] = None
-            ui.log("已从缓存加载 Stage 2 与 Stage 3（未调用 API）")
-            ui.persist_logs(job)
-            try:
-                st.toast("已从缓存加载 Stage 2 与 Stage 3", icon="ℹ️")
-            except Exception:
-                pass
-            return True
-        return False
-
     cached = try_load_cached_stage(job, stage_num, state)
     if cached is None:
         return False
@@ -657,16 +568,14 @@ def _begin_cached_or_api(
     return True
 
 
-def _prepare_stage_api_logs(ui: RunUI, stage_num: int) -> None:
-    ui.log(LOADING_PROMPT)
-    ui.log(stage_load_prompt(stage_num))
-    ui.set_progress(8 + stage_num * 18, text=f"Stage {stage_num} · 加载提示词…")
-    ui.log(CALLING_API)
+def _prepare_stage_api_logs(
+    ui: RunUI, stage_num: int, job: dict[str, Any]
+) -> None:
+    job["_api_started_at"] = time.time()
     ui.log(stage_call_api(stage_num))
-    model = st.session_state.get("run_job", {}).get("locked_model", st.session_state.model)
-    ui._live_line.caption(
-        f"正在连接 API（模型：**{model}**）。可随时在侧边栏换模型以停止本次请求。"
-    )
+    ui.set_progress(8 + stage_num * 18, text=f"Stage {stage_num} · 调用 API…")
+    model = job.get("locked_model", st.session_state.model)
+    ui.show_connecting_wait(stage_num, model, 0)
 
 
 def _apply_stage_result(state: WorkflowState, stage_num: int, result: Any) -> None:
@@ -810,8 +719,11 @@ def try_start_run_job(mode: str, question: str) -> bool:
         return False
 
     st.session_state.workflow_state = state
+    if state.errors:
+        state.errors.clear()
     locked_provider = st.session_state.provider
     locked_model = resolve_model_for_provider(locked_provider, st.session_state.model)
+    allow_history_save(question, locked_model)
     # 勿写入 st.session_state.model：侧边栏 selectbox(key="model") 已绑定，会触发 StreamlitAPIException
     st.session_state.run_job = {
         "mode": mode,
@@ -827,28 +739,26 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "thread_done": False,
         "thread_error": None,
         "thread_result": None,
-        "logs": [APP_START, PREPARING],
+        "logs": [],
         "stream_stage": stages[0],
         "stream_total": 0,
         "stream_preview": "",
         "usage_total": ChatUsage(),
         "pending_flushes": None,
         "_flush_queue_idx": 0,
-        "parallel_mode": False,
-        "parallel_results": None,
         "student_level": st.session_state.get("student_level", "中等"),
     }
     st.session_state.llm_run_usage = None
     if mode == "full":
         if len(stages) < 4:
             st.session_state.run_job["logs"].append(
-                f"断点续传：跳过已完成阶段，从 Stage {stages[0]} 继续…"
+                PIPELINE_SKIP.format(n=stages[0])
             )
         else:
-            st.session_state.run_job["logs"].append("Running full pipeline (4 stages)…")
+            st.session_state.run_job["logs"].append(PIPELINE_FULL)
     elif mode == "resume":
         st.session_state.run_job["logs"].append(
-            f"断点续传：从 Stage {stages[0]} 继续生成…"
+            PIPELINE_RESUME.format(n=stages[0])
         )
     st.session_state.run_cancelled = False
     st.session_state.is_running = True
@@ -893,7 +803,7 @@ def _finish_job_success(
     mode = job["mode"]
     if mode == "full":
         ui.set_progress(100, text="全部完成")
-        ui.log(PIPELINE_DONE)
+        ui.log(pipeline_done())
         ui.status.update(label="✅ 完整流程已完成", state="complete")
     else:
         stage_num = job["stages"][-1]
@@ -904,6 +814,8 @@ def _finish_job_success(
     st.session_state.last_question = job["question"]
     st.session_state.failed_stage = None
     st.session_state.stopped_stage = None
+    if state.errors:
+        state.errors.clear()
     set_workflow_origin_from_job(job)
     logger.info("运行完成 mode=%s", mode)
     _persist_history_from_job(job, state, notify=False)
@@ -936,7 +848,7 @@ def advance_run_job(
         question=question
     )
     state.question = job["question"]
-    ui = RunUI(job.get("logs"))
+    ui = RunUI(job.get("logs"), job=job)
     stage_num = job["stages"][job["stage_index"]]
     thread = job.get("thread")
     thread_alive = thread is not None and thread.is_alive()
@@ -947,27 +859,32 @@ def advance_run_job(
 
     if job["phase"] == "api":
         if job.get("thread") is None:
+            if job.get("_api_dispatching"):
+                dispatch_ts = float(job.get("_api_dispatch_ts") or 0)
+                if dispatch_ts and time.time() - dispatch_ts > 8:
+                    job["_api_dispatching"] = False
             need_full_rerun = False
-            started_thread = False
+            start_api = False
             with _ensure_job_lock(job):
                 if job.get("thread") is None:
                     if _begin_cached_or_api(job, state, ui, stage_num):
                         need_full_rerun = True
                     elif not job.get("_api_dispatching"):
                         job["_api_dispatching"] = True
-                        _prepare_stage_api_logs(ui, stage_num)
-                        ui.persist_logs(job)
-                        if should_parallel_stage23(job):
-                            _start_parallel_23_thread(job, state)
-                        else:
-                            _start_api_thread(job, stage_num, state)
-                        started_thread = True
+                        job["_api_dispatch_ts"] = time.time()
+                        start_api = True
             if need_full_rerun:
                 time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
-            if started_thread:
+            if start_api:
+                _prepare_stage_api_logs(ui, stage_num, job)
+                ui.persist_logs(job)
+                _start_api_thread(job, stage_num, state)
                 _sync_visible_stage_slots(state, slots, job, paint_mode=paint_mode)
+                return
+            if job.get("_api_started_at"):
+                ui.sync_stream_from_job(job)
             return
 
         thread = job["thread"]
@@ -1000,16 +917,8 @@ def advance_run_job(
                 return
             job["_error_handled"] = True
 
-            parallel_partial = job.get("parallel_results")
-            if parallel_partial:
-                for sn, res in parallel_partial.items():
-                    _apply_stage_result(state, int(sn), res)
-                    save_stage_cache(job, int(sn), state, res)
-                st.session_state.workflow_state = state
-                _persist_history_from_job(job, state, notify=True, notify_updates=False)
-
             kind, msg = err
-            failed_stage = int(job.get("_parallel_failed_stage") or stage_num)
+            failed_stage = stage_num
             if kind == "cancelled":
                 _finish_job_cancelled(ui, job, msg, state, slots)
                 time.sleep(_POLL_INTERVAL_FAST)
@@ -1058,27 +967,6 @@ def advance_run_job(
                 time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return
-
-        if job.get("parallel_mode") and job.get("parallel_results"):
-            parallel = job["parallel_results"]
-            for sn in (2, 3):
-                if sn in parallel:
-                    _apply_stage_result(state, sn, parallel[sn])
-                    save_stage_cache(job, sn, state, parallel[sn])
-            st.session_state.workflow_state = state
-            job["pending_flushes"] = [2, 3]
-            job["_flush_queue_idx"] = 0
-            job["phase"] = "flush"
-            job["thread"] = None
-            job["parallel_results"] = None
-            job["parallel_mode"] = False
-            ui.clear_stream_preview()
-            ui.log(PARSING_RESPONSE)
-            ui.log("Stage 2 与 Stage 3 并行完成")
-            ui.persist_logs(job)
-            time.sleep(_POLL_INTERVAL_FAST)
-            st.rerun()
-            return
 
         if thread_result is not None:
             _apply_stage_result(state, stage_num, thread_result)

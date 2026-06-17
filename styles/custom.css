@@ -6,38 +6,38 @@
 :root {
   --font-base: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
-  --c-ink: #3a3540;
-  --c-ink-muted: #6b6574;
-  --c-ink-light: #9690a0;
+  --c-ink: #1e293b;
+  --c-ink-muted: #64748b;
+  --c-ink-light: #94a3b8;
 
-  --c-navy: #6b5b73;
-  --c-navy-soft: #7a6882;
-  --c-navy-light: #f7f3f8;
+  --c-primary: #2563eb;
+  --c-primary-soft: #3b82f6;
+  --c-primary-light: #eff6ff;
 
-  --c-paper: #fefdfb;
-  --c-paper-deep: #f8f6f3;
+  --c-paper: #f8fafc;
+  --c-paper-deep: #f1f5f9;
   --c-card: #ffffff;
-  --c-border: #e8e4de;
-  --c-border-light: #f2efe9;
+  --c-border: #e2e8f0;
+  --c-border-light: #f1f5f9;
 
-  --c-accent: #9a7b4f;
-  --c-accent-light: #f8f4ec;
+  --c-accent: #ec4899;
+  --c-accent-light: #fdf2f8;
 
-  --c-success: #5a7a62;
-  --c-success-light: #eef4ef;
-  --c-danger: #b85c6a;
-  --c-danger-light: #faf0f2;
+  --c-success: #10b981;
+  --c-success-light: #d1fae5;
+  --c-danger: #ef4444;
+  --c-danger-light: #fee2e2;
 
-  --stage-1: #6b5b73;
-  --stage-2: #857592;
-  --stage-3: #9a7b4f;
-  --stage-4: #7a6b8a;
+  --stage-1: #2563eb;
+  --stage-2: #10b981;
+  --stage-3: #ec4899;
+  --stage-4: #6366f1;
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --shadow-sm: 0 1px 3px rgb(107 91 115 / 0.07);
-  --shadow-md: 0 2px 10px rgb(107 91 115 / 0.09);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px rgb(0 0 0 / 0.07);
   --stage-shell-title: 1.48rem;  /* Stage 1~4 卡片顶栏标题 */
   --stage-md-h1: 1.02rem;        /* # 大节：一、二、…（略大于正文，靠样式区分） */
   --stage-md-h2: 0.97rem;        /* ## 小节 */
@@ -178,7 +178,7 @@ section.main > div.block-container,
 .main h3,
 .main h4 {
   font-family: var(--font-base);
-  color: var(--c-navy);
+  color: var(--c-primary);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -244,19 +244,19 @@ section.main > div.block-container,
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {
-  color: var(--c-navy) !important;
+  color: var(--c-ink) !important;
 }
 
 [data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] strong,
 [data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] b,
 [data-testid="stAppViewContainer"] .main .stage-content strong,
 [data-testid="stAppViewContainer"] .main .stage-content b {
-  color: var(--c-navy) !important;
+  color: var(--c-ink) !important;
 }
 
 [data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] a,
 [data-testid="stAppViewContainer"] .main .stage-content a {
-  color: var(--c-navy-soft) !important;
+  color: var(--c-primary-soft) !important;
 }
 
 [data-testid="stAppViewContainer"] .main .stCaption,
@@ -280,7 +280,7 @@ section.main > div.block-container,
 
 [data-testid="stAppViewContainer"] .main [data-testid="stMarkdownContainer"] code,
 [data-testid="stAppViewContainer"] .main .stage-content code {
-  color: var(--c-navy) !important;
+  color: var(--c-ink) !important;
   background: var(--c-paper-deep) !important;
 }
 
@@ -294,12 +294,25 @@ section.main [data-testid="stMarkdownContainer"] :where(p, li, ol, ul, blockquot
 }
 
 section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) {
-  color: var(--c-navy) !important;
+  color: var(--c-ink) !important;
 }
 
 /* ── Hero ── */
 .hero-block {
-  margin: 0 0 0.1rem;
+  margin: 0 0 0.35rem;
+  padding: 0.35rem 0 0.15rem;
+}
+
+.hero-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2.5rem;
+}
+
+.hero-copy {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .hero-title {
@@ -308,7 +321,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-weight: 700;
   letter-spacing: 0.02em;
   margin: 0 0 0.15rem;
-  color: #4d4256;
+  color: var(--c-ink);
 }
 
 .hero-subtitle {
@@ -322,8 +335,48 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   width: 72px;
   height: 3px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--c-navy-soft), var(--c-accent));
+  background: linear-gradient(90deg, var(--c-primary), var(--c-accent));
   margin: 0 0 0.45rem;
+}
+
+.hero-lily {
+  flex: 0 0 auto;
+  width: min(86px, 14vw);
+  height: min(116px, 18vw);
+  margin: 0 0 0 0.65rem;
+  background-image: var(--lily-hero-url);
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: contain;
+  opacity: 0.95;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hero-lily--missing {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .hero-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .hero-lily {
+    width: min(82px, 28vw);
+    height: min(110px, 36vw);
+    align-self: flex-end;
+    margin-top: -0.25rem;
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-lily {
+    filter: none;
+  }
 }
 
 /* ── Mode Breadcrumb ── */
@@ -336,7 +389,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--c-card);
-  color: var(--c-navy-soft);
+  color: var(--c-primary-soft);
   margin-bottom: 0.4rem;
   border: 1px solid var(--c-border-light);
   box-shadow: var(--shadow-sm);
@@ -354,7 +407,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-family: var(--font-base);
   font-size: 1rem;
   font-weight: 600;
-  color: var(--c-navy);
+  color: var(--c-ink);
   margin: 1.1rem 0 0.65rem;
   padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--c-border-light);
@@ -404,8 +457,8 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   text-transform: uppercase;
   padding: 0.22rem 0.65rem;
   border-radius: 4px;
-  color: var(--c-navy);
-  background: var(--c-navy-light);
+  color: var(--c-primary);
+  background: var(--c-primary-light);
   border: 1px solid rgb(107 91 115 / 0.12);
   vertical-align: middle;
 }
@@ -421,7 +474,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-weight: 600;
   margin-left: 0.55rem;
   vertical-align: middle;
-  color: var(--c-navy);
+  color: var(--c-primary);
   line-height: 1.35;
 }
 
@@ -437,7 +490,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   [data-testid="stMarkdownContainer"] :is(h1, h2, h3, h4, h5, h6) {
   font-family: var(--font-base) !important;
   font-weight: 600 !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   letter-spacing: 0.01em;
   line-height: 1.5;
 }
@@ -446,11 +499,11 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   [data-testid="stMarkdownContainer"] h1 {
   font-size: var(--stage-md-h1) !important;
   font-weight: 600 !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   margin: 0 0 0.45em !important;
   padding: 0.28em 0.5em !important;
-  background: linear-gradient(90deg, var(--c-navy-light) 0%, transparent 72%) !important;
-  border-left: 3px solid var(--c-navy) !important;
+  background: linear-gradient(90deg, var(--c-primary-light) 0%, transparent 72%) !important;
+  border-left: 3px solid var(--c-primary) !important;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
@@ -458,7 +511,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   [data-testid="stMarkdownContainer"] h2 {
   font-size: var(--stage-md-h2) !important;
   font-weight: 600 !important;
-  color: var(--c-navy-soft) !important;
+  color: var(--c-primary-soft) !important;
   margin: 0.65em 0 0.35em !important;
   padding-bottom: 0.22em !important;
   border-bottom: 1px solid var(--c-border) !important;
@@ -468,7 +521,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   [data-testid="stMarkdownContainer"] h3 {
   font-size: var(--stage-md-h3) !important;
   font-weight: 600 !important;
-  color: var(--c-navy-soft) !important;
+  color: var(--c-primary-soft) !important;
   margin: 0.55em 0 0.28em !important;
   padding-left: 0.42em !important;
   border-left: 2px solid var(--c-border) !important;
@@ -660,7 +713,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   padding: 0 !important;
   background: none !important;
   font-weight: 600 !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   line-height: inherit !important;
 }
 
@@ -669,7 +722,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
 [data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge)
   [data-testid="stMarkdownContainer"] b {
   font-weight: 600 !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   background: rgb(248 244 236 / 0.85);
   padding: 0 0.08em;
   border-radius: 2px;
@@ -691,6 +744,14 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   border: none !important;
   border-top: 1px dashed var(--c-border) !important;
   margin: 1.15em 0 !important;
+}
+
+/* ── annotated-text 词汇标签 ── */
+[data-testid="stVerticalBlockBorderWrapper"]:has(.stage-badge) span[style] {
+  font-family: var(--font-base) !important;
+  font-size: 0.88rem !important;
+  line-height: 1.6 !important;
+  letter-spacing: 0.01em;
 }
 
 /* ── Summary & Export ── */
@@ -718,7 +779,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
   font-family: var(--font-base);
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--c-navy);
+  color: var(--c-primary);
   margin-bottom: 0.65rem;
 }
 
@@ -744,7 +805,7 @@ section.main [data-testid="stMarkdownContainer"] :where(h1, h2, h3, h4, h5, h6) 
 .copy-btn:hover {
   background: var(--c-accent-light) !important;
   border-color: var(--c-accent) !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
 }
 
 /* ── Sidebar（与主区统一素墨暗香） ── */
@@ -776,7 +837,7 @@ div[data-testid="stSidebar"] h1,
 div[data-testid="stSidebar"] h2,
 div[data-testid="stSidebar"] h3 {
   font-family: var(--font-base);
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   font-weight: 600;
 }
 
@@ -800,7 +861,7 @@ div[data-testid="stSidebar"] input::placeholder {
 }
 
 div[data-testid="stSidebar"] [data-testid="stAlert"] {
-  background: var(--c-navy-light) !important;
+  background: var(--c-primary-light) !important;
   border: 1px solid var(--c-border-light) !important;
   color: var(--c-ink) !important;
 }
@@ -808,25 +869,25 @@ div[data-testid="stSidebar"] [data-testid="stAlert"] {
 div[data-testid="stSidebar"] .stButton > button {
   border-color: var(--c-border) !important;
   background: var(--c-card) !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   border-radius: var(--radius-md) !important;
 }
 
 div[data-testid="stSidebar"] .stButton > button:hover {
-  border-color: var(--c-navy-soft) !important;
-  background: var(--c-navy-light) !important;
+  border-color: var(--c-primary-soft) !important;
+  background: var(--c-primary-light) !important;
 }
 
 div[data-testid="stSidebar"] .stButton > button[kind="primary"],
 div[data-testid="stSidebar"] .stButton > button[data-testid="baseButton-primary"] {
-  background: var(--c-navy-soft) !important;
+  background: var(--c-primary-soft) !important;
   color: #fff !important;
-  border-color: var(--c-navy-soft) !important;
+  border-color: var(--c-primary-soft) !important;
 }
 
 div[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
-  background: var(--c-navy) !important;
-  border-color: var(--c-navy) !important;
+  background: var(--c-primary) !important;
+  border-color: var(--c-primary) !important;
 }
 
 div[data-testid="stSidebar"] [data-baseweb="select"] span {
@@ -851,7 +912,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button {
 
 div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   opacity: 0.9;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
 }
 
 /* 侧栏顶栏：「工作区」与 << 同一行；适度顶距 */
@@ -925,7 +986,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.25;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   letter-spacing: 0.02em;
   flex: 1 1 auto;
   min-width: 0;
@@ -939,7 +1000,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   padding: 0 0 0.1rem !important;
   font-size: 1rem !important;
   font-weight: 600 !important;
-  color: var(--c-navy) !important;
+  color: var(--c-ink) !important;
   letter-spacing: 0.04em;
   line-height: 1.5 !important;
   min-height: 1.5em;
@@ -1121,7 +1182,7 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
   border: none !important;
   font-size: 1rem !important;
   font-weight: 600 !important;
-  color: var(--c-navy) !important;
+  color: var(--c-ink) !important;
   line-height: 1.5 !important;
   min-height: 1.5em;
   overflow: visible !important;
@@ -1161,8 +1222,8 @@ div[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
 }
 
 a.stage-nav-link:hover {
-  border-color: var(--c-navy-soft);
-  background: var(--c-navy-light);
+  border-color: var(--c-primary-soft);
+  background: var(--c-primary-light);
 }
 
 .stage-nav-link-disabled {
@@ -1188,7 +1249,7 @@ a.stage-nav-link:hover {
 .stage-nav-title {
   font-size: 1.06rem;
   font-weight: 600;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   line-height: 1.32;
   letter-spacing: 0.01em;
 }
@@ -1197,6 +1258,38 @@ a.stage-nav-link:hover {
   font-size: 0.88rem;
   color: var(--c-ink-muted) !important;
   line-height: 1.28;
+}
+
+/* ── 侧栏 Stage 状态徽章 ── */
+.nav-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+
+.nav-badge-ready {
+  background: var(--c-success);
+  box-shadow: 0 0 0 2px var(--c-success-light);
+}
+
+.nav-badge-running {
+  background: var(--c-primary-soft);
+  box-shadow: 0 0 0 2px var(--c-primary-light);
+  animation: nav-badge-pulse 1.4s ease-in-out infinite;
+}
+
+.nav-badge-empty {
+  background: transparent;
+  border: 1.5px solid var(--c-border);
+}
+
+@keyframes nav-badge-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
 }
 
 .sidebar-build-tag {
@@ -1281,24 +1374,24 @@ div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
   transition: background var(--transition), border-color var(--transition), box-shadow var(--transition) !important;
   border: 1px solid var(--c-border) !important;
   background: var(--c-card) !important;
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
 }
 
 .main .stButton > button:hover {
-  border-color: var(--c-navy-soft) !important;
-  background: var(--c-navy-light) !important;
+  border-color: var(--c-primary-soft) !important;
+  background: var(--c-primary-light) !important;
   box-shadow: var(--shadow-sm);
 }
 
 .main .stButton > button[kind="primary"],
 .main .stButton > button[data-testid="baseButton-primary"] {
-  background: var(--c-navy-soft) !important;
+  background: var(--c-primary-soft) !important;
   color: #fff !important;
-  border-color: var(--c-navy-soft) !important;
+  border-color: var(--c-primary-soft) !important;
 }
 
 .main .stButton > button[kind="primary"]:hover {
-  background: var(--c-navy) !important;
+  background: var(--c-primary) !important;
 }
 
 /* Tabs */
@@ -1316,7 +1409,7 @@ div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
 }
 
 .stTabs [aria-selected="true"] {
-  color: var(--c-navy) !important;
+  color: var(--c-primary) !important;
   background: var(--c-card) !important;
   border: 1px solid var(--c-border-light) !important;
   border-bottom-color: var(--c-card) !important;
@@ -1326,7 +1419,7 @@ div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
 .main [data-testid="stAlert"] {
   border-radius: var(--radius-md);
   border-width: 1px;
-  background: var(--c-navy-light) !important;
+  background: var(--c-primary-light) !important;
   color: var(--c-ink) !important;
 }
 
@@ -1339,7 +1432,7 @@ div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
 .main .streamlit-expanderHeader {
   font-family: var(--font-base);
   font-weight: 600;
-  color: var(--c-navy);
+  color: var(--c-primary);
   background: var(--c-card);
   border-radius: var(--radius-sm);
 }
@@ -1514,25 +1607,29 @@ footer {
   user-select: text;
 }
 
-/* 历史列表：表头不换行，收藏/删除列留足宽度 */
-.history-th {
-  white-space: nowrap;
-  font-weight: 600;
+/* 历史列表行：操作列按钮紧凑居中（配合 .hist-row-marker + HISTORY_COL_WEIGHTS） */
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.hist-row-marker) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(n + 5) .stButton {
+  margin-top: 0 !important;
+  width: 100% !important;
 }
 
-.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
-  max-width: 9.75rem;
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.hist-row-marker) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(n + 5) .stButton > button {
+  width: 100% !important;
+  min-height: 2rem !important;
+  max-height: 2.25rem !important;
+  height: 2rem !important;
+  padding: 0 0.25rem !important;
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
 }
 
-.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(8),
-.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(9) {
-  min-width: 2.75rem !important;
-  flex: 0.65 0 auto !important;
-}
-
-.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(8) .stButton > button,
-.main:has(.history-table-start) div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(9) .stButton > button {
-  min-width: 2.5rem;
-  padding-left: 0.35rem;
-  padding-right: 0.35rem;
+.main :is(div[data-testid="element-container"], div[data-testid="stElementContainer"]):has(.hist-row-marker) + div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(n + 7) .stButton > button {
+  font-size: 0.85rem !important;
+  padding: 0 0.15rem !important;
 }

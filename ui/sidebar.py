@@ -25,6 +25,7 @@ from utils.config import (
     PROVIDER_OPTIONS,
     build_settings,
     format_model_label,
+    normalize_agnes_model_id,
     normalize_deepseek_model_id,
     normalize_mimo_model_id,
     normalize_zhipu_model_id,
@@ -158,11 +159,12 @@ def _provider_key_label(provider: str) -> str:
         "dashscope": "阿里云百炼 API Key",
         "mimo": "小米 MiMo API Key",
         "zhipu": "智谱 API Key",
+        "agnes": "Agnes API Key",
     }.get(provider, "API Key")
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.14-remember-model"
+UI_BUILD_TAG = "2026.06.15-history-delete-fix"
 
 
 def _render_admin_popover_body() -> None:
@@ -293,6 +295,8 @@ def render_sidebar() -> bool:
                 current = normalize_zhipu_model_id(current)
             if st.session_state.provider == "mimo":
                 current = normalize_mimo_model_id(current)
+            if st.session_state.provider == "agnes":
+                current = normalize_agnes_model_id(current)
             if current not in model_options:
                 current = model_options[0]
             st.session_state.model = current
@@ -310,10 +314,12 @@ def render_sidebar() -> bool:
                     if st.session_state.provider == "dashscope"
                     else "MiMo 请选 mimo-v2.5-pro（API 只认小写 ID）。"
                     if st.session_state.provider == "mimo"
-                    else "DeepSeek 官方仅 deepseek-v4-pro（chat/reasoner 已弃用）。"
+                    else "DeepSeek 官方：deepseek-v4-pro / deepseek-v4-flash（chat/reasoner 已弃用）。"
                     if st.session_state.provider == "deepseek"
                     else "智谱 Key 见 open.bigmodel.cn。"
                     if st.session_state.provider == "zhipu"
+                    else "Brainstorming 开启 Thinking 深度思考，适合复杂备课推理。"
+                    if st.session_state.provider == "agnes"
                     else "运行中切换会停止当前请求"
                 ),
             )
