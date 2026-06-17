@@ -16,9 +16,11 @@ from llm.usage import ChatUsage
 from utils.config import get_project_root
 from utils.llm_messages import (
     build_chat_messages,
+    build_stage1_image_user_part,
     format_stage1_json,
     shared_question_context,
 )
+from utils.question_input import image_to_data_uri
 from utils.parsers import parse_stage1_output
 from utils.stage4_input import build_stage4_user_sections
 
@@ -129,15 +131,30 @@ class GaokaoWritingWorkflow:
     def run_stage1(
         self,
         question: str,
+        *,
+        question_image: dict[str, Any] | None = None,
         on_progress: ProgressFn = None,
         on_stream: StreamFn = None,
         should_cancel: CancelFn = None,
     ) -> Stage1Result:
         stage_prompt = load_prompt("stage1_prompt.md")
+        if question_image:
+            data_uri = image_to_data_uri(question_image)
+            user_parts = [
+                build_stage1_image_user_part(
+                    data_uri=data_uri,
+                    hint=(
+                        "【原题图片】请识别图中题目与选项/海报等非文字信息。"
+                        "STRUCTURED_JSON 必须包含 recognized_question_text 与 image_brief_description。"
+                    ),
+                )
+            ]
+        else:
+            user_parts = [f"【应用文原题】\n\n{question.strip()}"]
         messages = build_chat_messages(
             system_base=self._system,
             stage_prompt=stage_prompt,
-            user_parts=[f"【应用文原题】\n\n{question.strip()}"],
+            user_parts=user_parts,
             tail_instruction=(
                 "请按 stage1 任务说明输出 STRUCTURED_JSON 与 HUMAN_READABLE_SUMMARY。"
                 "JSON 从简（短句/短语）；PART B 六节必须写全，§6 须完整输出至「结尾段」。"

@@ -684,6 +684,12 @@ def stage1_summary_incomplete(summary: str) -> str | None:
     return None
 
 
+def format_image_question_for_history(structured: dict[str, Any]) -> str:
+    from utils.question_input import format_image_question_for_history as _fmt
+
+    return _fmt(structured)
+
+
 def parse_stage1_output(raw: str) -> tuple[dict[str, Any], str]:
     """从 Stage1 模型输出中解析 JSON 与人类可读摘要。"""
     text = raw.strip()

@@ -18,7 +18,8 @@ _POLL_INTERVAL_SLOW = 1.0    # API 调用中轮询间隔（秒），减少闪烁
 
 from llm.client import LLMClient, RunCancelled
 from llm.usage import ChatUsage
-from utils.config import build_settings, resolve_model_for_provider
+from utils.config import build_settings, is_multimodal_model, resolve_model_for_provider
+from utils.question_input import question_input_conflict
 from ui.run_cache import (
     merge_job_usage,
     save_stage_cache,
@@ -33,7 +34,7 @@ from utils.status_log import (
     stage_call_api,
     stage_complete,
 )
-from utils.parsers import stage1_summary_incomplete
+from utils.parsers import format_image_question_for_history, stage1_summary_incomplete
 from workflow import GaokaoWritingWorkflow, WorkflowState
 
 from services.workflow_origin import (
@@ -380,6 +381,7 @@ def _execute_stage_api(
             raise RunCancelled("已切换模型或提供商，当前请求已停止。")
         result = wf.run_stage1(
             question,
+            question_image=job.get("question_image"),
             on_progress=_job_on_progress(job, 1, cancel_event),
             on_stream=_job_on_stream(job, 1, cancel_event),
             should_cancel=should_cancel,
@@ -581,6 +583,14 @@ def _prepare_stage_api_logs(
 def _apply_stage_result(state: WorkflowState, stage_num: int, result: Any) -> None:
     if stage_num == 1:
         state.stage1 = result
+        job = st.session_state.get("run_job")
+        if job and job.get("question_image") and state.stage1:
+            state.question = format_image_question_for_history(
+                state.stage1.structured_json
+            )
+            job["question"] = state.question
+            st.session_state.question = state.question
+            st.session_state.last_question = state.question
         msg = stage1_summary_incomplete(getattr(result, "human_summary", "") or "")
         if msg and msg not in state.errors:
             state.errors.append(msg)
@@ -669,6 +679,16 @@ def try_start_run_job(mode: str, question: str) -> bool:
         st.error("请先在侧边栏配置 API Key")
         return False
 
+    image = st.session_state.get("question_image")
+    if question_input_conflict(question, image):
+        st.error("请只保留文字或图片其中一种输入方式。")
+        return False
+    if image and not is_multimodal_model(st.session_state.provider, st.session_state.model):
+        st.error("当前模型不支持识图，请在侧边栏选择带 👁 支持识图 的模型。")
+        return False
+    if image and not (question or "").strip():
+        question = "[图片题目]"
+
     state: WorkflowState = st.session_state.workflow_state or WorkflowState(
         question=question
     )
@@ -747,6 +767,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "pending_flushes": None,
         "_flush_queue_idx": 0,
         "student_level": st.session_state.get("student_level", "中等"),
+        "question_image": image,
     }
     st.session_state.llm_run_usage = None
     if mode == "full":

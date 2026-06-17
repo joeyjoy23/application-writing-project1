@@ -114,6 +114,7 @@ def clear_checkpoint() -> None:
     st.session_state.stopped_stage = None
     st.session_state._confirm_clear = False
     st.session_state.stage4_student_level = None
+    st.session_state.question_image = None
     clear_workflow_origin()
     st.toast("已清空当前结果；历史记录已保留，可在「历史」中查看", icon="🔄")
 

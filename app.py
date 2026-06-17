@@ -163,6 +163,7 @@ def init_session() -> None:
         "workflow_source_provider": None,
         "workflow_source_model": None,
         "history_nav_state": None,
+        "question_image": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:

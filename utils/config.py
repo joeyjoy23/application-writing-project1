@@ -124,6 +124,8 @@ ZHIPU_MODEL_LABELS: dict[str, str] = {
     "glm-5.2": "glm-5.2 · 最新旗舰",
     "glm-5.1": "glm-5.1 · 旗舰",
     "glm-4.7": "glm-4.7 · 高性价比",
+    "glm-4.6v": "glm-4.6v · 智谱视觉旗舰",
+    "glm-4.6v-flash": "glm-4.6v-flash · 智谱视觉 Flash",
 }
 
 ZHIPU_MODEL_ALIASES: dict[str, str] = {
@@ -237,6 +239,8 @@ def resolve_model_for_provider(provider: str, model: str) -> str:
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称；须与百炼 OpenAI 兼容接口 model 字段一致）
 DASHSCOPE_MODEL_LABELS: dict[str, str] = {
     "qwen3.7-max": "qwen3.7-max · 千问旗舰 Qwen3.7-Max",
+    "qwen3.7-plus": "qwen3.7-plus · 千问视觉旗舰",
+    "qwen3.6-plus": "qwen3.6-plus · 千问视觉均衡",
     "glm-5": "glm-5 · 智谱 GLM-5（百炼）",
     "qwen3.6-max-preview": "qwen3.6-max-preview · 千问旗舰（复杂推理）",
     "qwen-plus": "qwen-plus · 千问均衡（性能/成本）",
@@ -249,7 +253,7 @@ DASHSCOPE_MODEL_LABELS: dict[str, str] = {
 
 PROVIDER_MODELS: dict[str, list[str]] = {
     "deepseek": list(DEEPSEEK_MODEL_LABELS.keys()),
-    "zhipu": ["glm-5.2", "glm-5.1", "glm-4.7"],
+    "zhipu": list(ZHIPU_MODEL_LABELS.keys()),
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     "gemini": ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"],
     "dashscope": list(DASHSCOPE_MODEL_LABELS.keys()),
@@ -257,20 +261,49 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "agnes": list(AGNES_MODEL_LABELS.keys()),
 }
 
+MULTIMODAL_MODELS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("openai", "gpt-4o"),
+        ("openai", "gpt-4o-mini"),
+        ("openai", "gpt-4.1-mini"),
+        ("gemini", "gemini-2.0-flash"),
+        ("gemini", "gemini-2.5-flash-preview-05-20"),
+        ("dashscope", "kimi-k2.6"),
+        ("dashscope", "qwen3.7-plus"),
+        ("dashscope", "qwen3.6-plus"),
+        ("zhipu", "glm-4.6v"),
+        ("zhipu", "glm-4.6v-flash"),
+        ("mimo", "mimo-v2.5"),
+        ("agnes", "agnes-2.0-flash"),
+        ("agnes", "agnes-2.0-flash-thinking"),
+    }
+)
+
+_VISION_LABEL_SUFFIX = " · 👁 支持识图"
+
+
+def is_multimodal_model(provider: str, model_id: str) -> bool:
+    """是否支持 Stage 1 图片识题。"""
+    return (provider.lower(), model_id) in MULTIMODAL_MODELS
+
 
 def format_model_label(provider: str, model_id: str) -> str:
     """侧边栏下拉展示名；百炼 / MiMo 用中文说明，其它提供商显示原始 ID。"""
     if provider == "dashscope":
-        return DASHSCOPE_MODEL_LABELS.get(model_id, model_id)
-    if provider == "mimo":
-        return MIMO_MODEL_LABELS.get(model_id, model_id)
-    if provider == "deepseek":
-        return DEEPSEEK_MODEL_LABELS.get(model_id, model_id)
-    if provider == "zhipu":
-        return ZHIPU_MODEL_LABELS.get(model_id, model_id)
-    if provider == "agnes":
-        return AGNES_MODEL_LABELS.get(model_id, model_id)
-    return model_id
+        label = DASHSCOPE_MODEL_LABELS.get(model_id, model_id)
+    elif provider == "mimo":
+        label = MIMO_MODEL_LABELS.get(model_id, model_id)
+    elif provider == "deepseek":
+        label = DEEPSEEK_MODEL_LABELS.get(model_id, model_id)
+    elif provider == "zhipu":
+        label = ZHIPU_MODEL_LABELS.get(model_id, model_id)
+    elif provider == "agnes":
+        label = AGNES_MODEL_LABELS.get(model_id, model_id)
+    else:
+        label = model_id
+    if is_multimodal_model(provider, model_id):
+        return f"{label}{_VISION_LABEL_SUFFIX}"
+    return label
 
 
 @dataclass(frozen=True)

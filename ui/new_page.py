@@ -36,6 +36,7 @@ from services.workflow_storage import (
 )
 from utils.config import resolve_api_key
 from utils.export_word import export_workflow_to_word
+from utils.question_input import question_input_conflict
 from workflow import WorkflowState
 
 from ui.history import (
@@ -56,6 +57,13 @@ from ui.stale_results import (
     question_results_stale,
     render_stale_results_warning,
 )
+
+
+def _maybe_start_run(mode: str, question: str) -> bool:
+    """启动运行前校验图文互斥（run_manager 内亦有校验）。"""
+    if question_input_conflict(question, st.session_state.get("question_image")):
+        return False
+    return try_start_run_job(mode, question)
 
 
 def maybe_clear_checkpoint_if_question_changed(question: str) -> None:
@@ -476,6 +484,41 @@ def render_new_analysis(api_ready: bool) -> None:
     )
     st.session_state.question = question
 
+    uploaded = st.file_uploader(
+        "或上传题目图片（jpg/png，单张）",
+        type=["jpg", "jpeg", "png"],
+        key="question_image_uploader",
+        label_visibility="collapsed",
+    )
+    if uploaded is not None:
+        try:
+            from utils.question_input import compress_uploaded_image
+
+            compressed = compress_uploaded_image(
+                uploaded.getvalue(), filename=uploaded.name
+            )
+            st.session_state.question_image = {
+                "mime": "image/jpeg",
+                "b64": compressed.b64,
+                "name": uploaded.name,
+            }
+        except ValueError as e:
+            st.error(str(e))
+            st.session_state.question_image = None
+
+    if st.session_state.get("question_image"):
+        st.image(
+            f"data:image/jpeg;base64,{st.session_state.question_image['b64']}",
+            width=280,
+        )
+        if st.button("清除图片", key="clear_question_image"):
+            st.session_state.question_image = None
+            st.rerun()
+        st.caption("已上传图片，请选用侧边栏带 👁 支持识图 的模型。")
+
+    if question_input_conflict(question, st.session_state.get("question_image")):
+        st.error("请只保留文字或图片其中一种输入方式。")
+
     # 快捷难度切换按钮
     st.markdown(
         '<p class="section-label">学生水平'
@@ -597,8 +640,8 @@ def render_new_analysis(api_ready: bool) -> None:
                 st.session_state._confirm_clear = False
                 st.rerun()
 
-    if not question.strip():
-        st.warning("请先输入题目内容")
+    if not question.strip() and not st.session_state.get("question_image"):
+        st.warning("请先输入题目内容或上传题目图片")
         return
 
     if not api_ready:
@@ -639,7 +682,7 @@ def render_new_analysis(api_ready: bool) -> None:
             key="btn_clear_rerun_full",
         ):
             clear_checkpoint()
-            if try_start_run_job("full", question):
+            if _maybe_start_run("full", question):
                 st.rerun()
 
     if _next_stage is not None and not running and not st.session_state.run_job and not _model_mismatch:
@@ -652,7 +695,7 @@ def render_new_analysis(api_ready: bool) -> None:
                 key="btn_resume",
             ):
                 maybe_clear_checkpoint_if_question_changed(question)
-                if try_start_run_job("resume", question):
+                if _maybe_start_run("resume", question):
                     st.rerun()
         with _r2:
             _done = sum(1 for s in range(1, 5) if stage_has_content(_cached, s))
@@ -669,7 +712,7 @@ def render_new_analysis(api_ready: bool) -> None:
             ):
                 maybe_clear_checkpoint_if_question_changed(question)
                 _mode_map = {1: "stage1", 2: "stage2", 3: "stage3", 4: "stage4"}
-                if try_start_run_job(_mode_map.get(_failed, "full"), question):
+                if _maybe_start_run(_mode_map.get(_failed, "full"), question):
                     st.rerun()
         with _t2:
             st.caption(f"Stage {_failed} 上次生成失败，点击可重新尝试")
@@ -685,7 +728,7 @@ def render_new_analysis(api_ready: bool) -> None:
             ):
                 maybe_clear_checkpoint_if_question_changed(question)
                 _mode_map = {1: "stage1", 2: "stage2", 3: "stage3", 4: "stage4"}
-                if try_start_run_job(_mode_map.get(_stopped, "full"), question):
+                if _maybe_start_run(_mode_map.get(_stopped, "full"), question):
                     st.rerun()
         with _s2:
             st.caption(f"Stage {_stopped} 已停止（如切换模型），点击可继续生成")
@@ -733,7 +776,7 @@ def render_new_analysis(api_ready: bool) -> None:
 
         if clicked_mode:
             maybe_clear_checkpoint_if_question_changed(question)
-            if try_start_run_job(clicked_mode, question):
+            if _maybe_start_run(clicked_mode, question):
                 st.rerun()
         _render_stage_fragment(stage_slots)
 
@@ -762,7 +805,7 @@ def render_new_analysis(api_ready: bool) -> None:
             if st.session_state.get("_rerun_stage_mode"):
                 _mode = st.session_state.pop("_rerun_stage_mode")
                 maybe_clear_checkpoint_if_question_changed(question)
-                if try_start_run_job(_mode, question):
+                if _maybe_start_run(_mode, question):
                     st.rerun()
 
     state = st.session_state.workflow_state

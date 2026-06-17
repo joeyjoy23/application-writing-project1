@@ -52,7 +52,9 @@
   },
   "genre_specific_moves": [],
   "transition_strategy": [],
-  "high_score_strategy": []
+  "high_score_strategy": [],
+  "recognized_question_text": "",
+  "image_brief_description": ""
 }
 
 字段说明：
@@ -70,6 +72,8 @@
 - genre_specific_moves：本体裁常用语步 2–3 条（如建议信：问题—建议—期待），短句数组
 - transition_strategy：衔接策略短句数组
 - high_score_strategy：整体高分策略短句数组
+- `recognized_question_text`（图片输入时必填）：图中可识别的题目原文
+- `image_brief_description`（图片输入时必填）：图片内容一句话描述（如「两张活动海报供二选一」）
 
 ### PART B：HUMAN_READABLE_SUMMARY
 

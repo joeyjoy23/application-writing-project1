@@ -19,11 +19,18 @@ def format_stage1_json(stage1_json: dict[str, Any]) -> str:
     return json.dumps(stage1_json, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+def build_stage1_image_user_part(*, data_uri: str, hint: str) -> list[dict[str, Any]]:
+    return [
+        {"type": "image_url", "image_url": {"url": data_uri}},
+        {"type": "text", "text": hint.strip()},
+    ]
+
+
 def build_chat_messages(
     *,
     system_base: str,
     stage_prompt: str,
-    user_parts: list[str],
+    user_parts: list[str | list[dict[str, Any]]],
     tail_instruction: str = "",
 ) -> list[dict[str, Any]]:
     """
@@ -33,17 +40,23 @@ def build_chat_messages(
     关闭 ENABLE_PROMPT_CACHE_LAYOUT 时回退为单 system + 单 user。
     """
     if not prompt_cache_layout_enabled():
-        chunks = [p for p in user_parts if p.strip()]
+        chunks = [
+            p.strip() for p in user_parts if isinstance(p, str) and p.strip()
+        ]
         if tail_instruction.strip():
             chunks.append(tail_instruction.strip())
         user_body = "\n\n".join(chunks)
-        return [
+        messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": f"{system_base}\n\n---\n\n{stage_prompt}",
             },
             {"role": "user", "content": user_body},
         ]
+        for part in user_parts:
+            if isinstance(part, list):
+                messages.append({"role": "user", "content": part})
+        return messages
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_base}]
     if stage_prompt.strip():
@@ -54,7 +67,9 @@ def build_chat_messages(
             }
         )
     for part in user_parts:
-        if part.strip():
+        if isinstance(part, list):
+            messages.append({"role": "user", "content": part})
+        elif part.strip():
             messages.append({"role": "user", "content": part.strip()})
     if tail_instruction.strip():
         messages.append({"role": "user", "content": tail_instruction.strip()})

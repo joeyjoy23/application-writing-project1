@@ -57,3 +57,27 @@ def test_format_stage1_json_sort_keys():
     b = format_stage1_json({"a": 2, "z": 1})
     assert a == b
     assert '"a"' in a and a.index('"a"') < a.index('"z"')
+
+
+def test_build_stage1_image_user_part():
+    from utils.llm_messages import build_stage1_image_user_part
+
+    part = build_stage1_image_user_part(
+        data_uri="data:image/jpeg;base64,abc",
+        hint="【原题图片】请识别图中题目。",
+    )
+    assert part[0]["type"] == "image_url"
+    assert part[0]["image_url"]["url"] == "data:image/jpeg;base64,abc"
+    assert part[1]["type"] == "text"
+
+
+def test_build_chat_messages_accepts_multimodal_user_part(monkeypatch):
+    monkeypatch.setenv("ENABLE_PROMPT_CACHE_LAYOUT", "1")
+    multimodal = [{"type": "text", "text": "see image"}]
+    msgs = build_chat_messages(
+        system_base="SYS",
+        stage_prompt="P",
+        user_parts=[multimodal],
+        tail_instruction="TAIL",
+    )
+    assert msgs[2]["content"] == multimodal
