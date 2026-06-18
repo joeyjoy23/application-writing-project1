@@ -9,11 +9,19 @@ from workflow import WorkflowState
 
 def question_results_stale(question: str) -> bool:
     """题目已改但本页仍显示上一题生成结果。"""
+    from utils.question_input import resolve_effective_question
+
     last = (st.session_state.get("last_question") or "").strip()
     state = st.session_state.get("workflow_state")
     if not last or not state or not state.stage1:
         return False
-    return question.strip() != last
+    effective = resolve_effective_question(
+        question,
+        st.session_state.get("question_image"),
+        workflow_question=state.question or last,
+        last_question=last,
+    )
+    return effective != last
 
 
 def inject_stale_results_styles() -> None:

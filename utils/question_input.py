@@ -26,6 +26,31 @@ def question_input_conflict(text: str, image: dict[str, Any] | QuestionImage | N
     return has_text and has_image
 
 
+def resolve_effective_question(
+    text: str,
+    image: dict[str, Any] | QuestionImage | None,
+    *,
+    workflow_question: str | None = None,
+    last_question: str | None = None,
+) -> str:
+    """换题检测 / 续跑用：图片题或恢复会话时编辑器可能为空，需与 workflow 对齐。"""
+    t = (text or "").strip()
+    wq = (workflow_question or "").strip()
+    lq = (last_question or "").strip()
+    has_image = image is not None and bool(
+        getattr(image, "b64", None) or (image or {}).get("b64")
+    )
+    if t and not question_input_conflict(t, image):
+        return t
+    if wq:
+        return wq
+    if lq:
+        return lq
+    if has_image:
+        return "[图片题目]"
+    return t
+
+
 def image_to_data_uri(image: QuestionImage | dict[str, Any]) -> str:
     if isinstance(image, QuestionImage):
         mime, b64 = image.mime, image.b64

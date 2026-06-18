@@ -13,6 +13,12 @@ def test_question_input_conflict():
     assert question_input_conflict("text", {"b64": "x", "mime": "image/jpeg"}) is True
 
 
+def test_resolve_effective_question_prefers_editor_text():
+    from utils.question_input import resolve_effective_question
+
+    assert resolve_effective_question("纯文字题", None) == "纯文字题"
+
+
 def test_format_image_question_for_history():
     assert format_image_question_for_history({
         "recognized_question_text": "Write a letter...",

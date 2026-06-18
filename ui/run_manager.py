@@ -716,12 +716,20 @@ def try_start_run_job(mode: str, question: str) -> bool:
             f"请改用 {recommended_image_models_text()} 等侧边栏带 👁 的模型。"
         )
         return False
-    if image and not (question or "").strip():
-        question = "[图片题目]"
 
     state: WorkflowState = st.session_state.workflow_state or WorkflowState(
         question=question
     )
+    from utils.question_input import resolve_effective_question
+
+    question = resolve_effective_question(
+        question,
+        image,
+        workflow_question=state.question if state.stage1 else None,
+        last_question=st.session_state.get("last_question"),
+    )
+    if image and not (question or "").strip():
+        question = "[图片题目]"
     state.question = question
 
     ensure_workflow_origin_from_history()

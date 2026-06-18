@@ -38,3 +38,26 @@ def test_question_results_stale_false_without_results():
     ss = {"last_question": "题", "workflow_state": None}
     with patch("ui.stale_results.st.session_state", ss):
         assert question_results_stale("另一题") is False
+
+
+def test_question_results_stale_false_when_editor_empty_but_workflow_matches():
+    state = WorkflowState(question="识别后的题目\n[图：海报]")
+    state.stage1 = Stage1Result(raw="", structured_json={}, human_summary="s")
+    ss = {
+        "last_question": "识别后的题目\n[图：海报]",
+        "workflow_state": state,
+        "question_image": {"b64": "x", "mime": "image/jpeg"},
+    }
+    with patch("ui.stale_results.st.session_state", ss):
+        assert question_results_stale("") is False
+
+
+def test_resolve_effective_question_image_with_stage1():
+    from utils.question_input import resolve_effective_question
+
+    assert resolve_effective_question(
+        "",
+        {"b64": "x", "mime": "image/jpeg"},
+        workflow_question="真题文本",
+        last_question="真题文本",
+    ) == "真题文本"

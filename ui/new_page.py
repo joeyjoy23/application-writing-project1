@@ -74,11 +74,19 @@ def _maybe_start_run(mode: str, question: str) -> bool:
 
 def maybe_clear_checkpoint_if_question_changed(question: str) -> None:
     """仅在即将开始新的生成时检测题目是否变更。"""
+    from utils.question_input import resolve_effective_question
+
     cached_question = st.session_state.last_question
     cached_state = st.session_state.workflow_state
     if not cached_question or not cached_state or not cached_state.stage1:
         return
-    if question.strip() != cached_question.strip():
+    effective = resolve_effective_question(
+        question,
+        st.session_state.get("question_image"),
+        workflow_question=cached_state.question or cached_question,
+        last_question=cached_question,
+    )
+    if effective.strip() != cached_question.strip():
         clear_checkpoint()
         st.toast("题目已变更，已清除本页缓存（历史记录保留）", icon="🔄")
 
@@ -518,7 +526,15 @@ def render_new_analysis(api_ready: bool) -> None:
         key="question_editor",
         label_visibility="collapsed",
     )
-    st.session_state.question = question
+    # 图片题或程序回填后，空编辑器勿覆盖 workflow 中的题目文本
+    _ws_q = st.session_state.get("workflow_state")
+    if question.strip():
+        st.session_state.question = question
+    elif _ws_q and _ws_q.stage1 and (_ws_q.question or "").strip():
+        question = _ws_q.question.strip()
+        st.session_state.question = question
+    else:
+        st.session_state.question = question
 
     uploaded = st.file_uploader(
         "或上传题目图片（jpg/png，单张）",
