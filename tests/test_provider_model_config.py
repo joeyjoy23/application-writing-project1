@@ -74,6 +74,7 @@ def test_multimodal_whitelist():
         ("openai", "gpt-4.1-mini"),
         ("gemini", "gemini-2.0-flash"),
         ("gemini", "gemini-2.5-flash-preview-05-20"),
+        ("gemini", "gemini-3-flash-preview"),
         ("dashscope", "qwen3.7-plus"),
         ("dashscope", "qwen3.6-plus"),
         ("zhipu", "glm-4.6v"),
@@ -98,6 +99,13 @@ def test_question_image_upload_support():
     assert supports_question_image_upload("dashscope", "kimi-k2.6") is False
     assert supports_question_image_upload("deepseek", "deepseek-v4-pro") is False
     assert "gpt-4o" in recommended_image_models_text()
+
+
+def test_gemini_3_flash_preview_in_provider_models():
+    assert "gemini-3-flash-preview" in PROVIDER_MODELS["gemini"]
+    assert PROVIDER_MODELS["gemini"][0] == "gemini-3-flash-preview"
+    assert is_multimodal_model("gemini", "gemini-3-flash-preview") is True
+    assert supports_question_image_upload("gemini", "gemini-3-flash-preview") is True
 
 
 def test_groq_models_in_provider_lists():
