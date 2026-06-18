@@ -169,7 +169,7 @@ def _provider_key_label(provider: str) -> str:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.18-run-recovery"
+UI_BUILD_TAG = "2026.06.18-llm-cache-default"
 
 
 def _render_admin_popover_body() -> None:
@@ -377,6 +377,7 @@ def render_sidebar() -> bool:
 
             st.checkbox(
                 "使用 LLM 结果缓存（同题同模型可跳过 API）",
+                value=True,
                 help="命中缓存时直接载入该阶段结果；修改 prompts 目录后自动失效。",
                 key="use_llm_cache",
             )

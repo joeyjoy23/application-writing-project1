@@ -14,7 +14,7 @@ from services.api_key_persist import (
 
 def test_parse_empty_returns_defaults() -> None:
     prefs = parse_storage_payload(None)
-    assert prefs == BrowserPrefs(False, {}, "", "")
+    assert prefs == BrowserPrefs(False, {}, "", "", use_llm_cache=True)
 
 
 def test_build_and_parse_roundtrip() -> None:
@@ -37,6 +37,25 @@ def test_parse_legacy_payload_without_model_fields() -> None:
     assert prefs.keys == {"deepseek": "sk-x"}
     assert prefs.provider == ""
     assert prefs.model == ""
+    assert prefs.use_llm_cache is True
+
+
+def test_parse_legacy_payload_without_use_llm_cache_defaults_true() -> None:
+    raw = '{"remember":true,"keys":{"deepseek":"sk-x"},"provider":"deepseek","model":"gpt-4o"}'
+    prefs = parse_storage_payload(raw)
+    assert prefs.use_llm_cache is True
+
+
+def test_build_and_parse_use_llm_cache() -> None:
+    raw = build_storage_payload(
+        remember=True,
+        keys={"deepseek": "sk-test"},
+        provider="deepseek",
+        model="deepseek-v4-pro",
+        use_llm_cache=False,
+    )
+    prefs = parse_storage_payload(raw)
+    assert prefs.use_llm_cache is False
 
 
 def test_parse_invalid_json() -> None:
