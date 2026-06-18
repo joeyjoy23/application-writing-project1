@@ -15,6 +15,7 @@ class BrowserPrefs:
     keys: dict[str, str]
     provider: str
     model: str
+    guest_id: str = ""
 
 
 def parse_storage_payload(raw: str | None) -> BrowserPrefs:
@@ -39,7 +40,8 @@ def parse_storage_payload(raw: str | None) -> BrowserPrefs:
         }
     provider = str(data.get("provider") or "").strip()
     model = str(data.get("model") or "").strip()
-    return BrowserPrefs(remember=remember, keys=keys, provider=provider, model=model)
+    guest_id = str(data.get("guest_id") or "").strip()
+    return BrowserPrefs(remember=remember, keys=keys, provider=provider, model=model, guest_id=guest_id)
 
 
 def build_storage_payload(
@@ -48,6 +50,7 @@ def build_storage_payload(
     keys: dict[str, str],
     provider: str = "",
     model: str = "",
+    guest_id: str = "",
 ) -> str:
     """序列化为 localStorage JSON。"""
     cleaned = {
@@ -61,6 +64,9 @@ def build_storage_payload(
         "provider": (provider or "").strip(),
         "model": (model or "").strip(),
     }
+    gid = (guest_id or "").strip()
+    if gid:
+        payload["guest_id"] = gid
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -88,4 +94,4 @@ def key_for_provider(keys: dict[str, str], provider: str) -> str:
 
 
 def prefs_has_content(prefs: BrowserPrefs) -> bool:
-    return bool(prefs.keys or prefs.provider or prefs.model)
+    return bool(prefs.keys or prefs.provider or prefs.model or prefs.guest_id)

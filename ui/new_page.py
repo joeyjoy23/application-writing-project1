@@ -500,6 +500,14 @@ def _render_stage_fragment(stage_slots):
 
 def render_new_analysis(api_ready: bool) -> None:
     """新建分析模式：输入题目与运行流程。"""
+    banner = st.session_state.pop("_recovery_banner", None)
+    if banner:
+        st.info(banner)
+    preview = st.session_state.pop("_recovered_stream_preview", None)
+    if preview:
+        with st.expander("上次中断时的部分输出（未解析）", expanded=False):
+            st.text(preview[:2500])
+
     st.markdown('<p class="section-label">题目输入</p>', unsafe_allow_html=True)
 
     question = st.text_area(

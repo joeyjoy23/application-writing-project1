@@ -67,7 +67,7 @@ LLM_MODEL = "deepseek-v4-pro"
 **自动保存**：每完成一个 Stage（至少 Stage 1）即写入 `history` 表，同题同模型合并为一条。  
 **清空当前结果** 只清页面状态，**不删** `history` 表记录。详见 [USAGE.md](USAGE.md)。
 
-换浏览器或清缓存会生成新的 `guest_id`，旧历史对该浏览器不可见（除非管理员查看）。
+换浏览器或清缓存会生成新的 `guest_id`，旧历史对该浏览器不可见（除非管理员查看）。**同一浏览器**会尽量记住 `guest_id`（与 API Key 同存 localStorage），离开后再打开可恢复历史列表与断点。
 
 ## 6. 故障排查
 

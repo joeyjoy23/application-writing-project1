@@ -98,6 +98,8 @@ def hydrate_session_from_browser() -> None:
         stored = key_for_provider(prefs.keys, st.session_state.provider)
         if stored:
             st.session_state.api_key = stored
+    if prefs.guest_id:
+        st.session_state.guest_id = prefs.guest_id
 
 
 def persist_session_to_browser() -> None:
@@ -111,6 +113,10 @@ def persist_session_to_browser() -> None:
     model = st.session_state.model
     api_key = st.session_state.get("api_key") or ""
 
+    from db.identity import ensure_guest_id
+
+    guest_id = ensure_guest_id()
+
     keys = merge_provider_key(keys, provider, api_key, remember=remember)
     st.session_state._stored_api_keys = keys
 
@@ -119,6 +125,7 @@ def persist_session_to_browser() -> None:
         keys=keys,
         provider=provider,
         model=model,
+        guest_id=guest_id,
     )
     if not prefs_has_content(prefs):
         remove_local_storage(STORAGE_KEY, component_key="awp_ls_remove")
@@ -131,6 +138,7 @@ def persist_session_to_browser() -> None:
             keys=keys,
             provider=provider,
             model=model,
+            guest_id=guest_id,
         ),
         component_key="awp_ls_save",
     )

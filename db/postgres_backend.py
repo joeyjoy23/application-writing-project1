@@ -86,6 +86,13 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_hqi_expires ON history_question_images (expires_at)",
+    """
+    CREATE TABLE IF NOT EXISTS run_checkpoints (
+        owner_id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
 )
 
 
@@ -462,6 +469,40 @@ def _purge_expired_history_question_images() -> int:
         if n:
             logger.info("已清理 %d 条过期历史原图", n)
         return int(n)
+
+
+def save_run_checkpoint(owner_id: str, payload_json: str) -> None:
+    init_db()
+    now = utc_now_str()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO run_checkpoints (owner_id, payload_json, updated_at)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (owner_id) DO UPDATE SET
+                payload_json = EXCLUDED.payload_json,
+                updated_at = EXCLUDED.updated_at
+            """,
+            (owner_id, payload_json, now),
+        )
+        conn.commit()
+
+
+def get_run_checkpoint(owner_id: str) -> dict[str, Any] | None:
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT owner_id, payload_json, updated_at FROM run_checkpoints WHERE owner_id = %s",
+            (owner_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_run_checkpoint(owner_id: str) -> None:
+    init_db()
+    with _connect() as conn:
+        conn.execute("DELETE FROM run_checkpoints WHERE owner_id = %s", (owner_id,))
+        conn.commit()
 
 
 def get_llm_cache(cache_key: str, *, owner_id: str) -> str | None:

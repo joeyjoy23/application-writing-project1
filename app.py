@@ -210,6 +210,12 @@ def main() -> None:
                 "历史库连接异常（可能是短暂并发冲突）。请刷新页面重试；"
                 "若仍失败，请在 Streamlit Cloud 中 Reboot app。"
             )
+    from db.identity import ensure_guest_id
+    from services.run_recovery import try_recover_session_from_checkpoint
+
+    recovery_msg = try_recover_session_from_checkpoint(ensure_guest_id())
+    if recovery_msg:
+        st.session_state["_recovery_banner"] = recovery_msg
     from ui.new_page import render_history_page, render_new_analysis
     from ui.sidebar import UI_BUILD_TAG, inject_sidebar_collapse_dock, render_sidebar
 

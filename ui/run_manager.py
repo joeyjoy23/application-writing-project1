@@ -24,7 +24,12 @@ from utils.config import (
     resolve_model_for_provider,
     supports_question_image_upload,
 )
-from utils.question_input import question_input_conflict
+from services.run_recovery import (
+    clear_run_checkpoint_for_owner,
+    maybe_persist_stream_checkpoint,
+    persist_run_checkpoint,
+    persist_stage_completion_background,
+)
 from ui.run_cache import (
     merge_job_usage,
     save_stage_cache,
@@ -345,7 +350,12 @@ def _job_on_progress(
     return _cb
 
 
-def _job_on_stream(job: dict[str, Any], stage: int, cancel_event: threading.Event):
+def _job_on_stream(
+    job: dict[str, Any],
+    stage: int,
+    cancel_event: threading.Event,
+    state: WorkflowState,
+):
     def _cb(_d: str, total: int, full: str) -> None:
         if cancel_event.is_set():
             return
@@ -354,6 +364,7 @@ def _job_on_stream(job: dict[str, Any], stage: int, cancel_event: threading.Even
             job["stream_stage"] = stage
             job["stream_total"] = total
             job["stream_preview"] = preview
+        maybe_persist_stream_checkpoint(job.get("owner_id") or "", job, state)
 
     return _cb
 
@@ -388,7 +399,7 @@ def _execute_stage_api(
             question,
             question_image=job.get("question_image"),
             on_progress=_job_on_progress(job, 1, cancel_event),
-            on_stream=_job_on_stream(job, 1, cancel_event),
+            on_stream=_job_on_stream(job, 1, cancel_event, state),
             should_cancel=should_cancel,
         )
         if cancel_event.is_set():
@@ -402,7 +413,7 @@ def _execute_stage_api(
             question,
             _require_stage1_json(state),
             on_progress=_job_on_progress(job, 2, cancel_event),
-            on_stream=_job_on_stream(job, 2, cancel_event),
+            on_stream=_job_on_stream(job, 2, cancel_event, state),
             should_cancel=should_cancel,
         )
         if cancel_event.is_set():
@@ -416,7 +427,7 @@ def _execute_stage_api(
             question,
             _require_stage1_json(state),
             on_progress=_job_on_progress(job, 3, cancel_event),
-            on_stream=_job_on_stream(job, 3, cancel_event),
+            on_stream=_job_on_stream(job, 3, cancel_event, state),
             should_cancel=should_cancel,
         )
         if cancel_event.is_set():
@@ -432,7 +443,7 @@ def _execute_stage_api(
             _require_stage3_raw(state),
             student_level=job.get("student_level", "中等"),
             on_progress=_job_on_progress(job, 4, cancel_event),
-            on_stream=_job_on_stream(job, 4, cancel_event),
+            on_stream=_job_on_stream(job, 4, cancel_event, state),
             should_cancel=should_cancel,
         )
         if cancel_event.is_set():
@@ -505,6 +516,13 @@ def _start_api_thread(job: dict[str, Any], stage_num: int, state: WorkflowState)
                                 "Stage %d 完成，耗时 %.1f 秒", stage_num, elapsed
                             )
                             job["thread_result"] = result_holder[0]
+                            persist_stage_completion_background(
+                                job.get("owner_id") or "",
+                                job,
+                                state,
+                                stage_num,
+                                result_holder[0],
+                            )
                             return
                         if error_holder:
                             job["thread_error"] = error_holder[0]
@@ -755,6 +773,9 @@ def try_start_run_job(mode: str, question: str) -> bool:
     locked_provider = st.session_state.provider
     locked_model = resolve_model_for_provider(locked_provider, st.session_state.model)
     allow_history_save(question, locked_model)
+    from db.identity import ensure_guest_id
+
+    owner_id = ensure_guest_id()
     # 勿写入 st.session_state.model：侧边栏 selectbox(key="model") 已绑定，会触发 StreamlitAPIException
     st.session_state.run_job = {
         "mode": mode,
@@ -779,7 +800,9 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "_flush_queue_idx": 0,
         "student_level": st.session_state.get("student_level", "中等"),
         "question_image": image,
+        "owner_id": owner_id,
     }
+    persist_run_checkpoint(owner_id, st.session_state.run_job, state, run_status="running")
     st.session_state.llm_run_usage = None
     if mode == "full":
         if len(stages) < 4:
@@ -851,6 +874,7 @@ def _finish_job_success(
     set_workflow_origin_from_job(job)
     logger.info("运行完成 mode=%s", mode)
     _persist_history_from_job(job, state, notify=False)
+    clear_run_checkpoint_for_owner(job.get("owner_id") or "")
     clear_run_job()
     if state.errors:
         for err in state.errors:

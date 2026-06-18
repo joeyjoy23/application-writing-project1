@@ -105,6 +105,10 @@ def api_key_configured() -> bool:
 
 def clear_checkpoint() -> None:
     """清空当前页面的生成结果与断点（不删除「历史」中的已存记录）。"""
+    from services.run_recovery import clear_run_checkpoint_for_owner
+    from db.identity import ensure_guest_id
+
+    clear_run_checkpoint_for_owner(ensure_guest_id())
     from services.workflow_origin import clear_workflow_origin
 
     st.session_state.workflow_state = None
@@ -165,7 +169,7 @@ def _provider_key_label(provider: str) -> str:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.15-history-delete-fix"
+UI_BUILD_TAG = "2026.06.18-run-recovery"
 
 
 def _render_admin_popover_body() -> None:

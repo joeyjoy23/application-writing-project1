@@ -32,6 +32,9 @@ __all__ = [
     "save_history_question_image",
     "get_history_question_image",
     "purge_expired_history_question_images",
+    "save_run_checkpoint",
+    "get_run_checkpoint",
+    "delete_run_checkpoint",
     "format_stages_mask",
     "format_usage_total",
     "format_usage_detail",
@@ -108,7 +111,9 @@ def upsert_record(
     word_count: int | None = None,
     stages_mask: str = "0000",
     usage: dict[str, int] | None = None,
+    owner_id: str | None = None,
 ) -> tuple[int, bool]:
+    oid = owner_id if owner_id is not None else history_scope()[0]
     result = _backend().upsert_record(
         question,
         model,
@@ -117,7 +122,7 @@ def upsert_record(
         word_count=word_count,
         stages_mask=stages_mask,
         usage=usage,
-        owner_id=history_scope()[0],
+        owner_id=oid,
     )
     invalidate_history_cache()
     return result
@@ -166,14 +171,16 @@ def get_record_by_id(record_id: int) -> dict[str, Any] | None:
 def save_history_question_image(
     record_id: int,
     question_image: dict[str, Any],
+    *,
+    owner_id: str | None = None,
 ) -> None:
     b64 = (question_image or {}).get("b64")
     if not b64:
         return
-    owner_id, _ = history_scope()
+    oid = owner_id if owner_id is not None else history_scope()[0]
     _backend().save_history_question_image(
         record_id,
-        owner_id=owner_id,
+        owner_id=oid,
         mime=(question_image.get("mime") or "image/jpeg"),
         image_b64=str(b64),
     )
@@ -185,6 +192,18 @@ def get_history_question_image(record_id: int) -> dict[str, Any] | None:
 
 def purge_expired_history_question_images() -> int:
     return _backend().purge_expired_history_question_images()
+
+
+def save_run_checkpoint(owner_id: str, payload_json: str) -> None:
+    _backend().save_run_checkpoint(owner_id, payload_json)
+
+
+def get_run_checkpoint(owner_id: str) -> dict[str, Any] | None:
+    return _backend().get_run_checkpoint(owner_id)
+
+
+def delete_run_checkpoint(owner_id: str) -> None:
+    _backend().delete_run_checkpoint(owner_id)
 
 
 def delete_record(record_id: int) -> bool:
