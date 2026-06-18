@@ -31,7 +31,7 @@ from services.workflow_progress import (
 )
 from utils.datetime_util import format_created_at_display, format_created_at_list
 from services.workflow_storage import (
-    make_export_json_filename,
+    make_export_html_filename,
     make_export_word_filename,
     resolve_raw_input,
     workflow_state_from_json,
@@ -41,6 +41,7 @@ from utils.config import (
     resolve_api_key,
     supports_question_image_upload,
 )
+from utils.export_html import export_workflow_to_html
 from utils.export_word import export_workflow_to_word
 from utils.question_input import question_input_conflict
 from workflow import WorkflowState
@@ -107,13 +108,13 @@ def render_export_buttons(
     created_at: str | None = None,
     key_prefix: str = "export",
 ) -> None:
-    """导出 JSON / Word（新建页与历史详情共用）。"""
+    """导出 Word / HTML（新建页与历史详情共用）。"""
     if not state.stage1:
         return
     done = _completed_stage_count(state)
     if done < 4:
         st.warning(
-            f"当前仅完成 {done}/4 个阶段，导出的 Word / JSON 将缺少未完成阶段内容。"
+            f"当前仅完成 {done}/4 个阶段，导出的 Word / HTML 将缺少未完成阶段内容。"
         )
     st.markdown(
         '<div class="export-section">'
@@ -150,12 +151,22 @@ def render_export_buttons(
             question_type=question_type,
             question_type_label=question_type_label,
         )
+        html_bytes = export_workflow_to_html(
+            question=state.question,
+            stage1_summary=state.stage1.human_summary,
+            stage2_raw=state.stage2.raw if state.stage2 else None,
+            stage3_raw=state.stage3.raw if state.stage3 else None,
+            stage4_raw=state.stage4.raw if state.stage4 else None,
+            saved_at_utc=created_at,
+            question_type_label=question_type_label,
+        )
         word_name = make_export_word_filename(model, created_at)
-        json_name = make_export_json_filename(model, created_at)
+        html_name = make_export_html_filename(model, created_at)
     except Exception as e:
         word_bytes = None
-        json_name = make_export_json_filename(model, created_at)
-        st.error(f"Word 生成失败: {e}")
+        html_bytes = None
+        html_name = make_export_html_filename(model, created_at)
+        st.error(f"导出文件生成失败: {e}")
 
     if key_prefix.startswith("hist_"):
         key_base = key_prefix
@@ -165,7 +176,7 @@ def render_export_buttons(
             f"{hashlib.sha256(json.dumps(export, ensure_ascii=False, sort_keys=True).encode()).hexdigest()}"
         )
 
-    col_word, col_json = st.columns([3, 2])
+    col_word, col_html = st.columns([3, 2])
     with col_word:
         if word_bytes:
             st.download_button(
@@ -178,15 +189,17 @@ def render_export_buttons(
                 help="含题目、四阶段完整内容；标题/表格/列表已排版，便于阅读与打印",
                 key=f"{key_base}_word",
             )
-    with col_json:
-        st.download_button(
-            "📋 下载 JSON",
-            data=json.dumps(export, ensure_ascii=False, indent=2),
-            file_name=json_name,
-            mime="application/json",
-            use_container_width=True,
-            key=f"{key_base}_json",
-        )
+    with col_html:
+        if html_bytes:
+            st.download_button(
+                "🌐 导出 HTML",
+                data=html_bytes,
+                file_name=html_name,
+                mime="text/html",
+                use_container_width=True,
+                help="独立网页文件，排版贴近应用内展示，可在浏览器打开或打印",
+                key=f"{key_base}_html",
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
 

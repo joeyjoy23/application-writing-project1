@@ -27,6 +27,11 @@ def make_export_word_filename(model: str, date_str: str | None = None) -> str:
     return f"应用文分析_{date_str}_{safe_model}.docx"
 
 
+def make_export_html_filename(model: str, date_str: str | None = None) -> str:
+    """HTML 导出文件名：与 Word 同名规则，扩展名为 .html"""
+    return make_export_word_filename(model, date_str).removesuffix(".docx") + ".html"
+
+
 def make_export_json_filename(model: str, date_str: str | None = None) -> str:
     """JSON 导出文件名：与 Word 同名规则，扩展名为 .json"""
     return make_export_word_filename(model, date_str).removesuffix(".docx") + ".json"
