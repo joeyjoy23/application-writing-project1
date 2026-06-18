@@ -166,6 +166,19 @@ def format_construction_dimensions(text: str) -> str:
 _LABEL_LINE = re.compile(
     r"^(\s*)(?:[-*+]\s+)?\*\*[^*]+?\*\*\s*[：:]"
 )
+_BOLD_PAIR_RE = re.compile(r"\*\*([^*\n]+?)\*\*")
+_BOLD_OPEN_LABEL_RE = re.compile(r"\*\*\s+([^：:\n*]+?)([：:])")
+
+
+def normalize_bold_markers(text: str) -> str:
+    """Fix LLM bold like ``** 标签**`` / ``** 标签：`` so Markdown renders."""
+    if not text or "**" not in text:
+        return text
+    cleaned = _BOLD_PAIR_RE.sub(
+        lambda m: f"**{m.group(1).strip()}**",
+        text,
+    )
+    return _BOLD_OPEN_LABEL_RE.sub(r"**\1**\2", cleaned)
 _HEADING_LINE = re.compile(r"^\s*#{1,6}\s")
 _LIST_LINE = re.compile(r"^\s*[-*+]\s")
 
@@ -654,7 +667,7 @@ def prettify_stage_markdown(text: str) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"([^\n])\n(#{1,6}\s)", r"\1\n\n\2", cleaned)
     cleaned = _ensure_blank_before_list_after_paragraph(cleaned)
-    return cleaned
+    return normalize_bold_markers(cleaned)
 
 
 def sanitize_llm_html_breaks(text: str) -> str:

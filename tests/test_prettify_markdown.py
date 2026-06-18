@@ -1,4 +1,5 @@
 from utils.parsers import (
+    normalize_bold_markers,
     normalize_vertical_spacing,
     prettify_stage_markdown,
     promote_section_headings,
@@ -213,6 +214,30 @@ def test_prettify_inserts_blank_line_before_heading():
 
 def test_prettify_collapses_extra_blank_lines():
     assert prettify_stage_markdown("a\n\n\n\nb") == "a\n\nb"
+
+
+def test_normalize_bold_markers_fixes_spaced_pairs():
+    raw = (
+        "** 思路发散**：Poster 1 侧重「接纳负面情绪」；"
+        "Poster 2 侧重「主动关爱自我」 → 选一个深入展开"
+    )
+    out = normalize_bold_markers(raw)
+    assert out.startswith("**思路发散**：")
+    assert "** 思路发散**" not in out
+
+
+def test_normalize_bold_markers_fixes_open_label_without_close():
+    raw = "** 💡 思路发散**：示例一；示例二"
+    out = normalize_bold_markers(raw)
+    assert out == "**💡 思路发散**：示例一；示例二"
+
+
+def test_prettify_normalizes_spaced_bold_labels():
+    raw = "- ** 切入点 **：从后果入手\n- ** 适用要点**：甲、乙"
+    out = prettify_stage_markdown(raw)
+    assert "- **切入点**：从后果入手" in out
+    assert "- **适用要点**：甲、乙" in out
+    assert "** 切入点" not in out
 
 
 def test_normalize_inserts_gap_between_label_lines():
