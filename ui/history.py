@@ -90,6 +90,10 @@ def auto_save_history(
         usage_str = json.dumps(usage or {}, sort_keys=True)
         fingerprint = hashlib.sha256((content + usage_str).encode("utf-8")).hexdigest()
         if st.session_state.get("_last_save_fingerprint") == fingerprint:
+            if question_image and question_image.get("b64"):
+                rid = st.session_state.get("current_history_record_id")
+                if rid:
+                    save_history_question_image(int(rid), question_image)
             return None
         record_id, is_new = upsert_record(
             raw or state.question,
