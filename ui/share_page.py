@@ -22,6 +22,11 @@ def _query_share_token() -> str | None:
 
 
 def render_share_page() -> None:
+    # Route marker for share-only CSS (hide sidebar / GitHub chrome).
+    st.markdown(
+        '<div class="share-preview-route" aria-hidden="true"></div>',
+        unsafe_allow_html=True,
+    )
     token = _query_share_token()
     if not token:
         st.error("缺少分享参数")

@@ -113,14 +113,39 @@ header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"] {
 
 /* 隐藏 Streamlit 顶栏菜单/工具条（避免展示 GitHub 仓库与账号链接） */
 #MainMenu,
+[data-testid="stMainMenu"],
 [data-testid="stToolbar"],
 [data-testid="stToolbarActions"],
 [data-testid="stAppDeployButton"],
 [data-testid="stStatusWidget"],
-header[data-testid="stHeader"] a[href*="github.com"] {
+a[href*="github.com"] {
   visibility: hidden !important;
   display: none !important;
   pointer-events: none !important;
+}
+
+/* 分享预览页：无侧栏、无顶栏控件（避免暴露仓库/账号） */
+[data-testid="stAppViewContainer"]:has(.share-preview-route) [data-testid="stSidebar"],
+[data-testid="stAppViewContainer"]:has(.share-preview-route) [data-testid="stSidebarCollapsedControl"],
+[data-testid="stAppViewContainer"]:has(.share-preview-route) [data-testid="stSidebarCollapseButton"],
+[data-testid="stAppViewContainer"]:has(.share-preview-route) header[data-testid="stHeader"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+[data-testid="stAppViewContainer"]:has(.share-preview-route) section.main,
+[data-testid="stAppViewContainer"]:has(.share-preview-route) section.main .block-container {
+  max-width: min(1280px, calc(100vw - 2.5rem)) !important;
 }
 
 [data-testid="stSidebarCollapsedControl"] {

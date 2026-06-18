@@ -173,12 +173,19 @@ def init_session() -> None:
 # ── 主入口 ──
 
 
+def _is_share_route() -> bool:
+    raw = st.query_params.get("share")
+    if isinstance(raw, list):
+        return bool((raw[0] if raw else "").strip())
+    return bool((raw or "").strip())
+
+
 def main() -> None:
     st.set_page_config(
         page_title="高考英语应用文 AI 分析",
         page_icon="📝",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed" if _is_share_route() else "expanded",
     )
     init_session()
     load_css()
@@ -187,8 +194,7 @@ def main() -> None:
 
     hydrate_session_from_browser()
 
-    _share_param = st.query_params.get("share")
-    if _share_param:
+    if _is_share_route():
         from ui.share_page import render_share_page
 
         render_share_page()
