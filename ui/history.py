@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-from db import get_record_by_id, upsert_record
+from db import get_record_by_id, get_history_question_image, save_history_question_image, upsert_record
 from services.workflow_origin import sync_workflow_origin_from_record
 from services.workflow_progress import get_next_stage, resume_label, stage_has_content
 from services.workflow_storage import (
@@ -56,6 +56,7 @@ def auto_save_history(
     notify: bool = True,
     notify_updates: bool = False,
     usage: dict[str, int] | None = None,
+    question_image: dict[str, Any] | None = None,
 ) -> int | None:
     """
     写入历史：同题同模型合并为一条；换模型则另存一条。
@@ -101,6 +102,8 @@ def auto_save_history(
         )
         st.session_state.current_history_record_id = int(record_id)
         st.session_state._last_save_fingerprint = fingerprint
+        if question_image and question_image.get("b64"):
+            save_history_question_image(int(record_id), question_image)
         if notify:
             if is_new:
                 st.toast(
@@ -136,7 +139,16 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
     state = workflow_state_from_json(record["full_content"], raw_input=raw)
     state.question = raw
 
-    st.session_state.question = raw
+    img_row = get_history_question_image(record_id)
+    if img_row:
+        from utils.history_image import history_image_row_to_session
+
+        st.session_state.question_image = history_image_row_to_session(img_row)
+        st.session_state.question = ""
+        st.session_state["question_editor"] = ""
+    else:
+        st.session_state.question_image = None
+        st.session_state.question = raw
     st.session_state.workflow_state = state
     st.session_state.last_question = raw
     st.session_state.failed_stage = None

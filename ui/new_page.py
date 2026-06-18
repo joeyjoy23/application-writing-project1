@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from typing import Any
@@ -16,6 +17,7 @@ from db import (
     format_usage_detail,
     format_usage_total,
     get_all_records,
+    get_history_question_image,
     get_record_by_id,
     history_scope,
     toggle_star,
@@ -405,6 +407,18 @@ def render_history_detail(record_id: int) -> None:
             )
 
     st.markdown("#### 原始题目")
+    hist_image = get_history_question_image(record_id)
+    if hist_image:
+        st.image(
+            base64.b64decode(hist_image["image_b64"]),
+            caption=(
+                f"原题图片 · 保留至 "
+                f"{format_created_at_display(hist_image.get('expires_at'))}（北京时间）"
+            ),
+        )
+    elif "[图：" in raw:
+        st.caption("原题图片已超过保留期，仅显示下方识别文字与描述。")
+
     st.text_area(
         "完整题目（存档原文）",
         value=raw,

@@ -75,6 +75,17 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_share_history_owner ON share_links (history_id, owner_id)",
+    """
+    CREATE TABLE IF NOT EXISTS history_question_images (
+        history_id BIGINT PRIMARY KEY REFERENCES history(id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL,
+        mime TEXT NOT NULL DEFAULT 'image/jpeg',
+        image_b64 TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_hqi_expires ON history_question_images (expires_at)",
 )
 
 
@@ -113,35 +124,33 @@ def _apply_schema(conn: Any) -> None:
 
 def init_db() -> None:
     global _schema_ensured
-    if _schema_ensured:
-        return
-    with _init_lock:
-        if _schema_ensured:
-            return
-        last_err: BaseException | None = None
-        for attempt in range(5):
-            try:
-                with _connect() as conn:
-                    _apply_schema(conn)
-                    conn.commit()
-                _schema_ensured = True
-                logger.info("PostgreSQL history 表已就绪")
-                return
-            except Exception as exc:
-                last_err = exc
-                if _is_retryable_db_exc(exc) and attempt < 4:
-                    wait = 0.15 * (2**attempt)
-                    logger.warning(
-                        "PostgreSQL 建表冲突，%ss 后重试 (%d/5): %s",
-                        wait,
-                        attempt + 1,
-                        type(exc).__name__,
-                    )
-                    time.sleep(wait)
-                    continue
-                raise
-        if last_err:
-            raise last_err
+    if not _schema_ensured:
+        with _init_lock:
+            if not _schema_ensured:
+                last_err: BaseException | None = None
+                for attempt in range(5):
+                    try:
+                        with _connect() as conn:
+                            _apply_schema(conn)
+                            conn.commit()
+                        _schema_ensured = True
+                        logger.info("PostgreSQL history 表已就绪")
+                        break
+                    except Exception as exc:
+                        last_err = exc
+                        if _is_retryable_db_exc(exc) and attempt < 4:
+                            wait = 0.15 * (2**attempt)
+                            logger.warning(
+                                "PostgreSQL 建表冲突，%ss 后重试 (%d/5): %s",
+                                wait,
+                                attempt + 1,
+                                type(exc).__name__,
+                            )
+                            time.sleep(wait)
+                            continue
+                        raise
+                if last_err and not _schema_ensured:
+                    raise last_err
 
 
 def _owner_filter(owner_id: str, admin: bool) -> tuple[str, list[Any]]:
@@ -368,6 +377,91 @@ def delete_record(record_id: int, *, owner_id: str, admin: bool) -> bool:
         if ok:
             logger.info("删除历史记录 #%d", record_id)
         return ok
+
+
+def save_history_question_image(
+    record_id: int,
+    *,
+    owner_id: str,
+    mime: str,
+    image_b64: str,
+) -> None:
+    from utils.history_image import history_image_expires_at
+
+    init_db()
+    now = utc_now_str()
+    expires = history_image_expires_at(from_utc=now)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO history_question_images (
+                history_id, owner_id, mime, image_b64, expires_at, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (history_id) DO UPDATE SET
+                mime = EXCLUDED.mime,
+                image_b64 = EXCLUDED.image_b64,
+                owner_id = EXCLUDED.owner_id
+            """,
+            (record_id, owner_id, mime, image_b64, expires, now),
+        )
+        conn.commit()
+
+
+def get_history_question_image(
+    record_id: int, *, owner_id: str, admin: bool
+) -> dict[str, Any] | None:
+    from utils.history_image import is_history_image_expired
+
+    init_db()
+    with _connect() as conn:
+        if admin:
+            row = conn.execute(
+                """
+                SELECT history_id, owner_id, mime, image_b64, expires_at, created_at
+                FROM history_question_images WHERE history_id = %s
+                """,
+                (record_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT history_id, owner_id, mime, image_b64, expires_at, created_at
+                FROM history_question_images
+                WHERE history_id = %s AND owner_id = %s
+                """,
+                (record_id, owner_id),
+            ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        if is_history_image_expired(data.get("expires_at")):
+            conn.execute(
+                "DELETE FROM history_question_images WHERE history_id = %s",
+                (record_id,),
+            )
+            conn.commit()
+            logger.info("历史原图 #%d 已过期并删除", record_id)
+            return None
+        return data
+
+
+def purge_expired_history_question_images() -> int:
+    init_db()
+    return _purge_expired_history_question_images()
+
+
+def _purge_expired_history_question_images() -> int:
+    now = utc_now_str()
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM history_question_images WHERE expires_at < %s",
+            (now,),
+        )
+        conn.commit()
+        n = cur.rowcount
+        if n:
+            logger.info("已清理 %d 条过期历史原图", n)
+        return int(n)
 
 
 def get_llm_cache(cache_key: str, *, owner_id: str) -> str | None:

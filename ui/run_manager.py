@@ -638,6 +638,7 @@ def _persist_history_from_job(
         notify=notify,
         notify_updates=notify_updates,
         usage=usage_dict,
+        question_image=job.get("question_image"),
     )
 
 

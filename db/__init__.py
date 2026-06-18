@@ -29,6 +29,9 @@ __all__ = [
     "get_record_by_id",
     "delete_record",
     "toggle_star",
+    "save_history_question_image",
+    "get_history_question_image",
+    "purge_expired_history_question_images",
     "format_stages_mask",
     "format_usage_total",
     "format_usage_detail",
@@ -158,6 +161,30 @@ def count_records(
 
 def get_record_by_id(record_id: int) -> dict[str, Any] | None:
     return _backend().get_record_by_id(record_id, **_scope_kwargs())
+
+
+def save_history_question_image(
+    record_id: int,
+    question_image: dict[str, Any],
+) -> None:
+    b64 = (question_image or {}).get("b64")
+    if not b64:
+        return
+    owner_id, _ = history_scope()
+    _backend().save_history_question_image(
+        record_id,
+        owner_id=owner_id,
+        mime=(question_image.get("mime") or "image/jpeg"),
+        image_b64=str(b64),
+    )
+
+
+def get_history_question_image(record_id: int) -> dict[str, Any] | None:
+    return _backend().get_history_question_image(record_id, **_scope_kwargs())
+
+
+def purge_expired_history_question_images() -> int:
+    return _backend().purge_expired_history_question_images()
 
 
 def delete_record(record_id: int) -> bool:

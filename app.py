@@ -13,7 +13,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from db import init_db, using_postgres
+from db import init_db, purge_expired_history_question_images, using_postgres
 from utils.config import (
     apply_pending_llm_selection,
     get_project_root,
@@ -202,6 +202,7 @@ def main() -> None:
         _logger.warning("同步模型选择失败: %s", exc)
     try:
         init_db()
+        purge_expired_history_question_images()
     except Exception as exc:
         _logger.exception("数据库初始化失败: %s", exc)
         if using_postgres():

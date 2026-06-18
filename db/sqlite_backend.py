@@ -85,6 +85,21 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_llm_cache_owner ON llm_cache(owner_id, updated_at DESC)"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS history_question_images (
+            history_id INTEGER PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            mime TEXT NOT NULL DEFAULT 'image/jpeg',
+            image_b64 TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hqi_expires ON history_question_images(expires_at)"
+    )
     _schema_ensured = True
 
 
@@ -304,6 +319,10 @@ def toggle_star(record_id: int, starred: bool, *, owner_id: str, admin: bool) ->
 def delete_record(record_id: int, *, owner_id: str, admin: bool) -> bool:
     init_db()
     with _connect() as conn:
+        conn.execute(
+            "DELETE FROM history_question_images WHERE history_id = ?",
+            (record_id,),
+        )
         if admin:
             cur = conn.execute("DELETE FROM history WHERE id = ?", (record_id,))
         else:
@@ -316,6 +335,104 @@ def delete_record(record_id: int, *, owner_id: str, admin: bool) -> bool:
         if ok:
             logger.info("删除历史记录 #%d", record_id)
         return ok
+
+
+def save_history_question_image(
+    record_id: int,
+    *,
+    owner_id: str,
+    mime: str,
+    image_b64: str,
+) -> None:
+    """保存/更新历史原图；首次写入时设定 7 天过期，续跑更新阶段不延长。"""
+    from utils.history_image import history_image_expires_at
+
+    init_db()
+    now = utc_now_str()
+    expires = history_image_expires_at(from_utc=now)
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT history_id FROM history_question_images WHERE history_id = ?",
+            (record_id,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                """
+                UPDATE history_question_images
+                SET mime = ?, image_b64 = ?, owner_id = ?
+                WHERE history_id = ?
+                """,
+                (mime, image_b64, owner_id, record_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO history_question_images (
+                    history_id, owner_id, mime, image_b64, expires_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (record_id, owner_id, mime, image_b64, expires, now),
+            )
+        conn.commit()
+
+
+def get_history_question_image(
+    record_id: int, *, owner_id: str, admin: bool
+) -> dict[str, Any] | None:
+    """未过期则返回原图行；过期则删除并返回 None。"""
+    from utils.history_image import is_history_image_expired
+
+    init_db()
+    with _connect() as conn:
+        if admin:
+            row = conn.execute(
+                """
+                SELECT history_id, owner_id, mime, image_b64, expires_at, created_at
+                FROM history_question_images WHERE history_id = ?
+                """,
+                (record_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT history_id, owner_id, mime, image_b64, expires_at, created_at
+                FROM history_question_images
+                WHERE history_id = ? AND owner_id = ?
+                """,
+                (record_id, owner_id),
+            ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        if is_history_image_expired(data.get("expires_at")):
+            conn.execute(
+                "DELETE FROM history_question_images WHERE history_id = ?",
+                (record_id,),
+            )
+            conn.commit()
+            logger.info("历史原图 #%d 已过期并删除", record_id)
+            return None
+        return data
+
+
+def purge_expired_history_question_images() -> int:
+    init_db()
+    return _purge_expired_history_question_images()
+
+
+def _purge_expired_history_question_images() -> int:
+    """删除所有过期的历史原图（假定 schema 已就绪）。"""
+    now = utc_now_str()
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM history_question_images WHERE expires_at < ?",
+            (now,),
+        )
+        conn.commit()
+        n = cur.rowcount
+        if n:
+            logger.info("已清理 %d 条过期历史原图", n)
+        return int(n)
 
 
 def get_llm_cache(cache_key: str, *, owner_id: str) -> str | None:
