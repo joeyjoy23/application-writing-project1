@@ -14,7 +14,9 @@ from workflow import WorkflowState
 logger = logging.getLogger("app.run_cache")
 
 
-def llm_cache_enabled() -> bool:
+def llm_cache_enabled(job: dict[str, Any] | None = None) -> bool:
+    if job and job.get("skip_llm_cache"):
+        return False
     return bool(st.session_state.get("use_llm_cache", True))
 
 
@@ -38,7 +40,7 @@ def _cache_kwargs(job: dict[str, Any], state: WorkflowState) -> dict[str, Any]:
 def try_load_cached_stage(
     job: dict[str, Any], stage_num: int, state: WorkflowState
 ) -> Any | None:
-    if not llm_cache_enabled():
+    if not llm_cache_enabled(job):
         return None
     try:
         return get_cached_stage_result(stage=stage_num, **_cache_kwargs(job, state))
@@ -50,7 +52,7 @@ def try_load_cached_stage(
 def save_stage_cache(
     job: dict[str, Any], stage_num: int, state: WorkflowState, result: Any
 ) -> None:
-    if not llm_cache_enabled():
+    if not llm_cache_enabled(job):
         return
     try:
         save_cached_stage_result(stage=stage_num, result=result, **_cache_kwargs(job, state))

@@ -810,6 +810,7 @@ def try_start_run_job(mode: str, question: str) -> bool:
         "student_level": st.session_state.get("student_level", "中等"),
         "question_image": image,
         "owner_id": owner_id,
+        "skip_llm_cache": model_changed,
     }
     persist_run_checkpoint(owner_id, st.session_state.run_job, state, run_status="running")
     st.session_state.llm_run_usage = None
