@@ -13,5 +13,5 @@
 
 ## Git
 
-- 勿提交 `logs/`、`.env`、API Key
-- 仅用户要求时 commit / push
+- 勿提交 `logs/`、`.env`、API Key、宣传 docx
+- **完成任务后自动** `commit` + `push`（见 `.cursor/rules/auto-git-push-major.mdc`）；用户当次说「先别提交」时除外

@@ -528,11 +528,18 @@ def render_new_analysis(api_ready: bool) -> None:
     )
     # 图片题或程序回填后，空编辑器勿覆盖 workflow 中的题目文本
     _ws_q = st.session_state.get("workflow_state")
+    _has_image = bool(st.session_state.get("question_image"))
     if question.strip():
         st.session_state.question = question
-    elif _ws_q and _ws_q.stage1 and (_ws_q.question or "").strip():
+    elif (
+        not _has_image
+        and _ws_q
+        and _ws_q.stage1
+        and (_ws_q.question or "").strip()
+    ):
         question = _ws_q.question.strip()
         st.session_state.question = question
+        st.session_state["question_editor"] = question
     else:
         st.session_state.question = question
 

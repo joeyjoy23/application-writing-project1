@@ -993,26 +993,15 @@ def advance_run_job(
                 ui.status.update(label=f"Stage {failed_stage} 超时", state="error")
                 ui.log(f"⏱️ {msg}")
                 state.errors.append(msg)
+                ui.persist_logs(job)
                 st.session_state.workflow_state = state
                 st.session_state.last_question = job["question"]
                 st.session_state.failed_stage = failed_stage
                 st.session_state.stopped_stage = None
-                ui.persist_logs(job)
                 _persist_history_from_job(job, state, notify=True)
+                sync_slots_from_state(state, slots)
+                clear_run_job()
                 st.warning(msg)
-                if job["stage_index"] + 1 < len(job["stages"]):
-                    job["stage_index"] += 1
-                    job["phase"] = "api"
-                    job["thread"] = None
-                    job["thread_done"] = False
-                    job["thread_error"] = None
-                    job["thread_result"] = None
-                    job["stream_total"] = 0
-                    job["stream_preview"] = ""
-                    time.sleep(_POLL_INTERVAL_FAST)
-                    st.rerun()
-                    return
-                _finish_job_success(ui, job, state, slots)
                 time.sleep(_POLL_INTERVAL_FAST)
                 st.rerun()
                 return

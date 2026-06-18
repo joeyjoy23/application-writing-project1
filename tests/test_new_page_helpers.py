@@ -61,3 +61,15 @@ def test_resolve_effective_question_image_with_stage1():
         workflow_question="真题文本",
         last_question="真题文本",
     ) == "真题文本"
+
+
+def test_resolve_effective_question_ignores_conflicting_editor_when_image():
+    from utils.question_input import resolve_effective_question
+
+    img = {"b64": "x", "mime": "image/jpeg"}
+    assert resolve_effective_question(
+        "误输入文字",
+        img,
+        workflow_question="真题文本",
+        last_question="真题文本",
+    ) == "真题文本"

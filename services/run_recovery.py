@@ -241,6 +241,10 @@ def try_recover_session_from_checkpoint(owner_id: str) -> str | None:
         run_status = data.get("run_status") or ""
         preview = (data.get("stream_preview") or "").strip()
         if run_status == "running" and preview:
+            if raw:
+                st.session_state.question = raw
+                st.session_state.last_question = raw
+                st.session_state["question_editor"] = raw
             st.session_state._recovered_stream_preview = preview
             st.session_state._recovered_stream_total = int(data.get("stream_total") or 0)
             st.session_state._checkpoint_recovered = True
