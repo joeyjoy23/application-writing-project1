@@ -111,6 +111,18 @@ header[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"] {
   z-index: 999999 !important;
 }
 
+/* 隐藏 Streamlit 顶栏菜单/工具条（避免展示 GitHub 仓库与账号链接） */
+#MainMenu,
+[data-testid="stToolbar"],
+[data-testid="stToolbarActions"],
+[data-testid="stAppDeployButton"],
+[data-testid="stStatusWidget"],
+header[data-testid="stHeader"] a[href*="github.com"] {
+  visibility: hidden !important;
+  display: none !important;
+  pointer-events: none !important;
+}
+
 [data-testid="stSidebarCollapsedControl"] {
   position: fixed !important;
   top: 0.65rem !important;

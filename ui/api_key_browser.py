@@ -78,6 +78,10 @@ def hydrate_session_from_browser() -> None:
     """首次加载：恢复上次 provider / model / Key。"""
     if st.session_state.get("_browser_keys_hydrated"):
         return
+    # 同一次 rerun 内勿重复挂载 localStorage 组件（会 DuplicateElementKey）
+    if st.session_state.get("_browser_ls_hydrate_mounted"):
+        return
+    st.session_state._browser_ls_hydrate_mounted = True
 
     raw = _normalize_ls_raw(get_local_storage(STORAGE_KEY, component_key="awp_ls_hydrate"))
     if raw is None:

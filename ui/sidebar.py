@@ -35,7 +35,6 @@ from services.workflow_origin import job_llm_settings_changed
 from services.workflow_progress import stage_has_content
 from ui.api_key_browser import (
     clear_browser_saved_keys,
-    hydrate_session_from_browser,
     load_provider_key_after_switch,
     persist_session_to_browser,
     stash_provider_key_before_switch,
@@ -169,7 +168,7 @@ def _provider_key_label(provider: str) -> str:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.18-joyverse-footer"
+UI_BUILD_TAG = "2026.06.18-hydrate-fix"
 
 
 def _render_admin_popover_body() -> None:
@@ -210,7 +209,6 @@ def _render_admin_popover_trigger() -> None:
 
 def render_sidebar() -> bool:
     """渲染侧边栏；返回 True 表示 API 已配置。"""
-    hydrate_session_from_browser()
     if "_prev_provider" not in st.session_state:
         st.session_state._prev_provider = st.session_state.provider
 
