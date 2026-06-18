@@ -34,7 +34,11 @@ from services.workflow_storage import (
     resolve_raw_input,
     workflow_state_from_json,
 )
-from utils.config import resolve_api_key
+from utils.config import (
+    recommended_image_models_text,
+    resolve_api_key,
+    supports_question_image_upload,
+)
 from utils.export_word import export_workflow_to_word
 from utils.question_input import question_input_conflict
 from workflow import WorkflowState
@@ -456,16 +460,26 @@ def _current_question_text() -> str:
     return ""
 
 
-@fragment(run_every="0.5s" if st.session_state.get("run_job") else None)
+@fragment
+def _render_stage_fragment_idle(stage_slots):
+    """无运行任务时展示缓存结果（不轮询）。"""
+    cached = st.session_state.workflow_state
+    if cached:
+        render_all_stages(cached, stage_slots)
+
+
+@fragment(run_every=0.5)
+def _render_stage_fragment_active(stage_slots):
+    """运行中每 0.5s 轮询 advance_run_job（run_every 须为常量，不可在 import 时读 session）。"""
+    advance_run_job(_current_question_text(), stage_slots)
+
+
 def _render_stage_fragment(stage_slots):
-    """Render stages in a fragment to avoid flickering."""
-    job = st.session_state.get("run_job")
-    if job:
-        advance_run_job(_current_question_text(), stage_slots)
+    """双 fragment：idle / active 分离，避免 run_every 在模块加载时被固定为 None。"""
+    if st.session_state.get("run_job"):
+        _render_stage_fragment_active(stage_slots)
     else:
-        cached = st.session_state.workflow_state
-        if cached:
-            render_all_stages(cached, stage_slots)
+        _render_stage_fragment_idle(stage_slots)
 
 
 
@@ -514,7 +528,15 @@ def render_new_analysis(api_ready: bool) -> None:
         if st.button("清除图片", key="clear_question_image"):
             st.session_state.question_image = None
             st.rerun()
-        st.caption("已上传图片，请选用侧边栏带 👁 支持识图 的模型。")
+        provider = st.session_state.get("provider", "")
+        model = st.session_state.get("model", "")
+        if supports_question_image_upload(provider, model):
+            st.caption("已上传图片，请选用侧边栏带 👁 支持识图 的模型。")
+        else:
+            st.warning(
+                f"当前模型 **{model}** 不支持本地上传识图（百炼 Kimi 系列需公网图片 URL）。"
+                f"请改用 {recommended_image_models_text()} 等带 👁 的模型。"
+            )
 
     if question_input_conflict(question, st.session_state.get("question_image")):
         st.error("请只保留文字或图片其中一种输入方式。")

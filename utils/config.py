@@ -268,7 +268,6 @@ MULTIMODAL_MODELS: frozenset[tuple[str, str]] = frozenset(
         ("openai", "gpt-4.1-mini"),
         ("gemini", "gemini-2.0-flash"),
         ("gemini", "gemini-2.5-flash-preview-05-20"),
-        ("dashscope", "kimi-k2.6"),
         ("dashscope", "qwen3.7-plus"),
         ("dashscope", "qwen3.6-plus"),
         ("zhipu", "glm-4.6v"),
@@ -279,12 +278,39 @@ MULTIMODAL_MODELS: frozenset[tuple[str, str]] = frozenset(
     }
 )
 
+# 百炼 kimi-k2.6 等：DashScope 文档要求公网 URL 识图，与本地上传 Base64 不兼容
+_QUESTION_IMAGE_UNSUPPORTED: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("dashscope", "kimi-k2.6"),
+        ("dashscope", "kimi-k2.5"),
+    }
+)
+
+_RECOMMENDED_IMAGE_MODELS: tuple[str, ...] = (
+    "gpt-4o",
+    "qwen3.7-plus",
+    "glm-4.6v-flash",
+)
+
 _VISION_LABEL_SUFFIX = " · 👁 支持识图"
 
 
 def is_multimodal_model(provider: str, model_id: str) -> bool:
-    """是否支持 Stage 1 图片识题。"""
+    """是否支持 Stage 1 图片识题（侧边栏 👁 标记）。"""
     return (provider.lower(), model_id) in MULTIMODAL_MODELS
+
+
+def supports_question_image_upload(provider: str, model_id: str) -> bool:
+    """本地上传题目图片（Base64 data URI）是否与当前模型兼容。"""
+    key = (provider.lower(), model_id)
+    if key in _QUESTION_IMAGE_UNSUPPORTED:
+        return False
+    return key in MULTIMODAL_MODELS
+
+
+def recommended_image_models_text() -> str:
+    """图片识题推荐模型（用于错误提示）。"""
+    return "、".join(_RECOMMENDED_IMAGE_MODELS)
 
 
 def format_model_label(provider: str, model_id: str) -> str:

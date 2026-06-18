@@ -12,7 +12,9 @@ from utils.config import (
     is_multimodal_model,
     normalize_deepseek_model_id,
     normalize_zhipu_model_id,
+    recommended_image_models_text,
     resolve_model_for_provider,
+    supports_question_image_upload,
 )
 
 
@@ -72,7 +74,6 @@ def test_multimodal_whitelist():
         ("openai", "gpt-4.1-mini"),
         ("gemini", "gemini-2.0-flash"),
         ("gemini", "gemini-2.5-flash-preview-05-20"),
-        ("dashscope", "kimi-k2.6"),
         ("dashscope", "qwen3.7-plus"),
         ("dashscope", "qwen3.6-plus"),
         ("zhipu", "glm-4.6v"),
@@ -87,6 +88,16 @@ def test_multimodal_whitelist():
     assert is_multimodal_model("deepseek", "deepseek-v4-pro") is False
     assert is_multimodal_model("zhipu", "glm-5.1") is False
     assert is_multimodal_model("dashscope", "qwen-plus") is False
+    assert is_multimodal_model("dashscope", "kimi-k2.6") is False
+
+
+def test_question_image_upload_support():
+    assert supports_question_image_upload("openai", "gpt-4o") is True
+    assert supports_question_image_upload("dashscope", "qwen3.7-plus") is True
+    assert supports_question_image_upload("zhipu", "glm-4.6v-flash") is True
+    assert supports_question_image_upload("dashscope", "kimi-k2.6") is False
+    assert supports_question_image_upload("deepseek", "deepseek-v4-pro") is False
+    assert "gpt-4o" in recommended_image_models_text()
 
 
 def test_new_vision_models_in_provider_lists():

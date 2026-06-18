@@ -18,7 +18,12 @@ _POLL_INTERVAL_SLOW = 1.0    # API 调用中轮询间隔（秒），减少闪烁
 
 from llm.client import LLMClient, RunCancelled
 from llm.usage import ChatUsage
-from utils.config import build_settings, is_multimodal_model, resolve_model_for_provider
+from utils.config import (
+    build_settings,
+    recommended_image_models_text,
+    resolve_model_for_provider,
+    supports_question_image_upload,
+)
 from utils.question_input import question_input_conflict
 from ui.run_cache import (
     merge_job_usage,
@@ -683,8 +688,13 @@ def try_start_run_job(mode: str, question: str) -> bool:
     if question_input_conflict(question, image):
         st.error("请只保留文字或图片其中一种输入方式。")
         return False
-    if image and not is_multimodal_model(st.session_state.provider, st.session_state.model):
-        st.error("当前模型不支持识图，请在侧边栏选择带 👁 支持识图 的模型。")
+    if image and not supports_question_image_upload(
+        st.session_state.provider, st.session_state.model
+    ):
+        st.error(
+            "当前模型不支持本地上传识图。"
+            f"请改用 {recommended_image_models_text()} 等侧边栏带 👁 的模型。"
+        )
         return False
     if image and not (question or "").strip():
         question = "[图片题目]"
