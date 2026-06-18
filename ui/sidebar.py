@@ -169,7 +169,7 @@ def _provider_key_label(provider: str) -> str:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.18-llm-cache-default"
+UI_BUILD_TAG = "2026.06.18-joyverse-footer"
 
 
 def _render_admin_popover_body() -> None:

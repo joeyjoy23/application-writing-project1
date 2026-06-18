@@ -19,7 +19,7 @@ from utils.config import (
     get_project_root,
     sync_session_llm_selection,
 )
-from utils.ui_assets import lily_decor_css, render_hero_block
+from utils.ui_assets import lily_decor_css, render_hero_block, render_page_footer
 
 # ── 日志配置 ──
 
@@ -192,6 +192,7 @@ def main() -> None:
         from ui.share_page import render_share_page
 
         render_share_page()
+        render_page_footer()
         return
 
     ensure_sidebar_expanded_on_first_load()
@@ -244,9 +245,10 @@ def main() -> None:
 
     if st.session_state.app_mode == "历史":
         render_history_page()
-        return
+    else:
+        render_new_analysis(api_ready)
 
-    render_new_analysis(api_ready)
+    render_page_footer()
 
 
 if __name__ == "__main__":
