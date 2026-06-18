@@ -19,7 +19,8 @@ from utils.config import (
     get_project_root,
     sync_session_llm_selection,
 )
-from utils.ui_assets import lily_decor_css, render_hero_block, render_page_footer
+from ui.page_footer import render_page_footer
+from utils.ui_assets import lily_decor_css, render_hero_block
 
 # ── 日志配置 ──
 

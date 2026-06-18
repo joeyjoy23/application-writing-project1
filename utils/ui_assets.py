@@ -63,16 +63,3 @@ def render_hero_block() -> str:
         "</div>"
         "</div>"
     )
-
-
-def render_page_footer() -> None:
-    """主内容区底部出品标识。"""
-    import streamlit as st
-
-    st.markdown(
-        '<div class="page-footer-joyverse" aria-label="出品方">'
-        '<span class="page-footer-joyverse__brand">Joyverse</span>'
-        '<span class="page-footer-joyverse__hint">出品</span>'
-        "</div>",
-        unsafe_allow_html=True,
-    )
