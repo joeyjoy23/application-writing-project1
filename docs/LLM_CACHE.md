@@ -35,11 +35,13 @@
 
 Stage1 JSON 序列化使用 `sort_keys=True`，避免键序抖动导致前缀失效。
 
-## 3. Stage2 → Stage3 串行
+## 3. Stage2 / Stage3 错开并行
 
-- **行为**：全流程 / 断点续跑时，Stage 2 **完成后**再发起 Stage 3 API
-- **目的**：利于 DeepSeek 在同一 session 内链式命中前缀缓存（best-effort）
-- **代价**：Stage 2+3 段墙钟时间约为 `T2 + T3`（不再并行）
+- **行为**：全流程 / 断点续跑且需连续跑 Stage 2、3 时，Stage 2 **立即**发起 API，Stage 3 默认 **延迟 3 秒**再发起（`STAGE3_PARALLEL_DELAY_SECONDS`，默认 `3`）
+- **S2 缓存命中**：Stage 3 **不等待**，立即发起（或同样命中缓存则跳过 API）
+- **目的**：在 `max(T2, T3+3s)` 量级缩短墙钟时间，同时比「同时发」略降低瞬时并发与 429 风险
+- **前缀缓存 trade-off**：DeepSeek 等厂商的前缀缓存仍可能因 S3 不再严格跟在 S2 之后而弱于纯串行；属速度与成本的折中
+- **单跑 Stage 2 或 Stage 3** 不受影响，仍为单线程调度
 
 ## 4. Stage4 输入压缩
 
@@ -52,13 +54,14 @@ Stage1 JSON 序列化使用 `sort_keys=True`，避免键序抖动导致前缀失
 |------|------|------|
 | `ENABLE_PROMPT_CACHE_LAYOUT` | `1` | 缓存友好 messages 结构 |
 | `ENABLE_STREAM_USAGE` | `1` | 流式返回 usage |
+| `STAGE3_PARALLEL_DELAY_SECONDS` | `3` | S2 调 API 后，延迟多久发起 S3 |
 | `use_llm_cache`（session） | `True` | 应用层结果缓存 |
 
 ## 验证
 
 1. 同一真题跑满四阶段 → 再点全流程：Stage 1–4 应 toast「已从缓存加载」
 2. 同一模型连跑多道不同题的 Stage 1：第 2 题起历史详情 `cached_tokens` 应高于第 1 题
-3. 全流程 Stage 3 在 Stage 2 完成之后发起（运行日志无并行文案）
+3. 全流程 Stage 3 在 Stage 2 发起后约 3 秒再发起（S2 缓存命中则 S3 立即发起）
 
 ## 5. 与历史记录的关系
 

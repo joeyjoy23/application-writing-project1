@@ -21,6 +21,20 @@ def test_running_stages_single_stage2():
     assert _running_stages_for_job(job, state) == {2}
 
 
+def test_running_stages_parallel_23():
+    state = WorkflowState()
+    state.stage1 = Stage1Result(raw="", structured_json={}, human_summary="ok")
+    job = {
+        "phase": "api",
+        "parallel_23": True,
+        "parallel_workers": {
+            2: {"thread_done": False, "thread": _AliveThread()},
+            3: {"thread_done": False, "thread": None},
+        },
+    }
+    assert _running_stages_for_job(job, state) == {2, 3}
+
+
 def test_running_stages_only_one_at_a_time():
     state = WorkflowState()
     state.stage1 = Stage1Result(raw="", structured_json={}, human_summary="ok")
