@@ -1511,12 +1511,6 @@ footer {
   color: var(--c-ink-secondary);
 }
 
-.page-footer-joyverse__hint {
-  font-size: 0.72rem;
-  font-weight: 400;
-  opacity: 0.88;
-}
-
 /* ── 运行方式：两行强制同一 4 列 Grid（Stage 各占 1 列，完整/清空 各占 2 列） ── */
 .run-mode-grid-start {
   display: block !important;

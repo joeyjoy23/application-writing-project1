@@ -191,7 +191,7 @@ def export_workflow_to_html(
 
     parts.extend(
         [
-            '<footer class="doc-footer"><strong>Joyverse</strong> 出品</footer>',
+            '<footer class="doc-footer"><strong>Joyverse</strong></footer>',
             "</div>",
             "</body>",
             "</html>",
