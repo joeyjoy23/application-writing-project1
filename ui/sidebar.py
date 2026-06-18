@@ -168,7 +168,7 @@ def _provider_key_label(provider: str) -> str:
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.18-export-html"
+UI_BUILD_TAG = "2026.06.18-history-delete-dialog"
 
 
 def _render_admin_popover_body() -> None:

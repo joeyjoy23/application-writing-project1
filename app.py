@@ -141,7 +141,6 @@ def init_session() -> None:
         "_browser_ls_tried": False,
         "app_mode": "新建分析",
         "history_view_id": None,
-        "history_confirm_delete_id": None,
         "history_page": 1,
         "history_page_size": 20,
         "history_search_keyword": "",
