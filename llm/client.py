@@ -100,6 +100,13 @@ _STREAM_USAGE_PROVIDERS = frozenset(
 )
 
 
+def _delta_stream_text(delta: Any) -> tuple[str, str]:
+    """Return (content, reasoning_content) from a streaming delta."""
+    content = getattr(delta, "content", None) or ""
+    reasoning = getattr(delta, "reasoning_content", None) or ""
+    return content, reasoning
+
+
 class LLMClient:
     """OpenAI 兼容 API 客户端（默认流式，保持 Streamlit 连接活跃）。"""
 
@@ -231,6 +238,7 @@ class LLMClient:
         last_report = 0
         last_activity = time.monotonic()
         started_at = last_activity
+        saw_stream_activity = False
         usage = ChatUsage()
         finish_reason: str | None = None
         ended_by_idle = False
@@ -243,7 +251,7 @@ class LLMClient:
                 usage = chunk_usage
 
             now = time.monotonic()
-            if not parts and now - started_at > first_chunk_limit:
+            if not saw_stream_activity and now - started_at > first_chunk_limit:
                 raise RuntimeError(
                     f"已超过 {int(first_chunk_limit)} 秒未收到模型任何输出。"
                     "请检查：① 网络与代理 ② API Key ③ 侧边栏换一个更快模型"
@@ -251,31 +259,36 @@ class LLMClient:
                 )
 
             if not chunk.choices:
-                if parts and now - last_activity > idle_limit:
+                if saw_stream_activity and now - last_activity > idle_limit:
                     ended_by_idle = True
                     break
                 continue
 
             choice = chunk.choices[0]
-            delta = choice.delta.content or ""
+            content, reasoning = _delta_stream_text(choice.delta)
+            if reasoning:
+                saw_stream_activity = True
+                last_activity = now
+
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
-                if delta:
-                    parts.append(delta)
-                    total += len(delta)
+                if content:
+                    parts.append(content)
+                    total += len(content)
                 break
 
-            if not delta:
-                if parts and now - last_activity > idle_limit:
+            if not content:
+                if saw_stream_activity and now - last_activity > idle_limit:
                     ended_by_idle = True
                     break
                 continue
 
-            parts.append(delta)
-            total += len(delta)
+            saw_stream_activity = True
+            parts.append(content)
+            total += len(content)
             last_activity = now
             if on_stream and (last_report == 0 or total - last_report >= report_every):
-                on_stream(delta, total, "".join(parts))
+                on_stream(content, total, "".join(parts))
                 last_report = total
 
         if on_stream:
