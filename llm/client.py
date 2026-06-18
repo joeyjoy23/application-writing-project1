@@ -96,7 +96,7 @@ def parse_usage_from_response(obj: Any) -> ChatUsage:
 
 
 _STREAM_USAGE_PROVIDERS = frozenset(
-    {"deepseek", "openai", "gemini", "dashscope", "mimo", "zhipu"}
+    {"deepseek", "openai", "gemini", "dashscope", "mimo", "zhipu", "groq"}
 )
 
 

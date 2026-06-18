@@ -100,6 +100,40 @@ def test_question_image_upload_support():
     assert "gpt-4o" in recommended_image_models_text()
 
 
+def test_groq_models_in_provider_lists():
+    assert "groq" in PROVIDER_MODELS
+    assert "llama-3.3-70b-versatile" in PROVIDER_MODELS["groq"]
+    assert "llama-4-scout-17b-16e-instruct" in PROVIDER_MODELS["groq"]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("llama-3.3-70b-versatile", "llama-3.3-70b-versatile"),
+        ("llama-4-scout-17b-16e-instruct", "llama-4-scout-17b-16e-instruct"),
+        ("LLAMA-3.3-70B-VERSATILE", "llama-3.3-70b-versatile"),
+    ],
+)
+def test_normalize_groq_model_id(raw: str, expected: str):
+    from utils.config import GROQ_MODEL_LABELS, normalize_groq_model_id
+
+    assert normalize_groq_model_id(raw) == expected
+    assert expected in GROQ_MODEL_LABELS
+
+
+def test_resolve_model_for_provider_groq():
+    assert resolve_model_for_provider("groq", "llama-4-scout-17b-16e-instruct") == (
+        "llama-4-scout-17b-16e-instruct"
+    )
+
+
+def test_format_model_label_groq():
+    assert "Llama 3.3" in format_model_label("groq", "llama-3.3-70b-versatile")
+    assert "Llama 4 Scout" in format_model_label(
+        "groq", "llama-4-scout-17b-16e-instruct"
+    )
+
+
 def test_new_vision_models_in_provider_lists():
     assert "glm-4.6v" in PROVIDER_MODELS["zhipu"]
     assert "glm-4.6v-flash" in PROVIDER_MODELS["zhipu"]

@@ -27,6 +27,7 @@ from utils.config import (
     format_model_label,
     normalize_agnes_model_id,
     normalize_deepseek_model_id,
+    normalize_groq_model_id,
     normalize_mimo_model_id,
     normalize_zhipu_model_id,
 )
@@ -164,11 +165,12 @@ def _provider_key_label(provider: str) -> str:
         "mimo": "小米 MiMo API Key",
         "zhipu": "智谱 API Key",
         "agnes": "Agnes API Key",
+        "groq": "Groq API Key",
     }.get(provider, "API Key")
 
 
 # 界面版本号：部署后可在侧边栏底部核对是否已更新
-UI_BUILD_TAG = "2026.06.18-parallel-s23"
+UI_BUILD_TAG = "2026.06.18-groq-llama"
 
 
 def _render_admin_popover_body() -> None:
@@ -300,6 +302,8 @@ def render_sidebar() -> bool:
                 current = normalize_mimo_model_id(current)
             if st.session_state.provider == "agnes":
                 current = normalize_agnes_model_id(current)
+            if st.session_state.provider == "groq":
+                current = normalize_groq_model_id(current)
             if current not in model_options:
                 current = model_options[0]
             st.session_state.model = current
@@ -323,6 +327,8 @@ def render_sidebar() -> bool:
                     if st.session_state.provider == "zhipu"
                     else "Brainstorming 开启 Thinking 深度思考，适合复杂备课推理。"
                     if st.session_state.provider == "agnes"
+                    else "Groq 模型 ID 须与 console.groq.com 文档一致（小写连字符）。"
+                    if st.session_state.provider == "groq"
                     else "运行中切换会停止当前请求"
                 ),
             )

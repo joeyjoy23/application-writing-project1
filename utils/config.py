@@ -16,6 +16,7 @@ PROVIDER_OPTIONS = [
     "dashscope",
     "mimo",
     "agnes",
+    "groq",
 ]
 
 PROVIDER_LABELS = {
@@ -26,6 +27,7 @@ PROVIDER_LABELS = {
     "dashscope": "阿里云百炼",
     "mimo": "小米 MiMo（OpenAI 兼容）",
     "agnes": "Agnes AI（Sapiens）",
+    "groq": "Groq（OpenAI 兼容）",
 }
 
 PROVIDER_API_KEY_ENV = {
@@ -36,6 +38,7 @@ PROVIDER_API_KEY_ENV = {
     "dashscope": "DASHSCOPE_API_KEY",
     "mimo": "MIMO_API_KEY",
     "agnes": "AGNES_API_KEY",
+    "groq": "GROQ_API_KEY",
 }
 
 PROVIDER_BASE_URL = {
@@ -61,6 +64,10 @@ PROVIDER_BASE_URL = {
         "AGNES_BASE_URL",
         "https://apihub.agnes-ai.com/v1",
     ),
+    "groq": (
+        "GROQ_BASE_URL",
+        "https://api.groq.com/openai/v1",
+    ),
 }
 
 PROVIDER_DEFAULT_MODEL = {
@@ -71,6 +78,7 @@ PROVIDER_DEFAULT_MODEL = {
     "dashscope": "qwen-plus",
     "mimo": "mimo-v2.5-pro",
     "agnes": "agnes-2.0-flash",
+    "groq": "llama-3.3-70b-versatile",
 }
 
 # API 模型 ID 须小写连字符，见 https://platform.xiaomimimo.com/docs/zh-CN/tokenplan/quick-access
@@ -222,6 +230,36 @@ def agnes_enable_thinking(model: str) -> bool:
     return normalize_agnes_model_id(model) in AGNES_THINKING_MODELS
 
 
+def agnes_enable_thinking(model: str) -> bool:
+    """Brainstorming 模式：chat_template_kwargs.enable_thinking=true。"""
+    return normalize_agnes_model_id(model) in AGNES_THINKING_MODELS
+
+
+# Groq https://console.groq.com/docs/models — OpenAI 兼容 chat/completions
+GROQ_MODEL_LABELS: dict[str, str] = {
+    "llama-3.3-70b-versatile": "llama-3.3-70b-versatile · Llama 3.3 70B",
+    "llama-4-scout-17b-16e-instruct": "llama-4-scout-17b-16e-instruct · Llama 4 Scout 17B",
+}
+
+
+def normalize_groq_model_id(model: str) -> str:
+    """规范为 Groq API 模型 ID。"""
+    m = (model or "").strip()
+    if not m:
+        return PROVIDER_DEFAULT_MODEL["groq"]
+    if m in GROQ_MODEL_LABELS:
+        return m
+    lower = m.lower()
+    for api_id in GROQ_MODEL_LABELS:
+        if api_id.lower() == lower:
+            return api_id
+    if "llama-4-scout" in lower or "scout-17b" in lower:
+        return "llama-4-scout-17b-16e-instruct"
+    if "llama-3.3" in lower or "70b-versatile" in lower:
+        return "llama-3.3-70b-versatile"
+    return PROVIDER_DEFAULT_MODEL["groq"]
+
+
 def resolve_model_for_provider(provider: str, model: str) -> str:
     """按提供商规范化模型 ID（调用 API 前最后一道校验）。"""
     p = (provider or "").lower()
@@ -234,6 +272,8 @@ def resolve_model_for_provider(provider: str, model: str) -> str:
         return normalize_zhipu_model_id(m)
     if p == "agnes":
         return normalize_agnes_model_id(m)
+    if p == "groq":
+        return normalize_groq_model_id(m)
     return m or PROVIDER_DEFAULT_MODEL.get(p, "gpt-4o-mini")
 
 # 阿里云百炼侧边栏模型（API 模型 ID → 展示名称；须与百炼 OpenAI 兼容接口 model 字段一致）
@@ -259,6 +299,7 @@ PROVIDER_MODELS: dict[str, list[str]] = {
     "dashscope": list(DASHSCOPE_MODEL_LABELS.keys()),
     "mimo": list(MIMO_MODEL_LABELS.keys()),
     "agnes": list(AGNES_MODEL_LABELS.keys()),
+    "groq": list(GROQ_MODEL_LABELS.keys()),
 }
 
 MULTIMODAL_MODELS: frozenset[tuple[str, str]] = frozenset(
@@ -325,6 +366,8 @@ def format_model_label(provider: str, model_id: str) -> str:
         label = ZHIPU_MODEL_LABELS.get(model_id, model_id)
     elif provider == "agnes":
         label = AGNES_MODEL_LABELS.get(model_id, model_id)
+    elif provider == "groq":
+        label = GROQ_MODEL_LABELS.get(model_id, model_id)
     else:
         label = model_id
     if is_multimodal_model(provider, model_id):
@@ -405,7 +448,7 @@ def build_settings(
     model: str = "",
     temperature: float | None = None,
     max_tokens: int | None = None,
-    _settings_rev: str = "20260615-agnes",
+    _settings_rev: str = "20260618-groq",
 ) -> Settings:
     """根据网页选择的提供商与 Key 构建 API 配置（可缓存，参数须为可序列化值）。"""
     p = provider.lower()
