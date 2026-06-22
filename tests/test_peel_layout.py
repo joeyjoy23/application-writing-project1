@@ -80,39 +80,45 @@ def _mental_health_peel_points():
     return peel["points"]
 
 
+def test_normalize_peel_point_strips_e_meta_and_prefers_quote():
+    point = {
+        "p": "I'd go with Poster 1.",
+        "e_items": [
+            '将"选择"具体化到画面元素，如"the cracked heart with a smile"',
+            "说明元素的效果，如\"this combination makes the message relatable\"",
+        ],
+        "l": "Here's why.",
+    }
+    norm = normalize_peel_point(point)
+    assert len(norm["e_items"]) == 2
+    assert "cracked heart" in norm["e_items"][0]
+    assert "relatable" in norm["e_items"][1]
+    assert "具体化" not in norm["e_items"][0]
+
+
 def test_peel_dual_needs_split_on_tight_budget():
     point = _mental_health_peel_points()[0]
+    pts = _mental_health_peel_points()
+    assert peel_dual_needs_split(pts)
     assert fit_peel_point(point, 5.85, 0.9).needs_split
 
 
-def test_expand_peel_slides_splits_overflow_to_two_pages():
-    pts = _mental_health_peel_points()
-    slides = [
-        {
-            "type": "peel",
-            "title": "PEEL 写作骨架",
-            "points": pts,
-        }
-    ]
-    from scripts import ppt_layout_fit as plf
-
-    orig = plf.peel_dual_needs_split
-    plf.peel_dual_needs_split = lambda _pts: True
-    try:
-        out = plf.expand_peel_slides(slides)
-    finally:
-        plf.peel_dual_needs_split = orig
-    assert len(out) == 2
-    assert all(s.get("layout") == "single" for s in out)
-    assert "Point 1" in out[0]["title"]
-
-
-def test_expand_peel_slides_keeps_dual_when_fits():
+def test_expand_peel_slides_splits_two_points_by_default():
     pts = _mental_health_peel_points()
     slides = [{"type": "peel", "title": "PEEL 写作骨架", "points": pts}]
     out = expand_peel_slides(slides)
+    assert len(out) == 2
+    assert all(s.get("layout") == "single" for s in out)
+    assert "Point 1" in out[0]["title"]
+    assert "Point 2" in out[1]["title"]
+
+
+def test_expand_peel_slides_keeps_single_point_when_fits():
+    point = {"p": "Short point.", "e_items": ["One detail."], "l": "Link."}
+    slides = [{"type": "peel", "title": "PEEL 写作骨架", "points": [point]}]
+    out = expand_peel_slides(slides)
     assert len(out) == 1
-    assert out[0].get("layout") == "dual"
+    assert out[0].get("layout") == "single"
 
 
 def test_fit_peel_point_sizes_to_content_block():

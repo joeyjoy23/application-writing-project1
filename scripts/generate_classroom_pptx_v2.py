@@ -1086,7 +1086,7 @@ class SlideBuilderV2:
         hp.font.bold = True
         hp.font.color.rgb = color
 
-        body_h = min(card_h - 0.62, max(0.45, body_fit.block_height + 0.12))
+        body_h = min(card_h - 0.62, max(0.55, body_fit.block_height + 0.14))
         self._render_peel_point_body(
             slide,
             x=x,
@@ -1110,7 +1110,8 @@ class SlideBuilderV2:
             card_w = CONTENT_W.inches if hasattr(CONTENT_W, "inches") else 12.0
             body_max = avail_h - 0.62
             body_fit = fit_peel_point(points[0], card_w, body_max)
-            card_h = min(avail_h, body_fit.block_height + 0.82)
+            card_h = min(avail_h, max(body_fit.block_height + 0.82, 1.35))
+            body_h = min(card_h - 0.62, max(0.55, body_fit.block_height + 0.14))
             if card_h < avail_h * 0.72:
                 card_top = card_top + (avail_h - card_h) * 0.35
             self._peel_card(

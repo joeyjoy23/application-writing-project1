@@ -395,7 +395,18 @@ PEEL_CARD_BODY_INSET = 0.62  # header + gap below card top before body textbox
 PEEL_CARD_CHROME = 0.82  # card height above measured body block
 PEEL_DUAL_CARD_TOP = 1.70  # V2 header (1.62) + 0.08 gap
 MAX_PEEL_E_ITEMS = 2
-PEEL_LINE_MAX_LEN = 120
+PEEL_LINE_MAX_LEN = 96
+PEEL_E_LINE_MAX_LEN = 72
+PEEL_POINT_CHAR_BUDGET = 130
+_PEEL_E_META_PREFIX = (
+    "具体化",
+    "感受",
+    "元素含义",
+    "说明元素",
+    "影响",
+    "将",
+    "说明",
+)
 
 
 def _trim_peel(text: str, max_len: int = PEEL_LINE_MAX_LEN) -> str:
@@ -403,11 +414,61 @@ def _trim_peel(text: str, max_len: int = PEEL_LINE_MAX_LEN) -> str:
     return s[: max_len - 1] + "…" if len(s) > max_len else s
 
 
+def _quoted_peel_fragment(raw: str) -> str:
+    for pat in (
+        r"如[「\"']([^」\"']{6,})[」\"']",
+        r"如\s*[「\"']([^」\"']{6,})",
+        r"「([^」]{6,})」",
+    ):
+        m = re.search(pat, raw)
+        if m:
+            return m.group(1).strip()
+    best = ""
+    for m in re.finditer(r'"([^"]+)"', raw):
+        cand = m.group(1).strip()
+        if len(cand) < 6:
+            continue
+        latin = sum(ch.isascii() and ch.isalpha() for ch in cand)
+        if latin >= 4 and len(cand) > len(best):
+            best = cand
+    if best:
+        return best
+    m = re.search(r"'([^']{6,})'", raw)
+    return m.group(1).strip() if m else ""
+
+
+def _project_peel_e_item(raw: str) -> str:
+    """Strip Chinese meta-labels; prefer short English quote for projection."""
+    s = re.sub(r"\s+", " ", (raw or "").strip())
+    if not s:
+        return ""
+    quoted = _quoted_peel_fragment(s)
+    if quoted:
+        return _trim_peel(quoted, PEEL_E_LINE_MAX_LEN)
+    if "：" in s:
+        head, tail = s.split("：", 1)
+        if any(head.startswith(p) or p in head for p in _PEEL_E_META_PREFIX):
+            s = tail.strip()
+    elif ":" in s and re.match(r"^[\w/]+:", s):
+        s = s.split(":", 1)[1].strip()
+    s = re.sub(r"（[^）]*）", "", s)
+    s = re.sub(r"\([^)]*\)", "", s)
+    quoted = _quoted_peel_fragment(s)
+    if quoted:
+        return _trim_peel(quoted, PEEL_E_LINE_MAX_LEN)
+    return _trim_peel(s, PEEL_E_LINE_MAX_LEN)
+
+
+def peel_point_char_total(point: dict) -> int:
+    norm = normalize_peel_point(point)
+    return len(norm["p"]) + sum(len(e) for e in norm["e_items"]) + len(norm["l"])
+
+
 def normalize_peel_point(point: dict, *, max_e: int = MAX_PEEL_E_ITEMS) -> dict:
     """Cap E items and trim verbose PEEL fields for slide layout."""
     p = _trim_peel(str(point.get("p") or ""))
     e_raw = point.get("e_items") or ([point["e"]] if point.get("e") else [])
-    e_items = [_trim_peel(str(e)) for e in e_raw if str(e).strip()][:max_e]
+    e_items = [_project_peel_e_item(str(e)) for e in e_raw if str(e).strip()][:max_e]
     l = _trim_peel(str(point.get("l") or ""))
     return {
         "label": (point.get("label") or "").strip() or "Point",
@@ -499,16 +560,23 @@ def estimate_peel_single_body_height() -> float:
 
 
 def peel_dual_needs_split(points: list[dict]) -> bool:
-    """True when dual-card PEEL layout would overflow at min typography."""
+    """True when dual-card PEEL must split (WPS-safe: prefer one point per slide)."""
+    normed = [normalize_peel_point(p) for p in points[:2]]
+    if len(normed) >= 2:
+        return True
+    if not normed:
+        return False
+    point = normed[0]
+    if len(point["e_items"]) > 1:
+        return True
+    if peel_point_char_total(point) > PEEL_POINT_CHAR_BUDGET:
+        return True
     body_h = estimate_peel_dual_body_height()
-    for point in points[:2]:
-        if fit_peel_point(point, PEEL_CARD_WIDTH, body_h).needs_split:
-            return True
-    return False
+    return fit_peel_point(point, PEEL_CARD_WIDTH, body_h).needs_split
 
 
 def expand_peel_slides(slides: list[dict]) -> list[dict]:
-    """Split overflowing dual PEEL specs into one Point per slide."""
+    """Split PEEL specs into one Point per slide when dual would overflow."""
     expanded: list[dict] = []
     for spec in slides:
         if spec.get("type") != "peel":
@@ -519,7 +587,13 @@ def expand_peel_slides(slides: list[dict]) -> list[dict]:
         if not points:
             expanded.append(spec)
             continue
-        if len(points) == 1 or peel_dual_needs_split(points):
+        if len(points) == 1:
+            new_spec = dict(spec)
+            new_spec["points"] = points
+            new_spec["layout"] = "single"
+            expanded.append(new_spec)
+            continue
+        if peel_dual_needs_split(points):
             for idx, point in enumerate(points):
                 new_spec = dict(spec)
                 new_spec["points"] = [point]
