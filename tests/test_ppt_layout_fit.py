@@ -226,7 +226,7 @@ def test_title_poster_panel_shrink_wraps_fitted_text():
     assert cover.stem_panel_h + cover.poster_panel_h < 5.5
 
 
-def test_expand_title_slides_always_splits_poster():
+def test_expand_title_slides_consolidates_poster():
     from scripts.ppt_layout_fit import expand_title_slides
 
     poster = ["Poster 1：双手托心", "Poster 2：浇水壶"]
@@ -234,9 +234,10 @@ def test_expand_title_slides_always_splits_poster():
     slides = expand_title_slides(
         [{"type": "title", "title": "封面", "subtitle": "tag", "body": stem, "poster_lines": poster}]
     )
-    assert len(slides) == 3
+    assert len(slides) == 2
     assert slides[0].get("poster_lines") is None
-    assert all(s["type"] == "title_poster" for s in slides[1:])
+    assert slides[1]["type"] == "title_poster"
+    assert slides[1]["poster_lines"] == poster
 
 
 def test_essay_annotation_stacks_below_body():
@@ -247,5 +248,20 @@ def test_essay_annotation_stacks_below_body():
     ]
     annotation = "①选择明确  ②理由有画面  ③结尾升华"
     stack = plan_essay_stack(paragraphs, annotation)
-    assert stack.annotation_top >= stack.body_top + stack.body_height + 0.07
+    assert stack.annotation_top > stack.body_top + stack.body_height + 0.05
     assert stack.annotation_top + stack.annotation_height <= 7.32 + 0.05
+    assert stack.body_fit.block_height <= stack.body_height
+
+
+def test_bullet_card_heights_cover_fitted_text():
+    budget = LAYOUT_REGISTRY["content_cards"]
+    bullets = [
+        "体裁：朋友间邮件（非正式报告）",
+        "核心任务：" + ("表明立场并用设计元素支撑理由 " * 6),
+        "语气：友好、真诚，结尾鼓励参赛",
+    ]
+    layout = fit_bullet_card_layout(bullets, budget, content_height=2.2)
+    for bullet, card_h, fit in zip(bullets, layout.heights, layout.fits):
+        if is_arrow_separator(bullet):
+            continue
+        assert card_h >= fit.block_height + 0.30

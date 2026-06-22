@@ -883,9 +883,11 @@ def fit_bullet_card_layout(
     ]
     refit: list[FitResult] = []
     needs_split = False
+    final_heights: list[float] = []
     for bullet, card_h in zip(bullets, scaled):
         if is_arrow_separator(bullet):
             refit.append(FitResult(budget.max_primary_pt, 1.0, ARROW_SEP_HEIGHT, needs_split=False))
+            final_heights.append(ARROW_SEP_HEIGHT)
             continue
         fit = fit_typography(
             bullet,
@@ -895,9 +897,11 @@ def fit_bullet_card_layout(
             min_pt=budget.min_pt,
         )
         refit.append(fit)
+        needed = max(card_min_h, fit.block_height + card_pad_v)
+        final_heights.append(max(card_h, needed))
         if fit.needs_split:
             needs_split = True
-    return BulletCardLayout(scaled, refit, needs_split=needs_split)
+    return BulletCardLayout(final_heights, refit, needs_split=needs_split)
 
 
 def phrase_table_body_heights(
@@ -1070,6 +1074,8 @@ def plan_title_cover_layout(
         poster_panel_h = poster_fit.block_height * WPS_PANEL_FUDGE + poster_pad
 
     stem_budget = max_panel_h - poster_panel_h - (poster_gap if poster_clean else 0.0)
+    if not poster_clean:
+        stem_budget = max_panel_h
     stem_fit = fit_paragraphs(
         body_clean,
         text_w,
@@ -1080,7 +1086,10 @@ def plan_title_cover_layout(
         pad_h_pt=10,
         pad_v_pt=8,
     )
-    stem_panel_h = max(0.9, stem_fit.block_height * WPS_PANEL_FUDGE + stem_pad)
+    stem_panel_h = min(
+        stem_budget,
+        max(0.9, stem_fit.block_height * WPS_PANEL_FUDGE + stem_pad),
+    )
     return TitleCoverLayout(stem_panel_h, poster_panel_h, stem_fit, poster_fit)
 
 
@@ -1103,8 +1112,53 @@ def title_cover_needs_poster_slide(
     return total > bottom_y - panel_top - 0.06
 
 
+def _poster_slide_chunks(poster_lines: list[str], *, max_lines: int = 2) -> list[list[str]]:
+    """Pack poster descriptions: all on one slide when possible, else ≤max_lines per slide."""
+    posters = [ln for ln in poster_lines if ln.strip()]
+    if not posters:
+        return []
+    budget = LAYOUT_REGISTRY["title_body"]
+    text_w = 11.2 - 0.4
+    avail_h = SLIDE_CONTENT_BOTTOM - 1.70 - 0.20
+    all_fit = fit_paragraphs(
+        posters,
+        text_w,
+        avail_h - 0.36,
+        space_after_pt=10,
+        max_pt=budget.max_secondary_pt,
+        min_pt=budget.min_pt,
+        pad_h_pt=10,
+        pad_v_pt=8,
+    )
+    if not all_fit.needs_split:
+        return [posters]
+
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    for line in posters:
+        trial = current + [line]
+        trial_fit = fit_paragraphs(
+            trial,
+            text_w,
+            avail_h - 0.36,
+            space_after_pt=10,
+            max_pt=budget.max_secondary_pt,
+            min_pt=budget.min_pt,
+            pad_h_pt=10,
+            pad_v_pt=8,
+        )
+        if current and (len(current) >= max_lines or trial_fit.needs_split):
+            chunks.append(current)
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        chunks.append(current)
+    return chunks or [posters]
+
+
 def expand_title_slides(slides: list[dict]) -> list[dict]:
-    """Stem on cover; poster descriptions always on a follow-up slide."""
+    """Stem on cover; poster descriptions on one follow-up slide (split only when needed)."""
     expanded: list[dict] = []
     for spec in slides:
         if spec.get("type") != "title":
@@ -1115,12 +1169,12 @@ def expand_title_slides(slides: list[dict]) -> list[dict]:
             stem = dict(spec)
             stem.pop("poster_lines", None)
             expanded.append(stem)
-            for pl in posters:
+            for chunk in _poster_slide_chunks(posters):
                 expanded.append(
                     {
                         "type": "title_poster",
                         "title": "海报示意",
-                        "poster_lines": [pl],
+                        "poster_lines": chunk,
                         "_module": spec.get("_module"),
                     }
                 )
@@ -1137,6 +1191,96 @@ class EssayStackLayout:
     annotation_height: float
     body_fit: FitResult
     ann_fit: FitResult | None
+    para_space_pt: int = 10
+    indent_spaces: int = 4
+
+
+def _essay_display_paragraphs(
+    paragraphs: list[str],
+) -> tuple[list[str], float, int, int]:
+    """Display lines + typography matching ``essay_slide`` rendering."""
+    import re
+
+    from scripts.essay_format import essay_layout_for_length
+
+    clean = [
+        re.sub(r"\s*Word count:\s*\d+\s*$", "", p, flags=re.IGNORECASE).strip()
+        for p in paragraphs
+        if p.strip()
+    ]
+    line_spacing, para_space_pt, indent_spaces = essay_layout_for_length(clean)
+    display = [(" " * indent_spaces) + p for p in clean]
+    return display, line_spacing, para_space_pt, indent_spaces
+
+
+def _essay_body_block_height(
+    display_paragraphs: list[str],
+    width_inches: float,
+    font_pt: int,
+    line_spacing: float,
+    *,
+    space_after_pt: float = 4,
+    space_before_pt: int = 10,
+) -> float:
+    """Measure essay body height including indent, space_after, and space_before."""
+    if not display_paragraphs:
+        return 0.35
+    eff_w, _ = effective_text_area(width_inches, 10.0, pad_h_pt=10, pad_v_pt=6)
+    total = 0.0
+    for i, para in enumerate(display_paragraphs):
+        if i > 0:
+            sb = space_before_pt if line_spacing >= 1.0 else 4
+            total += sb / 72.0
+        total += text_block_height(para, eff_w, font_pt, line_spacing)
+        if i < len(display_paragraphs) - 1:
+            total += space_after_pt / 72.0
+    return total
+
+
+def _fit_essay_body(
+    display_paragraphs: list[str],
+    width_inches: float,
+    max_height_inches: float,
+    *,
+    line_spacing_hint: float,
+    space_after_pt: float = 4,
+    space_before_pt: int = 10,
+) -> FitResult:
+    """Fit essay body using the same spacing rules as the V2 renderer."""
+    eff_w, eff_h = effective_text_area(width_inches, max_height_inches, pad_h_pt=10, pad_v_pt=6)
+    cap = eff_h * FIT_FILL_RATIO
+    if not display_paragraphs:
+        return FitResult(26, 1.12, 0.35, needs_split=False)
+    spacing_steps = [s for s in LINE_SPACING_STEPS if s <= line_spacing_hint + 0.02]
+    if not spacing_steps:
+        spacing_steps = list(LINE_SPACING_STEPS)
+    for pt in FONT_STEPS:
+        if pt > 28:
+            continue
+        if pt < 26:
+            break
+        for spacing in spacing_steps:
+            if spacing < MIN_LINE_SPACING - 1e-6:
+                break
+            h = _essay_body_block_height(
+                display_paragraphs,
+                width_inches,
+                pt,
+                spacing,
+                space_after_pt=space_after_pt,
+                space_before_pt=space_before_pt,
+            )
+            if h <= cap:
+                return FitResult(pt, spacing, h, needs_split=False)
+    h = _essay_body_block_height(
+        display_paragraphs,
+        width_inches,
+        26,
+        MIN_LINE_SPACING,
+        space_after_pt=space_after_pt,
+        space_before_pt=space_before_pt,
+    )
+    return FitResult(26, MIN_LINE_SPACING, h, needs_split=True)
 
 
 def plan_essay_stack(
@@ -1147,7 +1291,7 @@ def plan_essay_stack(
     bottom_y: float = SLIDE_CONTENT_BOTTOM,
     content_width: float = 11.6,
 ) -> EssayStackLayout:
-    """Vertical stack: body from content_top, annotation strictly below body."""
+    """Vertical stack: body from content_top, annotation strictly below rendered body."""
     content_top = header_bottom + 0.08
     text_w = content_width - 0.2
     ann_gap = 0.08
@@ -1156,25 +1300,55 @@ def plan_essay_stack(
     ann_fit: FitResult | None = None
     if ann_text:
         ann_fit = fit_typography(ann_text, text_w, 2.5, max_pt=26, min_pt=26)
-        ann_h = ann_fit.block_height + 0.16
+        ann_h = ann_fit.block_height * WPS_PANEL_FUDGE + 0.16
 
     body_max_h = bottom_y - content_top - ann_h - ann_gap - (0.06 if ann_text else 0.0)
-    lines = [p for p in paragraphs if p.strip()]
-    body_fit = fit_paragraphs(
-        lines,
+    display, layout_ls, para_space_pt, indent_spaces = _essay_display_paragraphs(paragraphs)
+    body_fit = _fit_essay_body(
+        display,
         text_w,
         max(1.0, body_max_h),
-        space_after_pt=6,
-        max_pt=28,
-        min_pt=26,
-        min_spacing=0.9,
-        pad_h_pt=10,
-        pad_v_pt=6,
+        line_spacing_hint=layout_ls,
+        space_after_pt=4,
+        space_before_pt=para_space_pt,
     )
-    body_height = min(body_max_h, max(1.2, body_fit.block_height + 0.18))
+    rendered_h = body_fit.block_height
+    body_height = min(body_max_h, max(1.2, rendered_h * WPS_PANEL_FUDGE + 0.12))
     body_top = content_top
     annotation_top = body_top + body_height + ann_gap
-    return EssayStackLayout(body_top, body_height, annotation_top, ann_h, body_fit, ann_fit)
+    return EssayStackLayout(
+        body_top,
+        body_height,
+        annotation_top,
+        ann_h,
+        body_fit,
+        ann_fit,
+        para_space_pt=para_space_pt,
+        indent_spaces=indent_spaces,
+    )
+
+
+def essay_stack_fits(
+    paragraphs: list[str],
+    annotation: str,
+    *,
+    header_bottom: float = 1.70,
+    bottom_y: float = SLIDE_CONTENT_BOTTOM,
+    content_width: float = 11.6,
+) -> bool:
+    """True when essay body + annotation fit one slide without overlap."""
+    stack = plan_essay_stack(
+        paragraphs,
+        annotation,
+        header_bottom=header_bottom,
+        bottom_y=bottom_y,
+        content_width=content_width,
+    )
+    if stack.body_fit.needs_split:
+        return False
+    if stack.ann_fit and stack.ann_fit.needs_split:
+        return False
+    return stack.annotation_top + stack.annotation_height <= bottom_y + 0.05
 
 
 def essay_text_fits(
@@ -1184,12 +1358,18 @@ def essay_text_fits(
     has_annotation: bool = True,
     content_width: float = 11.6,
 ) -> bool:
-    panel_h = estimate_essay_panel_height(has_badge=has_badge, has_annotation=has_annotation)
-    return not fit_essay_block(
-        essay_text,
-        content_width=content_width,
-        panel_height=panel_h,
-    ).needs_split
+    from scripts.essay_format import prepare_classroom_essay_body
+
+    paragraphs, wc, embedded_ann = prepare_classroom_essay_body(essay_text)
+    if not paragraphs and essay_text.strip():
+        paragraphs = [p.strip() for p in essay_text.split("\n\n") if p.strip()]
+    if wc and paragraphs:
+        import re
+
+        last = re.sub(r"\s*Word count:\s*\d+\s*$", "", paragraphs[-1], flags=re.IGNORECASE).rstrip()
+        paragraphs = paragraphs[:-1] + [f"{last}  Word count: {wc}"]
+    ann = embedded_ann if has_annotation else ""
+    return essay_stack_fits(paragraphs, ann, content_width=content_width)
 
 
 def _split_sentences(text: str) -> list[str]:

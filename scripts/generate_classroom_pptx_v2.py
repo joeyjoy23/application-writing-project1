@@ -329,6 +329,11 @@ class SlideBuilderV2:
         fit = cover.stem_fit
         poster_fit = cover.poster_fit
         panel_h = cover.stem_panel_h
+        if not poster_clean:
+            max_stem_h = BOTTOM_Y - panel_top - 0.08
+            panel_h = min(max_stem_h, cover.stem_fit.block_height * WPS_PANEL_FUDGE + 0.36)
+            if cover.stem_fit.needs_split:
+                panel_h = max_stem_h
         panel_top_adj = panel_top
 
         panel = slide.shapes.add_shape(
@@ -681,6 +686,7 @@ class SlideBuilderV2:
         tier_colors = {"基础": MUTED, "进阶": MINT, "高级": VIOLET, "亮点": CORAL, "必备": MUTED}
         gap = 0.14
         arrow_gap = 0.12
+        card_pad_v = 0.32
         budget = LAYOUT_REGISTRY["content_cards"]
         layout = fit_bullet_card_layout(
             bullets,
@@ -763,9 +769,9 @@ class SlideBuilderV2:
 
             box = slide.shapes.add_textbox(
                 Inches(left + 0.22),
-                Inches(y + 0.1),
+                Inches(y + card_pad_v / 2),
                 Inches(width - 0.34),
-                Inches(card_h - 0.18),
+                Inches(max(0.35, card_h - card_pad_v)),
             )
             _configure_text_frame(box.text_frame, pad_h=6, pad_v=4)
             para = box.text_frame.paragraphs[0]
@@ -846,10 +852,7 @@ class SlideBuilderV2:
                 para.line_spacing = fit.line_spacing
 
     def essay_slide(self, title: str, essay_text: str, annotation: str, *, badge: str | None = None) -> None:
-        from scripts.essay_format import (
-            essay_layout_for_length,
-            prepare_classroom_essay_display,
-        )
+        from scripts.essay_format import prepare_classroom_essay_display
 
         slide = self._blank()
         top = self._header(slide, title, section="范文")
@@ -862,12 +865,6 @@ class SlideBuilderV2:
         else:
             paragraphs = [p.strip() for p in essay_text.split("\n\n") if p.strip()]
             ann_text = (annotation or "").strip()
-        line_spacing, para_space_pt, indent_spaces = essay_layout_for_length(
-            [
-                re.sub(r"\s*Word count:\s*\d+\s*$", "", p, flags=re.IGNORECASE).strip()
-                for p in paragraphs
-            ]
-        )
 
         stack = plan_essay_stack(
             paragraphs,
@@ -883,6 +880,8 @@ class SlideBuilderV2:
         essay_top = stack.body_top
         ann_fit = stack.ann_fit
         ann_h = stack.annotation_height
+        para_space_pt = stack.para_space_pt
+        indent_spaces = stack.indent_spaces
 
         panel = slide.shapes.add_shape(
             MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
