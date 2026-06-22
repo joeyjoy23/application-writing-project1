@@ -14,7 +14,9 @@ from typing import Any, Literal
 
 from utils.export_word import STAGE_TITLES
 
-LessonPreset = Literal["40min", "80min"]
+LessonPreset = Literal["40min", "70min", "80min"]
+
+# 70min = 80min 去掉 4 个 optional 页（B4/C3/D8/D10），保留 A3 快速思考
 
 # ---------------------------------------------------------------------------
 # Page slots (fixed architecture — LLM/Cursor only fills content, not structure)
@@ -32,28 +34,28 @@ class PageSlot:
 
 # Module A 导入 · B 审题 · C 思维 · D 范文 · E 语言(Stage3) · F 训练 · G 总结
 ARCHITECTURE_V1_SLOTS: tuple[PageSlot, ...] = (
-    PageSlot("A1", "A", "导入 · 真题展示", "title", frozenset({"40min", "80min"})),
-    PageSlot("A2", "A", "导入 · 情境代入", "content", frozenset({"40min", "80min"})),
-    PageSlot("A3", "A", "导入 · 快速思考", "content", frozenset({"80min"}), optional=True),
-    PageSlot("B1", "B", "审题 · 三元审题", "content", frozenset({"40min", "80min"})),
-    PageSlot("B2", "B", "审题 · 任务拆解", "content", frozenset({"40min", "80min"})),
-    PageSlot("B3", "B", "审题 · 易错对比", "content", frozenset({"40min", "80min"})),
+    PageSlot("A1", "A", "导入 · 真题展示", "title", frozenset({"40min", "70min", "80min"})),
+    PageSlot("A2", "A", "导入 · 情境代入", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("A3", "A", "导入 · 快速思考", "content", frozenset({"70min", "80min"}), optional=True),
+    PageSlot("B1", "B", "审题 · 三元审题", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("B2", "B", "审题 · 任务拆解", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("B3", "B", "审题 · 易错对比", "content", frozenset({"40min", "70min", "80min"})),
     PageSlot("B4", "B", "审题 · 考查能力链", "content", frozenset({"80min"}), optional=True),
-    PageSlot("C1", "C", "思维 · 高分路径", "content", frozenset({"40min", "80min"})),
-    PageSlot("C2", "C", "思维 · 高分公式", "content", frozenset({"40min", "80min"})),
+    PageSlot("C1", "C", "思维 · 高分路径", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("C2", "C", "思维 · 高分公式", "content", frozenset({"40min", "70min", "80min"})),
     PageSlot("C3", "C", "思维 · 维度分析", "content", frozenset({"80min"}), optional=True),
-    PageSlot("F1s", "F", "动笔易错", "content", frozenset({"40min", "80min"})),
-    PageSlot("D1", "D", "PEEL 写作骨架", "peel", frozenset({"40min", "80min"})),
-    PageSlot("D6", "D", "基础版范文", "essay", frozenset({"40min", "80min"})),
-    PageSlot("D7", "D", "高分版 A", "essay", frozenset({"40min", "80min"})),
+    PageSlot("F1s", "F", "动笔易错", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("D1", "D", "PEEL 写作骨架", "peel", frozenset({"40min", "70min", "80min"})),
+    PageSlot("D6", "D", "基础版范文", "essay", frozenset({"40min", "70min", "80min"})),
+    PageSlot("D7", "D", "高分版 A", "essay", frozenset({"40min", "70min", "80min"})),
     PageSlot("D8", "D", "高分版 B", "essay", frozenset({"80min"}), optional=True),
-    PageSlot("D9", "D", "三版对比要点", "table", frozenset({"40min", "80min"})),
+    PageSlot("D9", "D", "三版对比要点", "table", frozenset({"40min", "70min", "80min"})),
     PageSlot("D10", "D", "高分升级点总结", "content", frozenset({"80min"}), optional=True),
-    PageSlot("F2s", "F", "讲评活动 · 元素与逻辑", "content", frozenset({"40min", "80min"})),
-    PageSlot("E0", "E", "功能句型与话题词块", "stage3_placeholder", frozenset({"40min", "80min"})),
-    PageSlot("F3s", "F", "当堂迁移", "content", frozenset({"40min", "80min"})),
-    PageSlot("G1", "G", "课堂小结 · 高分公式", "content", frozenset({"40min", "80min"})),
-    PageSlot("G2", "G", "课后任务", "content", frozenset({"40min", "80min"})),
+    PageSlot("F2s", "F", "讲评活动 · 元素与逻辑", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("E0", "E", "功能句型与话题词块", "stage3_placeholder", frozenset({"40min", "70min", "80min"})),
+    PageSlot("F3s", "F", "当堂迁移", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("G1", "G", "课堂小结 · 高分公式", "content", frozenset({"40min", "70min", "80min"})),
+    PageSlot("G2", "G", "课后任务", "content", frozenset({"40min", "70min", "80min"})),
 )
 
 MODULE_DIVIDERS: dict[str, tuple[str, str, str]] = {
@@ -671,7 +673,7 @@ def build_slot_spec(slot: PageSlot, data: dict[str, Any]) -> dict | None:
 def build_architecture_deck(
     data: dict[str, Any],
     *,
-    preset: LessonPreset = "80min",
+    preset: LessonPreset = "70min",
 ) -> list[dict]:
     """Build fixed-architecture slide specs (Stage3 filled later via deck_plan)."""
     slides: list[dict] = []
@@ -821,7 +823,7 @@ def build_full_deck_from_export(
     stage3_path: Path,
     deck_plan_path: Path | None,
     *,
-    preset: LessonPreset = "80min",
+    preset: LessonPreset = "70min",
     vocab_max_rows: int = 6,
 ) -> list[dict]:
     from scripts.deck_plan import (

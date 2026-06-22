@@ -19,6 +19,16 @@ def test_80min_has_more_slots_than_40min():
     assert len(slots_for_preset("80min")) > len(slots_for_preset("40min"))
 
 
+def test_70min_slot_count():
+    """70min = 80min minus B4/C3/D8/D10 (18 architecture slots + Stage3)."""
+    slots = slots_for_preset("70min")
+    assert len(slots) == 18
+    ids = {s.slot_id for s in slots}
+    assert "A3" in ids
+    assert ids.isdisjoint({"B4", "C3", "D8", "D10"})
+    assert len(slots_for_preset("40min")) < len(slots) < len(slots_for_preset("80min"))
+
+
 def test_build_architecture_deck_has_title_and_stage3_placeholder():
     data = {
         "question_type_label": "观点理由类",

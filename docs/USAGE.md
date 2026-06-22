@@ -23,7 +23,7 @@
 | 阶段 | 产出 |
 |------|------|
 | Stage 1 | 审题总结 + 结构化 JSON（后续阶段的数据契约） |
-| Stage 2 | PEEL 策略卡、三版范文（**105–125 英文词**）、对比分析 |
+| Stage 2 | PEEL 策略卡、三版范文（**105–125 英文词，仅三段正文，不含 Dear 与结尾祝愿/落款**）、对比分析 |
 | Stage 3 | 功能句型包、话题词汇（必备 / 进阶 / 亮点） |
 | Stage 4 | 学情适配教学指南、易错预警、课后练习 |
 
@@ -81,6 +81,7 @@ Prompt 模板在 `prompts/`，修改后重跑对应 Stage 即可生效（`prompt
 ## 7. 导出与分享
 
 - **一键导出 Word**：至少完成 Stage 1 后可用；含题目与已完成阶段，标题/列表/表格已排版。
+- **导出 → 课堂 PPT**：`.\scripts\one_click_classroom_ppt.ps1 "导出.html"` 一键生成 `ppt-work/mental_health_classroom.pptx`（**Architecture V1 + V2 层次版**：固定 A–G 模块 + Stage3 表格 + WPS on-click 动画）。默认 **`--preset 70min`**（标准课时）；`40min` 精简、`80min` 完整可选。请用**分析报告** `.html`/`.docx`；若误传 `-课件.html` 会自动找同名分析报告。旧版 16 页课件骨架需加 `--classroom-html`。
 - **下载 JSON**：含 `stage1_json` 与各阶段原文，便于二次加工。
 - **分享链接**（需 Neon + `APP_BASE_URL`）：见 [DEPLOY_CLOUD.md](DEPLOY_CLOUD.md)。
 
@@ -93,5 +94,5 @@ Prompt 模板在 `prompts/`，修改后重跑对应 Stage 即可生效（`prompt
 ## 9. 常见问题
 
 - **卡在 Calling API**：看运行状态字数是否增长；可换更快模型或增大 `.env` 超时，见 README「排错」。
-- **范文词数不对**：Stage 2 要求 105–125 词；可单独重跑 Stage 2 或换指令跟随更好的模型。
+- **范文词数不对**：Stage 2 要求三段正文 **105–125 词**（不计称呼与结尾祝愿/落款）；可单独重跑 Stage 2 或换指令跟随更好的模型。
 - **Cloud 未更新**：`git push` 后在 Streamlit Cloud **Reboot**；核对侧边栏底部版本标签。

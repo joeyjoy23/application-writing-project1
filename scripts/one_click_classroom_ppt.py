@@ -43,7 +43,7 @@ def _build_v2_slides(
     vocab_max_rows: int,
     use_custom_plan: bool,
     export_data_path: Path | None = None,
-    preset: str = "80min",
+    preset: str = "70min",
     use_classroom_html: bool = False,
     module_dividers: bool = False,
 ) -> list[dict]:
@@ -64,7 +64,7 @@ def _build_v2_slides(
             else {}
         )
 
-    lesson: str = preset if preset in ("40min", "80min") else "80min"
+    lesson: str = preset if preset in ("40min", "70min", "80min") else "70min"
     if use_custom_plan and deck_plan_path and deck_plan_path.is_file():
         from deck_plan import load_deck_plan
 
@@ -144,9 +144,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--preset",
-        choices=("40min", "80min"),
-        default="80min",
-        help="课时 preset：40min 精简 / 80min 完整（架构 V1）",
+        choices=("40min", "70min", "80min"),
+        default="70min",
+        help="课时 preset：40min 精简 / 70min 标准（默认）/ 80min 完整（架构 V1）",
     )
     parser.add_argument(
         "--legacy-deck",

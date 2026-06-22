@@ -10,6 +10,7 @@
 - **测试**：`pytest`（改 UI、DB、解析、导出、工作流后必跑）
 - **文档**：`README.md`、`docs/USAGE.md`
 - **部署**：Streamlit Cloud；侧边栏 `UI_BUILD_TAG` 核对版本
+- **导出 → 课件 PPT**：skill `.cursor/skills/yingyongwen-export-to-ppt/`（V1 python-pptx）；`one_click_classroom_ppt.py` 或 `prepare_ppt_source.py` + `generate_classroom_pptx.py`；默认 **`--preset 70min`**；可选 Agent 撰写 `classroom_deck.json`
 
 ## Git
 
