@@ -67,6 +67,8 @@ from scripts.ppt_layout_fit import (
     plan_essay_stack,
     plan_title_cover_layout,
     split_banner_text,
+    TITLE_PANEL_TOP,
+    WPS_PANEL_FUDGE,
     text_block_height_paragraphs,
 )
 
@@ -270,20 +272,21 @@ class SlideBuilderV2:
         poster_lines: list[str] | None = None,
     ) -> None:
         slide = self._blank()
+        hero_h = TITLE_PANEL_TOP - 0.10
         hero = slide.shapes.add_shape(
-            MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(0), SLIDE_W, Inches(2.35)
+            MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(0), SLIDE_W, Inches(hero_h)
         )
         hero.fill.solid()
         hero.fill.fore_color.rgb = VIOLET
         hero.line.fill.background()
         stripe = slide.shapes.add_shape(
-            MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(2.35), SLIDE_W, Inches(0.06)
+            MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(hero_h), SLIDE_W, Inches(0.06)
         )
         stripe.fill.solid()
         stripe.fill.fore_color.rgb = CORAL
         stripe.line.fill.background()
 
-        tbox = slide.shapes.add_textbox(MARGIN_L, Inches(0.38), Inches(8.5), Inches(0.72))
+        tbox = slide.shapes.add_textbox(MARGIN_L, Inches(0.34), Inches(7.8), Inches(0.68))
         _configure_text_frame(tbox.text_frame, anchor=MSO_ANCHOR.MIDDLE)
         p = tbox.text_frame.paragraphs[0]
         p.text = title
@@ -292,40 +295,42 @@ class SlideBuilderV2:
         p.font.bold = True
         p.font.color.rgb = WHITE
 
-        sbox = slide.shapes.add_textbox(MARGIN_L, Inches(1.05), Inches(8.5), Inches(0.55))
-        _configure_text_frame(sbox.text_frame)
-        p = sbox.text_frame.paragraphs[0]
-        p.text = subtitle
-        p.font.name = FONT_UI
-        p.font.size = FONT_SECTION
-        p.font.color.rgb = RGBColor(0xE9, 0xD5, 0xFF)
+        tag = (subtitle or "").strip()
+        if tag and len(tag) <= 28:
+            sbox = slide.shapes.add_textbox(MARGIN_L, Inches(0.98), Inches(7.8), Inches(0.42))
+            _configure_text_frame(sbox.text_frame)
+            sp = sbox.text_frame.paragraphs[0]
+            sp.text = tag
+            sp.font.name = FONT_UI
+            sp.font.size = Pt(24)
+            sp.font.color.rgb = RGBColor(0xE9, 0xD5, 0xFF)
 
         self._pill(
             slide,
             "本课任务：选海报\n写理由",
-            left=MARGIN_L,
-            top=Inches(1.72),
-            width=Inches(4.6),
-            height=Inches(0.78),
+            left=Inches(8.55),
+            top=Inches(0.42),
+            width=Inches(4.2),
+            height=Inches(0.88),
             fill=CORAL,
         )
 
-        panel_top = 2.55
         body_lines_clean = [line for line in body_lines if line.strip()]
         poster_clean = [line for line in (poster_lines or []) if line.strip()]
         text_w = float(CONTENT_TEXT_W.inches) - 0.4
+        panel_top = TITLE_PANEL_TOP
         cover = plan_title_cover_layout(
             body_lines_clean,
             poster_clean or None,
             panel_top=panel_top,
             bottom_y=BOTTOM_Y,
             text_w=text_w,
-            poster_text_w=float(CONTENT_TEXT_W.inches) - 1.55 - 0.12,
         )
         fit = cover.stem_fit
         poster_fit = cover.poster_fit
         panel_h = cover.stem_panel_h
         panel_top_adj = panel_top
+
         panel = slide.shapes.add_shape(
             MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
             MARGIN_L,
@@ -337,18 +342,19 @@ class SlideBuilderV2:
         panel.fill.fore_color.rgb = PANEL_SKY
         panel.line.color.rgb = BORDER
 
-        space_after = Pt(10 if fit.line_spacing >= 1.0 else 6)
-        body_h = max(0.5, fit.block_height + 0.16)
-
+        pad_v = 0.18
+        pad_h = 0.2
+        body_h = max(0.55, panel_h - pad_v * 2)
         body = slide.shapes.add_textbox(
-            MARGIN_L + Inches(0.2),
-            Inches(panel_top_adj + 0.16),
-            CONTENT_TEXT_W - Inches(0.4),
+            MARGIN_L + Inches(pad_h),
+            Inches(panel_top_adj + pad_v),
+            CONTENT_TEXT_W - Inches(pad_h * 2),
             Inches(body_h),
         )
         _configure_text_frame(body.text_frame, pad_h=10, pad_v=8)
         tf = body.text_frame
         first = True
+        space_after = Pt(10 if fit.line_spacing >= 1.0 else 6)
         for line in body_lines_clean:
             para = tf.paragraphs[0] if first else tf.add_paragraph()
             first = False
@@ -360,7 +366,7 @@ class SlideBuilderV2:
             para.line_spacing = fit.line_spacing
 
         if poster_clean and poster_fit:
-            poster_gap = 0.1
+            poster_gap = 0.12
             poster_top = panel_top_adj + panel_h + poster_gap
             poster_h = cover.poster_panel_h
             poster = slide.shapes.add_shape(
@@ -373,26 +379,15 @@ class SlideBuilderV2:
             poster.fill.solid()
             poster.fill.fore_color.rgb = PANEL_MINT
             poster.line.color.rgb = BORDER
-            lbl = slide.shapes.add_textbox(
-                MARGIN_L + Inches(0.18),
-                Inches(poster_top + 0.08),
-                Inches(1.2),
-                Inches(0.42),
-            )
-            lp = lbl.text_frame.paragraphs[0]
-            lp.text = "图"
-            lp.font.name = FONT_UI
-            lp.font.size = Pt(26)
-            lp.font.bold = True
-            lp.font.color.rgb = INK
-            text_box_h = max(0.35, poster_fit.block_height + 0.1)
+            p_pad_v = 0.18
+            p_pad_h = 0.2
             pbox = slide.shapes.add_textbox(
-                MARGIN_L + Inches(1.35),
-                Inches(poster_top + 0.08),
-                CONTENT_TEXT_W - Inches(1.55),
-                Inches(text_box_h),
+                MARGIN_L + Inches(p_pad_h),
+                Inches(poster_top + p_pad_v),
+                CONTENT_TEXT_W - Inches(p_pad_h * 2),
+                Inches(max(0.45, poster_h - p_pad_v * 2)),
             )
-            _configure_text_frame(pbox.text_frame, pad_h=6, pad_v=4)
+            _configure_text_frame(pbox.text_frame, pad_h=10, pad_v=8)
             tf_p = pbox.text_frame
             first_p = True
             for line in poster_clean:
@@ -401,8 +396,59 @@ class SlideBuilderV2:
                 para.text = line
                 para.font.name = FONT_UI
                 para.font.size = Pt(poster_fit.font_pt)
-                para.font.color.rgb = MUTED
+                para.font.color.rgb = INK
+                para.space_after = Pt(8)
                 para.line_spacing = poster_fit.line_spacing
+
+    def title_poster_slide(self, title: str, poster_lines: list[str]) -> None:
+        """Second cover page when poster descriptions need their own slide."""
+        slide = self._blank()
+        top = self._header(slide, title, section="审题")
+        poster_clean = [ln for ln in poster_lines if ln.strip()]
+        if not poster_clean:
+            return
+        text_w = float(CONTENT_TEXT_W.inches) - 0.4
+        avail_h = BOTTOM_Y - top - 0.12
+        budget = LAYOUT_REGISTRY["title_body"]
+        poster_fit = fit_paragraphs(
+            poster_clean,
+            text_w,
+            avail_h - 0.36,
+            space_after_pt=10,
+            max_pt=budget.max_secondary_pt,
+            min_pt=budget.min_pt,
+            pad_h_pt=10,
+            pad_v_pt=8,
+        )
+        panel_h = max(1.0, poster_fit.block_height * WPS_PANEL_FUDGE + 0.36)
+        panel = slide.shapes.add_shape(
+            MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+            MARGIN_L,
+            Inches(top + 0.08),
+            CONTENT_TEXT_W,
+            Inches(panel_h),
+        )
+        panel.fill.solid()
+        panel.fill.fore_color.rgb = PANEL_MINT
+        panel.line.color.rgb = BORDER
+        pbox = slide.shapes.add_textbox(
+            MARGIN_L + Inches(0.2),
+            Inches(top + 0.26),
+            CONTENT_TEXT_W - Inches(0.4),
+            Inches(max(0.55, panel_h - 0.36)),
+        )
+        _configure_text_frame(pbox.text_frame, pad_h=10, pad_v=8)
+        tf_p = pbox.text_frame
+        first_p = True
+        for line in poster_clean:
+            para = tf_p.paragraphs[0] if first_p else tf_p.add_paragraph()
+            first_p = False
+            para.text = line
+            para.font.name = FONT_UI
+            para.font.size = Pt(poster_fit.font_pt)
+            para.font.color.rgb = INK
+            para.space_after = Pt(10)
+            para.line_spacing = poster_fit.line_spacing
 
     def roadmap_slide(self, steps: list[tuple[str, str, str]]) -> None:
         slide = self._blank()
@@ -1615,6 +1661,8 @@ def render_v2_deck(slides: list[dict], output: Path) -> Path:
                 spec["body"],
                 poster_lines=spec.get("poster_lines"),
             )
+        elif kind == "title_poster":
+            builder.title_poster_slide(spec["title"], spec.get("poster_lines") or [])
         elif kind == "roadmap":
             pass  # roadmap slides disabled
         elif kind == "divider":

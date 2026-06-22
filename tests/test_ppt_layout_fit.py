@@ -222,8 +222,21 @@ def test_title_poster_panel_shrink_wraps_fitted_text():
         poster,
     )
     assert cover.poster_fit is not None
-    assert cover.poster_panel_h >= cover.poster_fit.block_height + 0.35
-    assert cover.stem_panel_h + cover.poster_panel_h < 5.0
+    assert cover.poster_panel_h >= cover.poster_fit.block_height + 0.30
+    assert cover.stem_panel_h + cover.poster_panel_h < 5.5
+
+
+def test_expand_title_slides_always_splits_poster():
+    from scripts.ppt_layout_fit import expand_title_slides
+
+    poster = ["Poster 1：双手托心", "Poster 2：浇水壶"]
+    stem = ["假如你是李华，James 参加心理健康周海报大赛。"]
+    slides = expand_title_slides(
+        [{"type": "title", "title": "封面", "subtitle": "tag", "body": stem, "poster_lines": poster}]
+    )
+    assert len(slides) == 3
+    assert slides[0].get("poster_lines") is None
+    assert all(s["type"] == "title_poster" for s in slides[1:])
 
 
 def test_essay_annotation_stacks_below_body():

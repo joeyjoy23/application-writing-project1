@@ -91,14 +91,25 @@ def test_compare_table_parsed_from_stage2():
 
 def test_upgrade_bullets_from_stage2():
     stage2 = """五、高分升级点解析
-从「说态度」升级为「说动机」：not out of dullness…
-从「说明由」升级为「说画面」：wrestling with ideas…
+基础版 → 高分版 A
+从"说态度"升级为"说动机"：not out of dullness…
+从"说明由"升级为"说画面"：wrestling with ideas…
 """
     from scripts.architecture_v1 import _upgrade_bullets_from_stage2
 
     pts = _upgrade_bullets_from_stage2(stage2)
     assert len(pts) >= 2
     assert "动机" in pts[0]
+
+
+def test_poster_lines_splits_poster_chunks():
+    q = (
+        "题干\n"
+        "[图：两张海报：Poster 1是双手托心；Poster 2是浇水壶浇灌植物]"
+    )
+    posters = _poster_lines(q)
+    assert len(posters) >= 2
+    assert all(not p.startswith("[图") for p in posters)
 
 
 def test_question_lines_unescapes_and_splits_poster():

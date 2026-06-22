@@ -113,15 +113,27 @@ def _question_lines(question: str, max_lines: int = 6) -> list[str]:
     return [_trim(ln, 140) for ln in stem[:max_lines]]
 
 
-def _poster_lines(question: str, max_lines: int = 3) -> list[str]:
-    """Visual description lines split from question (``[图：…]``)."""
+_POSTER_CHUNK_SPLIT = re.compile(r"(?:;\s*|(?=Poster\s*\d)|(?=海报\s*\d))")
+
+
+def _poster_lines(question: str, max_lines: int = 4) -> list[str]:
+    """Visual description lines from ``[图：…]`` — one chunk per poster."""
     out: list[str] = []
     for ln in question.splitlines():
         ln = html.unescape(ln.strip())
-        if _POSTER_LINE_RE.match(ln):
-            out.append(_trim(ln, 160))
-        if len(out) >= max_lines:
-            break
+        if not _POSTER_LINE_RE.match(ln):
+            continue
+        inner = re.sub(r"^\[图[：:]\s*", "", ln).rstrip("]").strip()
+        chunks = [c.strip() for c in _POSTER_CHUNK_SPLIT.split(inner) if c.strip()]
+        if not chunks:
+            chunks = [inner]
+        for chunk in chunks:
+            label = chunk
+            if not re.match(r"^(Poster|海报)", chunk, re.I):
+                label = chunk
+            out.append(_trim(label, 140))
+            if len(out) >= max_lines:
+                return out
     return out
 
 
@@ -187,9 +199,9 @@ def _question_type_label(data: dict[str, Any]) -> str:
 
 
 def _topic_subtitle(data: dict[str, Any]) -> str:
-    q = (data.get("question") or "").strip()
-    first = _trim(q.splitlines()[0], 60) if q else "课堂应用文"
-    return first
+    """Short hero tag only — full题干 lives in the body panel (never duplicate here)."""
+    qtype = _question_type_label(data)
+    return f"{qtype} · 选海报写理由"
 
 
 def _stage1_triplet(stage1: str) -> list[str]:
@@ -576,7 +588,7 @@ def _upgrade_bullets_from_stage2(stage2: str, *, max_n: int = 5) -> list[str]:
             continue
         if re.match(r"^[一二三四五六七八九十、]", line) and out:
             break
-        if line.startswith("从「") or line.startswith("从\""):
+        if line.startswith("从") and ("升级为" in line or "：" in line):
             out.append(_trim(line, 140))
         elif line.startswith("- "):
             out.append(_trim(line[2:], 140))

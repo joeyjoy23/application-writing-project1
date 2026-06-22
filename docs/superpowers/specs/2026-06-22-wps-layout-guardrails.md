@@ -8,7 +8,8 @@
 
 | 槽位 | 规则 | 实现 |
 |------|------|------|
-| A1 封面 | 题干与 `[图：…]` 分离；HTML 实体解码 | `architecture_v1._question_lines` + `poster_lines` |
+| A1 封面 | 题干与 `[图：…]` 分离；HTML 实体解码；**海报每幅单独一页** | `_question_lines` + `expand_title_slides` |
+| A1 subtitle | 仅短标签（如「观点理由类 · 选海报写理由」），**禁止**重复题干首句 | `_topic_subtitle` |
 | C1 思维路径 | 只用「底层思维路径」或维度链；禁止「学生容易写成」类 bullet | `_extract_thinking_chain` |
 | F3s 当堂迁移 | 与题干人物/主题冲突的 Stage4 泛化题拒绝 | `_migration_matches_question` + 题干 fallback |
 | content 页 | 每页最多 3 条 bullet 卡片 | `expand_content_slides` |
@@ -21,7 +22,9 @@
 ```
 slides = expand_content_slides(
     expand_peel_slides(
-        expand_essay_slides(slides)
+        expand_essay_slides(
+            expand_title_slides(slides)
+        )
     )
 )
 ```

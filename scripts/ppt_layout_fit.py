@@ -24,6 +24,9 @@ FIT_WIDTH_FACTOR = 0.85
 FIT_HEIGHT_FACTOR = 0.94
 FIT_FILL_RATIO = 0.98
 WPS_SAFETY_FACTOR = 0.85
+# WPS text frames render taller than heuristic block_height — pad panel chrome.
+WPS_PANEL_FUDGE = 1.12
+TITLE_PANEL_TOP = 2.12
 MAX_CONTENT_BULLETS = 3
 ARROW_SEP_HEIGHT = 0.12
 _ARROW_SEP_RE = re.compile(r"^[↓→↔⬇]$")
@@ -1034,49 +1037,96 @@ def plan_title_cover_layout(
     body_lines: list[str],
     poster_lines: list[str] | None,
     *,
-    panel_top: float = 2.55,
+    panel_top: float = TITLE_PANEL_TOP,
     bottom_y: float = SLIDE_CONTENT_BOTTOM,
     text_w: float = 11.2,
     poster_text_w: float | None = None,
 ) -> TitleCoverLayout:
-    """Top-down stem + poster stack; poster box shrink-wraps fitted text."""
+    """Top-down stem + poster stack; panels shrink-wrap fitted paragraphs."""
     budget = LAYOUT_REGISTRY["title_body"]
     poster_clean = [ln for ln in (poster_lines or []) if ln.strip()]
     body_clean = [ln for ln in body_lines if ln.strip()]
     max_panel_h = bottom_y - panel_top - 0.08
-    poster_gap = 0.1
-    poster_pad = 0.42
-    poster_text_w = poster_text_w if poster_text_w is not None else text_w - 1.15
+    poster_gap = 0.12
+    stem_pad = 0.36
+    poster_pad = 0.36
+    poster_text_w = poster_text_w if poster_text_w is not None else text_w - 0.4
 
     poster_panel_h = 0.0
     poster_fit: FitResult | None = None
     if poster_clean:
-        min_stem_h = 0.8
-        poster_inner_budget = max(0.35, max_panel_h - min_stem_h - poster_gap - poster_pad)
-        poster_fit = fit_typography(
-            "\n".join(poster_clean),
+        min_stem_h = 0.9
+        poster_inner_budget = max(0.45, max_panel_h - min_stem_h - poster_gap - poster_pad)
+        poster_fit = fit_paragraphs(
+            poster_clean,
             poster_text_w,
             poster_inner_budget,
+            space_after_pt=8,
             max_pt=budget.max_secondary_pt,
             min_pt=budget.min_pt,
-            pad_h_pt=6,
-            pad_v_pt=4,
+            pad_h_pt=10,
+            pad_v_pt=8,
         )
-        poster_panel_h = poster_fit.block_height + poster_pad
+        poster_panel_h = poster_fit.block_height * WPS_PANEL_FUDGE + poster_pad
 
     stem_budget = max_panel_h - poster_panel_h - (poster_gap if poster_clean else 0.0)
     stem_fit = fit_paragraphs(
         body_clean,
         text_w,
-        max(0.5, stem_budget - 0.32),
+        max(0.55, stem_budget - stem_pad),
         space_after_pt=10,
         max_pt=budget.max_primary_pt,
         min_pt=budget.min_pt,
         pad_h_pt=10,
         pad_v_pt=8,
     )
-    stem_panel_h = max(0.8, stem_fit.block_height + 0.48)
+    stem_panel_h = max(0.9, stem_fit.block_height * WPS_PANEL_FUDGE + stem_pad)
     return TitleCoverLayout(stem_panel_h, poster_panel_h, stem_fit, poster_fit)
+
+
+def title_cover_needs_poster_slide(
+    body_lines: list[str],
+    poster_lines: list[str] | None,
+    *,
+    panel_top: float = TITLE_PANEL_TOP,
+    bottom_y: float = SLIDE_CONTENT_BOTTOM,
+) -> bool:
+    """True when stem + poster cannot fit one slide — poster goes to a follow-up page."""
+    cover = plan_title_cover_layout(body_lines, poster_lines, panel_top=panel_top, bottom_y=bottom_y)
+    if not poster_lines:
+        return False
+    if cover.poster_fit and cover.poster_fit.needs_split:
+        return True
+    if cover.stem_fit.needs_split:
+        return True
+    total = cover.stem_panel_h + cover.poster_panel_h + 0.12
+    return total > bottom_y - panel_top - 0.06
+
+
+def expand_title_slides(slides: list[dict]) -> list[dict]:
+    """Stem on cover; poster descriptions always on a follow-up slide."""
+    expanded: list[dict] = []
+    for spec in slides:
+        if spec.get("type") != "title":
+            expanded.append(spec)
+            continue
+        posters = spec.get("poster_lines") or []
+        if posters:
+            stem = dict(spec)
+            stem.pop("poster_lines", None)
+            expanded.append(stem)
+            for pl in posters:
+                expanded.append(
+                    {
+                        "type": "title_poster",
+                        "title": "海报示意",
+                        "poster_lines": [pl],
+                        "_module": spec.get("_module"),
+                    }
+                )
+        else:
+            expanded.append(spec)
+    return expanded
 
 
 @dataclass(frozen=True)

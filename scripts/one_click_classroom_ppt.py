@@ -29,6 +29,15 @@ from ppt_work_cleanup import cleanup_ppt_work_dir
 from pptx_click_reveal import apply_click_reveal
 
 
+def _console_print(text: str) -> None:
+    """Print safely on Windows consoles that lack full Unicode (e.g. GBK)."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc))
+
+
 def _default_out_dir(export_path: Path) -> Path:
     return export_path.parent / "ppt-work"
 
@@ -108,9 +117,16 @@ def _render_and_verify(
     *,
     no_anim: bool,
 ) -> tuple[list[str], int]:
-    from scripts.ppt_layout_fit import expand_content_slides, expand_essay_slides, expand_peel_slides
+    from scripts.ppt_layout_fit import (
+        expand_content_slides,
+        expand_essay_slides,
+        expand_peel_slides,
+        expand_title_slides,
+    )
 
-    slides = expand_content_slides(expand_peel_slides(expand_essay_slides(slides)))
+    slides = expand_content_slides(
+        expand_peel_slides(expand_essay_slides(expand_title_slides(slides)))
+    )
     render_v2_deck(slides, output_pptx)
     if not no_anim:
         apply_click_reveal(output_pptx)
@@ -272,11 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"动画: {'跳过' if args.no_anim else '已注入 on-click fade'}")
     print(f"Text overflow check: {'pass' if not overflow else 'FAIL'}")
     for issue in overflow[:5]:
-        line = f"  - {issue}"
-        try:
-            print(line)
-        except UnicodeEncodeError:
-            print(line.encode("utf-8", errors="replace").decode("utf-8"))
+        _console_print(f"  - {issue}")
 
     if len(overflow) > 5:
         print(f"  ... and {len(overflow) - 5} more")
