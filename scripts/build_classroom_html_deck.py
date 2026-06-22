@@ -1,10 +1,11 @@
-"""Build a student-safe, single-file HTML classroom deck from export-data.json.
+"""Build Plan B classroom HTML deck: Humanize AST + Architecture V1 content fill.
 
-Plan B fallback when guizang-ppt-skill is not installed: ecc-frontend-slides style,
-keyboard navigation, reveal animations, viewport-safe layout (26–32px body type).
+Pipeline:
+  1. Humanize slide_plan.json — per-module audience state transfer (AST)
+  2. Architecture V1 70min — page allocation + export-data + stage3 full content
+  3. ecc-frontend-slides HTML — viewport-safe, click-reveal, speaker-notes.html
 
-Content source: Architecture V1 + stage3.json (same pipeline as generate_classroom_pptx_v2),
-not the 6-page Humanize narrative outline.
+Student projection only; teacher guidance lives in speaker notes (S key).
 """
 
 from __future__ import annotations
@@ -24,6 +25,11 @@ if str(ROOT) not in sys.path:
 from scripts.architecture_v1 import build_full_deck_from_export
 from scripts.classroom_content_filter import is_teacher_only_line
 from scripts.essay_format import classroom_essay_plain_text, prepare_classroom_essay_display
+from scripts.humanize_classroom_ast import (
+    classroom_ast_header,
+    enrich_specs_with_ast,
+    speaker_note_entries,
+)
 
 MAX_BULLETS_PER_SLIDE = 6
 _VOCAB_COL_LABELS = {"english": "英文", "chinese": "中文", "example": "例句"}
@@ -410,15 +416,18 @@ def build_slide_specs(
     *,
     stage3_path: Path | None = None,
     deck_plan_path: Path | None = None,
-    preset: str = "80min",
+    slide_plan_path: Path | None = None,
+    speaker_intent_path: Path | None = None,
+    preset: str = "70min",
 ) -> list[dict[str, Any]]:
-    """Build full HTML slide specs from export + stage3 (Architecture V1 pipeline)."""
+    """Humanize AST metadata + Architecture V1 content → HTML slide dicts."""
+    lesson = preset if preset in ("40min", "70min", "80min") else "70min"
     if stage3_path and stage3_path.is_file():
         v2 = build_full_deck_from_export(
             export_data,
             stage3_path,
             deck_plan_path,
-            preset=preset if preset in ("40min", "70min", "80min") else "80min",  # type: ignore[arg-type]
+            preset=lesson,  # type: ignore[arg-type]
         )
     else:
         v2 = _legacy_specs_from_export(export_data)
@@ -428,6 +437,21 @@ def build_slide_specs(
     html_specs: list[dict[str, Any]] = []
     for spec in v2:
         html_specs.extend(v2_spec_to_html_slides(spec))
+
+    if slide_plan_path is None and speaker_intent_path is None:
+        return html_specs
+
+    if slide_plan_path is None and speaker_intent_path:
+        slide_plan_path = speaker_intent_path.parent / "slide_plan.json"
+    if speaker_intent_path is None and slide_plan_path:
+        candidate = slide_plan_path.parent / "speaker_intent.md"
+        speaker_intent_path = candidate if candidate.is_file() else None
+
+    enrich_specs_with_ast(
+        html_specs,
+        slide_plan_path=slide_plan_path,
+        speaker_intent_path=speaker_intent_path,
+    )
     return html_specs
 
 
@@ -439,26 +463,6 @@ def _legacy_specs_from_export(export_data: dict[str, Any]) -> list[dict[str, Any
     return inject_module_dividers(base)
 
 
-def _attach_slide_plan_intents(
-    specs: list[dict[str, Any]], slide_plan_path: Path | None
-) -> None:
-    """Optional: attach Humanize speaker_intent as data attribute (content unchanged)."""
-    if not slide_plan_path or not slide_plan_path.is_file():
-        return
-    try:
-        raw = json.loads(slide_plan_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return
-    plans = raw if isinstance(raw, list) else raw.get("slides") or []
-    if not plans:
-        return
-    for i, spec in enumerate(specs):
-        if i < len(plans):
-            intent = plans[i].get("speaker_intent") or plans[i].get("intent") or ""
-            if intent:
-                spec["speaker_intent"] = intent
-
-
 def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
     tag = _esc(slide.get("tag", ""))
     title = _esc(slide.get("title", ""))
@@ -467,8 +471,17 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
     warn = ' data-warn="1"' if slide.get("warn_panel") else ""
     intent = slide.get("speaker_intent", "")
     intent_attr = f' data-intent="{_esc(intent)}"' if intent else ""
+    ast_attrs = ""
+    if slide.get("one_thing"):
+        ast_attrs += f' data-one-thing="{_esc(slide["one_thing"])}"'
+    if slide.get("audience_in"):
+        ast_attrs += f' data-audience-in="{_esc(slide["audience_in"])}"'
+    if slide.get("audience_out"):
+        ast_attrs += f' data-audience-out="{_esc(slide["audience_out"])}"'
+    if slide.get("ast_role"):
+        ast_attrs += f' data-ast-role="{_esc(slide["ast_role"])}"'
     parts = [
-        f'<section class="slide{hero}{warn}" data-index="{index}" aria-label="{title}"{intent_attr}>',
+        f'<section class="slide{hero}{warn}" data-index="{index}" aria-label="{title}"{intent_attr}{ast_attrs}>',
         '<header class="slide-chrome">',
         f'<span class="tag">{tag}</span>',
     ]
@@ -494,7 +507,7 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
     if bullets:
         parts.append('<ul class="bullets">')
         for i, b in enumerate(bullets):
-            parts.append(f'<li class="reveal" style="--d:{i}">{_esc(b)}</li>')
+            parts.append(f'<li class="reveal" data-reveal="{i}">{_esc(b)}</li>')
         parts.append("</ul>")
 
     peel = slide.get("peel") or []
@@ -520,14 +533,14 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
 
     phrase_body = slide.get("phrase_body") or []
     if phrase_body:
-        parts.append('<table class="data-table reveal"><thead><tr>')
+        parts.append('<table class="data-table"><thead><tr>')
         parts.append("<th>层级</th><th>英文句型</th><th>说明</th></tr></thead><tbody>")
-        for row in phrase_body:
+        for ri, row in enumerate(phrase_body):
             zh = row.get("zh", "")
             if row.get("note"):
                 zh = f"{zh} · {row['note']}" if zh else row["note"]
             parts.append(
-                "<tr>"
+                f'<tr class="reveal-row" data-reveal="{ri}">'
                 f"<td>{_esc(row.get('tier', ''))}</td>"
                 f"<td class=\"en\">{_esc(row.get('en', ''))}</td>"
                 f"<td>{_esc(zh)}</td>"
@@ -538,14 +551,15 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
     headers = slide.get("table_headers") or []
     rows = slide.get("table_rows") or []
     if headers and rows:
-        parts.append('<table class="data-table reveal"><thead><tr>')
+        parts.append('<table class="data-table"><thead><tr>')
         for h in headers:
             parts.append(f"<th>{_esc(str(h))}</th>")
         parts.append("</tr></thead><tbody>")
-        for row in rows:
-            parts.append("<tr>")
-            for cell in row:
-                parts.append(f"<td>{_esc(str(cell))}</td>")
+        for ri, row in enumerate(rows):
+            parts.append(f'<tr class="reveal-row" data-reveal="{ri}">')
+            for ci, cell in enumerate(row):
+                cell_cls = ' class="en"' if ci == 0 or str(headers[ci]) == "英文" else ""
+                parts.append(f"<td{cell_cls}>{_esc(str(cell))}</td>")
             parts.append("</tr>")
         parts.append("</tbody></table>")
 
@@ -584,11 +598,12 @@ def render_html(specs: list[dict[str, Any]], deck_title: str) -> str:
   --warn: #e85d5d;
   --serif: "Noto Serif SC", serif;
   --sans: "Noto Sans SC", sans-serif;
+  --en: "Times New Roman", Times, "Noto Serif", serif;
   --mono: "IBM Plex Mono", monospace;
   --body-min: 26px;
   --body-max: 32px;
-  --title-min: 34px;
-  --title-max: 48px;
+  --title-min: 36px;
+  --title-max: 40px;
 }}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 html, body {{
@@ -682,7 +697,7 @@ html, body {{
 }}
 .peel-card li {{ margin-bottom: 0.35em; }}
 .essay {{
-  white-space: pre-wrap; font-family: var(--sans);
+  white-space: pre-wrap; font-family: var(--en);
   font-size: clamp(var(--body-min), 2.3vw, 30px); line-height: 1.45;
   background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.08);
   border-radius: 12px; padding: clamp(0.7rem, 1.8vh, 1.1rem);
@@ -702,7 +717,8 @@ html, body {{
   vertical-align: top; text-align: left; line-height: 1.35;
 }}
 .data-table th {{ background: var(--accent-soft); color: #d8efe6; }}
-.data-table td.en, .data-table td:nth-child(2) {{ font-family: var(--mono); }}
+.data-table td.en, .data-table td:nth-child(2) {{ font-family: var(--en); }}
+.peel-card li {{ font-family: var(--en); }}
 .fix-grid {{
   display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; flex: 1; min-height: 0;
 }}
@@ -718,13 +734,16 @@ html, body {{
   font-family: var(--mono); font-size: clamp(14px, 1.2vw, 16px);
   color: rgba(244,241,234,.4);
 }}
-.reveal {{ opacity: 0; transform: translateY(14px); transition: opacity .55s ease, transform .55s ease; }}
-.slide.is-active .reveal {{ opacity: 1; transform: none; }}
-.slide.is-active .reveal[style*="--d:1"] {{ transition-delay: .08s; }}
-.slide.is-active .reveal[style*="--d:2"] {{ transition-delay: .16s; }}
-.slide.is-active .reveal[style*="--d:3"] {{ transition-delay: .24s; }}
-.slide.is-active .reveal[style*="--d:4"] {{ transition-delay: .32s; }}
-.slide.is-active .reveal[style*="--d:5"] {{ transition-delay: .40s; }}
+.reveal, .reveal-row {{
+  opacity: 0; transform: translateY(12px);
+  transition: opacity .45s ease, transform .45s ease;
+}}
+.reveal.is-shown, .reveal-row.is-shown {{
+  opacity: 1; transform: none;
+}}
+.slide-chrome, .slide-title, .slide-foot, .data-table thead {{
+  opacity: 1 !important; transform: none !important;
+}}
 #hint {{
   position: fixed; bottom: 1rem; right: 1.2rem; z-index: 20;
   font-family: var(--mono); font-size: clamp(14px, 1.2vw, 16px);
@@ -734,8 +753,8 @@ html, body {{
   .peel-grid, .fix-grid {{ grid-template-columns: 1fr; }}
 }}
 @media (prefers-reduced-motion: reduce) {{
-  #deck, .reveal {{ transition: none !important; }}
-  .reveal {{ opacity: 1; transform: none; }}
+  #deck, .reveal, .reveal-row {{ transition: none !important; }}
+  .reveal, .reveal-row {{ opacity: 1; transform: none; }}
 }}
 </style>
 </head>
@@ -743,29 +762,78 @@ html, body {{
 <main id="deck" aria-live="polite">
 {slides_html}
 </main>
-<div id="hint">← → 翻页 · F11 全屏</div>
+<div id="hint">空格/点击 逐条呈现 · ← → 翻页 · F11 全屏 · S 讲稿</div>
 <script>
 (function() {{
   const deck = document.getElementById('deck');
   const slides = Array.from(deck.querySelectorAll('.slide'));
   let idx = 0;
+  let notesWin = null;
+
+  function revealItems(slide) {{
+    return Array.from(slide.querySelectorAll('.reveal, .reveal-row'))
+      .sort((a, b) => (+a.dataset.reveal || 0) - (+b.dataset.reveal || 0));
+  }}
+
+  function resetReveal(slide) {{
+    revealItems(slide).forEach(el => el.classList.remove('is-shown'));
+  }}
+
+  function shownCount(slide) {{
+    return revealItems(slide).filter(el => el.classList.contains('is-shown')).length;
+  }}
+
+  function revealNext(slide) {{
+    const items = revealItems(slide);
+    const next = items.find(el => !el.classList.contains('is-shown'));
+    if (next) {{ next.classList.add('is-shown'); return true; }}
+    return false;
+  }}
+
+  function revealAll(slide) {{
+    revealItems(slide).forEach(el => el.classList.add('is-shown'));
+  }}
+
   function go(n) {{
     idx = Math.max(0, Math.min(slides.length - 1, n));
     deck.style.transform = 'translateX(-' + (idx * 100) + 'vw)';
     slides.forEach((s, i) => s.classList.toggle('is-active', i === idx));
+    resetReveal(slides[idx]);
+    revealNext(slides[idx]);
   }}
+
+  function advanceOrNext() {{
+    const slide = slides[idx];
+    if (!revealNext(slide)) go(idx + 1);
+  }}
+
+  function openNotes() {{
+    const path = 'speaker-notes.html';
+    if (notesWin && !notesWin.closed) {{ notesWin.focus(); return; }}
+    notesWin = window.open(path, 'speaker-notes', 'width=520,height=720');
+  }}
+
   function onKey(e) {{
-    if (['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)) {{ e.preventDefault(); go(idx + 1); }}
-    if (['ArrowLeft','ArrowUp','PageUp','Backspace'].includes(e.key)) {{ e.preventDefault(); go(idx - 1); }}
+    if (e.key === 's' || e.key === 'S') {{ e.preventDefault(); openNotes(); return; }}
+    if (['ArrowRight','ArrowDown','PageDown'].includes(e.key)) {{
+      e.preventDefault(); go(idx + 1); return;
+    }}
+    if (['ArrowLeft','ArrowUp','PageUp','Backspace'].includes(e.key)) {{
+      e.preventDefault(); go(idx - 1); return;
+    }}
+    if (e.key === ' ' || e.key === 'Enter') {{ e.preventDefault(); advanceOrNext(); return; }}
     if (e.key === 'Home') go(0);
     if (e.key === 'End') go(slides.length - 1);
   }}
+
   let touchX = null;
+  deck.addEventListener('click', () => advanceOrNext());
   deck.addEventListener('touchstart', e => {{ touchX = e.changedTouches[0].clientX; }}, {{passive:true}});
   deck.addEventListener('touchend', e => {{
     if (touchX == null) return;
     const dx = e.changedTouches[0].clientX - touchX;
     if (Math.abs(dx) > 40) go(idx + (dx < 0 ? 1 : -1));
+    else advanceOrNext();
     touchX = null;
   }}, {{passive:true}});
   window.addEventListener('keydown', onKey);
@@ -777,6 +845,58 @@ html, body {{
   go(0);
 }})();
 </script>
+</body>
+</html>
+"""
+
+
+def render_speaker_notes_html(specs: list[dict[str, Any]], deck_title: str) -> str:
+    """Teacher-facing notes: AST state transfer + intent (not on student projection)."""
+    header = classroom_ast_header()
+    entries = speaker_note_entries(specs)
+    rows: list[str] = []
+    for e in entries:
+        rows.append(
+            f"""<article class="note" id="slide-{e['index']}">
+  <header><span class="num">{e['index']}</span> <strong>{_esc(e['title'])}</strong>
+    <span class="tag">{_esc(e['tag'])} · {_esc(e['role_label'])}</span></header>
+  <dl>
+    <dt>观众进入</dt><dd>{_esc(e['audience_in'])}</dd>
+    <dt>本页一件事</dt><dd>{_esc(e['one_thing'])}</dd>
+    <dt>观众带走</dt><dd>{_esc(e['audience_out'])}</dd>
+  </dl>
+</article>"""
+        )
+    body = "\n".join(rows)
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{_esc(deck_title)} · 讲稿</title>
+<style>
+:root {{ --ink:#1a1a1a; --paper:#faf8f5; --accent:#1a5f4a; --sans:"Noto Sans SC",sans-serif; }}
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:var(--sans); background:var(--paper); color:var(--ink); padding:1.2rem; line-height:1.5; }}
+h1 {{ font-size:1.35rem; margin-bottom:.5rem; }}
+.arc {{ background:#eef5f2; border-left:4px solid var(--accent); padding:.75rem 1rem; margin-bottom:1.2rem; font-size:.95rem; }}
+.note {{ border:1px solid #ddd; border-radius:8px; padding:.85rem 1rem; margin-bottom:.75rem; }}
+.note header {{ margin-bottom:.45rem; }}
+.num {{ display:inline-block; background:var(--accent); color:#fff; border-radius:999px; padding:0 .55em; font-size:.85rem; }}
+.tag {{ color:#666; font-size:.85rem; margin-left:.5rem; }}
+dl {{ display:grid; grid-template-columns:5.5em 1fr; gap:.25rem .6rem; font-size:.92rem; }}
+dt {{ color:#666; }}
+</style>
+</head>
+<body>
+<h1>{_esc(deck_title)}</h1>
+<div class="arc">
+  <p><strong>观众</strong> {_esc(header['audience'])}</p>
+  <p><strong>起点</strong> {_esc(header['initial_state'])} → <strong>终点</strong> {_esc(header['desired_state'])}</p>
+  <p><strong>张力</strong> {_esc(header['core_tension'])}</p>
+</div>
+{body}
+<p style="margin-top:1.5rem;color:#888;font-size:.85rem">共 {len(entries)} 页 · 与学生屏 classroom-deck.html 页序一致</p>
 </body>
 </html>
 """
@@ -806,13 +926,19 @@ def main() -> int:
         "--slide-plan",
         type=Path,
         default=None,
-        help="Optional Humanize slide_plan.json (intent metadata only)",
+        help="Humanize slide_plan.json (AST spine for speaker notes)",
+    )
+    ap.add_argument(
+        "--speaker-intent",
+        type=Path,
+        default=None,
+        help="Humanize speaker_intent.md",
     )
     ap.add_argument(
         "--preset",
         choices=("40min", "70min", "80min"),
-        default="80min",
-        help="Architecture V1 lesson preset (80min = full 3 essays)",
+        default="70min",
+        help="Architecture V1 lesson preset (default 70min)",
     )
     ap.add_argument(
         "--out",
@@ -820,26 +946,44 @@ def main() -> int:
         default=Path(r"D:\Downloads\ppt-work\humanize-run\classroom-deck.html"),
         help="Output HTML path",
     )
+    ap.add_argument(
+        "--notes-out",
+        type=Path,
+        default=None,
+        help="Speaker notes HTML (default: sibling speaker-notes.html)",
+    )
     args = ap.parse_args()
     data = json.loads(args.export.read_text(encoding="utf-8"))
+
+    slide_plan = args.slide_plan
+    speaker_intent = args.speaker_intent
+    if slide_plan is None:
+        default_plan = Path(r"D:\Downloads\ppt-work\humanize-run\slide_plan.json")
+        if default_plan.is_file():
+            slide_plan = default_plan
+    if speaker_intent is None and slide_plan:
+        candidate = slide_plan.parent / "speaker_intent.md"
+        speaker_intent = candidate if candidate.is_file() else None
+
     specs = build_slide_specs(
         data,
         stage3_path=args.stage3 if args.stage3.is_file() else None,
         deck_plan_path=args.deck_plan,
+        slide_plan_path=slide_plan,
+        speaker_intent_path=speaker_intent,
         preset=args.preset,
     )
-    slide_plan = args.slide_plan
-    if slide_plan is None:
-        default_plan = args.out.parent / "slide_plan.json"
-        if default_plan.is_file():
-            slide_plan = default_plan
-    _attach_slide_plan_intents(specs, slide_plan)
 
     title = specs[0]["title"] if specs else "课堂课件"
     html_out = render_html(specs, title)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(html_out, encoding="utf-8")
+
+    notes_path = args.notes_out or args.out.parent / "speaker-notes.html"
+    notes_path.write_text(render_speaker_notes_html(specs, title), encoding="utf-8")
+
     print(f"Wrote {len(specs)} slides -> {args.out}")
+    print(f"Wrote speaker notes -> {notes_path}")
     return 0
 
 

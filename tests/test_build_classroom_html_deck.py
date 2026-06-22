@@ -9,6 +9,7 @@ from pathlib import Path
 from scripts.build_classroom_html_deck import (
     build_slide_specs,
     render_html,
+    render_speaker_notes_html,
     stage1_supplement_specs,
     v2_spec_to_html_slides,
 )
@@ -41,6 +42,25 @@ def test_render_html_uses_classroom_font_minimum():
     html_out = render_html(specs, "字体测试")
     assert "clamp(var(--body-min), 2.5vw, var(--body-max))" in html_out
     assert "--body-min: 26px" in html_out
+    assert "--title-min: 36px" in html_out
+    assert "Times New Roman" in html_out
+    assert "data-reveal" in html_out
+
+
+def test_speaker_notes_html():
+    specs = [
+        {
+            "title": "审题",
+            "tag": "Stage 1",
+            "ast_role_label": "张力",
+            "audience_in": "进入",
+            "audience_out": "带走",
+            "one_thing": "完成审题",
+        }
+    ]
+    notes = render_speaker_notes_html(specs, "测试")
+    assert "完成审题" in notes
+    assert "观众进入" in notes
 
 
 def test_v2_essay_uses_prepare_classroom_display():
@@ -79,17 +99,23 @@ def test_stage1_supplements_include_self_checks():
 def test_render_html_slide_count_matches_export(tmp_path):
     if not REAL_EXPORT.is_file() or not REAL_STAGE3.is_file():
         return
+    plan = Path(r"D:\Downloads\ppt-work\humanize-run\slide_plan.json")
     data = json.loads(REAL_EXPORT.read_text(encoding="utf-8"))
-    specs = build_slide_specs(data, stage3_path=REAL_STAGE3, preset="80min")
-    assert len(specs) >= 40, f"expected full deck, got {len(specs)}"
+    specs = build_slide_specs(
+        data,
+        stage3_path=REAL_STAGE3,
+        slide_plan_path=plan if plan.is_file() else None,
+        preset="70min",
+    )
+    assert len(specs) >= 35, f"expected 70min full deck, got {len(specs)}"
     assert any(s.get("essay") for s in specs), "missing essay slides"
     assert any(s.get("phrase_body") for s in specs), "missing phrase tables"
-    assert any(s.get("table_rows") and s.get("tier") for s in specs), "missing vocab"
+    assert any(s.get("one_thing") for s in specs), "missing Humanize AST"
     out = tmp_path / "deck.html"
     html_out = render_html(specs, "心理健康")
     out.write_text(html_out, encoding="utf-8")
     assert html_out.count("<section") == len(specs)
-    assert re.search(r"font-size:\s*clamp\(var\(--body-min\)", html_out)
+    assert "advanceOrNext" in html_out
 
 
 def test_no_sub_26px_body_in_css():
