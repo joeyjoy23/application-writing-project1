@@ -2,6 +2,7 @@
 
 from scripts.ppt_layout_fit import (
     LAYOUT_REGISTRY,
+    expand_content_slides,
     expand_essay_slides,
     essay_text_fits,
     fit_banner,
@@ -12,6 +13,7 @@ from scripts.ppt_layout_fit import (
     fit_vocab_chunk,
     phrase_table_body_heights,
     split_essay_text,
+    split_banner_text,
 )
 
 
@@ -143,3 +145,31 @@ def test_bullet_card_layout_long_bullet_taller():
     long = "核心任务：" + ("表明立场并用设计元素支撑理由 " * 8)
     layout = fit_bullet_card_layout([short, long], budget, content_height=5.0)
     assert layout.heights[1] > layout.heights[0]
+
+
+def test_expand_content_slides_splits_four_bullets():
+    slides = [
+        {
+            "type": "content",
+            "title": "审题 · 任务拆解",
+            "bullets": ["① 一", "② 二", "③ 三", "④ 四"],
+        }
+    ]
+    out = expand_content_slides(slides)
+    assert len(out) == 2
+    assert len(out[0]["bullets"]) == 3
+    assert len(out[1]["bullets"]) == 1
+    assert "（1/2）" in out[0]["title"]
+
+
+def test_split_banner_text_two_lines_for_long_topic_note():
+    budget = LAYOUT_REGISTRY["phrase_table_footer"]
+    note = (
+        "本题需明确表达选择，适合用此功能句型；"
+        "避免用“I suggest that”等过于正式或模糊的表达，"
+        "直接陈述观点更符合朋友间邮件的友好语气。"
+    )
+    lines = split_banner_text(note, budget)
+    assert len(lines) >= 1
+    if fit_banner(note, budget).needs_split:
+        assert len(lines) == 2

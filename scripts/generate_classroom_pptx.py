@@ -156,8 +156,10 @@ def _frame_text_height(
     Planning uses WPS safety factors; verify uses margins only + small tolerance.
     """
     if for_verify:
-        eff_w = max(1.0, width_inches - 2 * pad_h_pt / 72.0)
-        eff_h = max(0.25, height_inches - 2 * pad_v_pt / 72.0)
+        from scripts.ppt_layout_fit import WPS_SAFETY_FACTOR
+
+        eff_w = max(1.0, width_inches - 2 * pad_h_pt / 72.0) * WPS_SAFETY_FACTOR
+        eff_h = max(0.25, height_inches - 2 * pad_v_pt / 72.0) * WPS_SAFETY_FACTOR
     else:
         eff_w, eff_h = effective_text_area(
             width_inches, height_inches, pad_h_pt=pad_h_pt, pad_v_pt=pad_v_pt

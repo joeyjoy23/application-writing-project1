@@ -108,9 +108,9 @@ def _render_and_verify(
     *,
     no_anim: bool,
 ) -> tuple[list[str], int]:
-    from scripts.ppt_layout_fit import expand_essay_slides, expand_peel_slides
+    from scripts.ppt_layout_fit import expand_content_slides, expand_essay_slides, expand_peel_slides
 
-    slides = expand_peel_slides(expand_essay_slides(slides))
+    slides = expand_content_slides(expand_peel_slides(expand_essay_slides(slides)))
     render_v2_deck(slides, output_pptx)
     if not no_anim:
         apply_click_reveal(output_pptx)

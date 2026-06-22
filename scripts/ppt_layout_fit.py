@@ -20,9 +20,11 @@ MIN_LINE_SPACING = 0.9
 FONT_STEPS = (32, 30, 28, 26)
 LINE_SPACING_STEPS = (1.12, 1.05, 1.0, 0.95, 0.9)
 # WPS wraps tighter than heuristic; leave margin for cell/text-frame padding.
-FIT_WIDTH_FACTOR = 0.88
+FIT_WIDTH_FACTOR = 0.85
 FIT_HEIGHT_FACTOR = 0.94
 FIT_FILL_RATIO = 0.98
+WPS_SAFETY_FACTOR = 0.85
+MAX_CONTENT_BULLETS = 3
 
 ColKind = Literal["primary", "secondary", "label"]
 
@@ -345,6 +347,25 @@ def fit_banner(
     )
 
 
+def split_banner_text(text: str, budget: LayoutBudget | None = None) -> list[str]:
+    """Split long banner text into two lines when single-line fit would overflow."""
+    budget = budget or LAYOUT_REGISTRY["phrase_table_footer"]
+    clean = text.replace("💡", "").strip()
+    if not clean or not fit_banner(clean, budget).needs_split:
+        return [clean] if clean else []
+    mid = len(clean) // 2
+    best = mid
+    for sep in ("；", "，", ",", "。", "、", " "):
+        pos = clean.rfind(sep, max(0, mid - 24), min(len(clean), mid + 24))
+        if pos > 12:
+            best = pos + len(sep)
+            break
+    line1, line2 = clean[:best].strip(), clean[best:].strip()
+    if line1 and line2:
+        return [line1, line2]
+    return [clean]
+
+
 def fit_table_rows(
     values: list[str],
     col_fracs: list[float],
@@ -605,6 +626,55 @@ def expand_peel_slides(slides: list[dict]) -> list[dict]:
             new_spec = dict(spec)
             new_spec["points"] = points
             new_spec["layout"] = "dual"
+            expanded.append(new_spec)
+    return expanded
+
+
+def expand_content_slides(slides: list[dict]) -> list[dict]:
+    """Split content slides when bullet cards overflow (WPS-safe: max 3 bullets/page)."""
+    expanded: list[dict] = []
+    budget = LAYOUT_REGISTRY["content_cards"]
+    for spec in slides:
+        if spec.get("type") != "content":
+            expanded.append(spec)
+            continue
+        bullets = [b for b in (spec.get("bullets") or []) if b.strip()]
+        if not bullets:
+            expanded.append(spec)
+            continue
+        key_lines = [
+            b for b in bullets if b.startswith("💡") or "高分关键" in b or "最危险" in b
+        ]
+        body_bullets = [b for b in bullets if b not in key_lines]
+        has_banner = bool(key_lines)
+        has_badge = bool(spec.get("badge"))
+        reserve = 0.62 if has_badge else 0.0
+        reserve += 1.05 if has_banner else 0.0
+        content_h = budget.content_height(with_pill=has_badge) - reserve
+        layout = fit_bullet_card_layout(
+            body_bullets,
+            budget,
+            content_height=max(2.0, content_h),
+        )
+        needs_split = layout.needs_split or len(body_bullets) > MAX_CONTENT_BULLETS
+        if not needs_split:
+            expanded.append(spec)
+            continue
+        chunk_size = MAX_CONTENT_BULLETS
+        chunks: list[list[str]] = []
+        for i in range(0, len(body_bullets), chunk_size):
+            chunk = body_bullets[i : i + chunk_size]
+            if i == 0 and key_lines:
+                chunks.append(key_lines + chunk)
+            else:
+                chunks.append(chunk)
+        for idx, chunk in enumerate(chunks):
+            new_spec = dict(spec)
+            new_spec["bullets"] = chunk
+            if len(chunks) > 1:
+                new_spec["title"] = f"{spec['title']}（{idx + 1}/{len(chunks)}）"
+            if idx > 0:
+                new_spec.pop("badge", None)
             expanded.append(new_spec)
     return expanded
 
