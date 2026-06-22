@@ -1,6 +1,7 @@
 """Tests for ppt_layout_fit."""
 
 from scripts.ppt_layout_fit import (
+    ARROW_SEP_HEIGHT,
     LAYOUT_REGISTRY,
     expand_content_slides,
     expand_essay_slides,
@@ -11,9 +12,13 @@ from scripts.ppt_layout_fit import (
     fit_paragraphs,
     fit_typography,
     fit_vocab_chunk,
+    is_arrow_separator,
     phrase_table_body_heights,
+    plan_essay_stack,
+    plan_title_cover_layout,
     split_essay_text,
     split_banner_text,
+    substantive_bullet_count,
 )
 
 
@@ -173,3 +178,61 @@ def test_split_banner_text_two_lines_for_long_topic_note():
     assert len(lines) >= 1
     if fit_banner(note, budget).needs_split:
         assert len(lines) == 2
+
+
+def test_is_arrow_separator_detects_chain_arrows():
+    assert is_arrow_separator("↓")
+    assert is_arrow_separator("→")
+    assert is_arrow_separator("↔")
+    assert not is_arrow_separator("海报画面 → 象征意义")
+    assert not is_arrow_separator("① 选择明确")
+
+
+def test_arrow_separators_use_minimal_card_height():
+    budget = LAYOUT_REGISTRY["content_cards"]
+    bullets = ["步骤一：读题", "↓", "步骤二：立意", "↓", "步骤三：成文"]
+    layout = fit_bullet_card_layout(bullets, budget, content_height=5.0)
+    assert layout.heights[1] == ARROW_SEP_HEIGHT
+    assert layout.heights[3] == ARROW_SEP_HEIGHT
+    assert layout.heights[0] > ARROW_SEP_HEIGHT
+
+
+def test_expand_content_slides_ignores_arrows_in_bullet_limit():
+    slides = [
+        {
+            "type": "content",
+            "title": "思维 · 高分路径",
+            "bullets": ["读画面", "↓", "挖象征", "↓", "写理由"],
+        }
+    ]
+    out = expand_content_slides(slides)
+    assert len(out) == 1
+    assert substantive_bullet_count(out[0]["bullets"]) == 3
+
+
+def test_title_poster_panel_shrink_wraps_fitted_text():
+    poster = [
+        "海报一：裂缝中的向日葵，象征在困境中仍向阳生长",
+        "海报二：微笑面具下的泪水，揭示心理健康需被看见",
+        "两幅海报均紧扣 James 心理健康主题",
+        "画面元素可支撑选海报并写理由",
+    ]
+    cover = plan_title_cover_layout(
+        ["James 发来两幅心理健康主题海报，请你帮他选一幅并说明理由。"],
+        poster,
+    )
+    assert cover.poster_fit is not None
+    assert cover.poster_panel_h >= cover.poster_fit.block_height + 0.35
+    assert cover.stem_panel_h + cover.poster_panel_h < 5.0
+
+
+def test_essay_annotation_stacks_below_body():
+    paragraphs = [
+        "Glad to hear about your poster designs.",
+        "I'd go with Poster 1 because it shows vulnerability and hope.",
+        "Overall, mental health matters.  Word count: 110",
+    ]
+    annotation = "①选择明确  ②理由有画面  ③结尾升华"
+    stack = plan_essay_stack(paragraphs, annotation)
+    assert stack.annotation_top >= stack.body_top + stack.body_height + 0.07
+    assert stack.annotation_top + stack.annotation_height <= 7.32 + 0.05

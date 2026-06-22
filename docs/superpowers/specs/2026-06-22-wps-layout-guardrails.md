@@ -63,3 +63,13 @@ Stage3 句型/词块拆页由 `deck_plan.refine_deck_plan` 在合并前完成。
 2. 改布局预算 → 补 layout_fit 单测
 3. 合并前跑 `expand_*` 链 + `verify_text_fit`
 4. 重大排版修复 → 更新本文档日期与表格
+
+## 渲染硬规则（2026-06-22 增补）
+
+| 规则 | 说明 |
+|------|------|
+| 框高 shrink-wrap | 圆角矩形高度 = `fit_typography` / `fit_paragraphs` 实测块高 + padding；禁止用固定 `min` 高度忽略 fit 结果（封面海报区、stem 白框） |
+| 箭头分隔符 | `↓` `→` `↔` 等链式箭头：**无**卡片底框，居中纯文字，`ARROW_SEP_HEIGHT≈0.12"`；不计入 `MAX_CONTENT_BULLETS` |
+| 范文批注 | 英文正文与中文批注（①②③）**纵向堆叠**：`annotation_top = body_top + body_height + gap`；禁止与正文共用起始 Y 或垂直居中导致重叠 |
+
+实现：`plan_title_cover_layout`、`plan_essay_stack`、`is_arrow_separator`（`ppt_layout_fit.py`）；V2 渲染器 `generate_classroom_pptx_v2.py`。

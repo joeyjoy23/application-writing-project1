@@ -46,6 +46,7 @@ from scripts.generate_classroom_pptx import (
     verify_text_fit,
 )
 from scripts.ppt_layout_fit import (
+    ARROW_SEP_HEIGHT,
     LAYOUT_REGISTRY,
     PEEL_CARD_WIDTH,
     effective_text_area,
@@ -59,9 +60,12 @@ from scripts.ppt_layout_fit import (
     fit_table_rows,
     fit_typography,
     fit_vocab_chunk,
+    is_arrow_separator,
     line_count,
     normalize_peel_point,
     phrase_table_body_heights,
+    plan_essay_stack,
+    plan_title_cover_layout,
     split_banner_text,
     text_block_height_paragraphs,
 )
@@ -307,35 +311,21 @@ class SlideBuilderV2:
         )
 
         panel_top = 2.55
-        max_panel_h = BOTTOM_Y - panel_top - 0.08
-        budget = LAYOUT_REGISTRY["title_body"]
         body_lines_clean = [line for line in body_lines if line.strip()]
         poster_clean = [line for line in (poster_lines or []) if line.strip()]
         text_w = float(CONTENT_TEXT_W.inches) - 0.4
-        poster_reserve = 0.0
-        if poster_clean:
-            poster_fit = fit_typography(
-                "\n".join(poster_clean),
-                text_w,
-                1.35,
-                max_pt=budget.max_secondary_pt,
-                min_pt=budget.min_pt,
-                pad_h_pt=10,
-                pad_v_pt=6,
-            )
-            poster_reserve = min(1.45, poster_fit.block_height + 0.42)
-        fit = fit_paragraphs(
+        cover = plan_title_cover_layout(
             body_lines_clean,
-            text_w,
-            max_panel_h - 0.32 - poster_reserve,
-            space_after_pt=10,
-            max_pt=budget.max_primary_pt,
-            min_pt=budget.min_pt,
-            pad_h_pt=10,
-            pad_v_pt=8,
+            poster_clean or None,
+            panel_top=panel_top,
+            bottom_y=BOTTOM_Y,
+            text_w=text_w,
+            poster_text_w=float(CONTENT_TEXT_W.inches) - 1.55 - 0.12,
         )
-        panel_h = min(max_panel_h - poster_reserve, max(1.6, fit.block_height + 0.4))
-        panel_top_adj = panel_top + max(0.0, (max_panel_h - poster_reserve - panel_h) * 0.2)
+        fit = cover.stem_fit
+        poster_fit = cover.poster_fit
+        panel_h = cover.stem_panel_h
+        panel_top_adj = panel_top
         panel = slide.shapes.add_shape(
             MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
             MARGIN_L,
@@ -348,7 +338,7 @@ class SlideBuilderV2:
         panel.line.color.rgb = BORDER
 
         space_after = Pt(10 if fit.line_spacing >= 1.0 else 6)
-        body_h = max(0.8, panel_h - 0.32)
+        body_h = max(0.5, fit.block_height + 0.16)
 
         body = slide.shapes.add_textbox(
             MARGIN_L + Inches(0.2),
@@ -369,9 +359,10 @@ class SlideBuilderV2:
             para.space_after = space_after
             para.line_spacing = fit.line_spacing
 
-        if poster_clean:
-            poster_top = panel_top_adj + panel_h + 0.1
-            poster_h = max(0.72, poster_reserve)
+        if poster_clean and poster_fit:
+            poster_gap = 0.1
+            poster_top = panel_top_adj + panel_h + poster_gap
+            poster_h = cover.poster_panel_h
             poster = slide.shapes.add_shape(
                 MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
                 MARGIN_L,
@@ -394,11 +385,12 @@ class SlideBuilderV2:
             lp.font.size = Pt(26)
             lp.font.bold = True
             lp.font.color.rgb = INK
+            text_box_h = max(0.35, poster_fit.block_height + 0.1)
             pbox = slide.shapes.add_textbox(
                 MARGIN_L + Inches(1.35),
                 Inches(poster_top + 0.08),
                 CONTENT_TEXT_W - Inches(1.55),
-                Inches(poster_h - 0.16),
+                Inches(text_box_h),
             )
             _configure_text_frame(pbox.text_frame, pad_h=6, pad_v=4)
             tf_p = pbox.text_frame
@@ -642,6 +634,7 @@ class SlideBuilderV2:
             return
         tier_colors = {"基础": MUTED, "进阶": MINT, "高级": VIOLET, "亮点": CORAL, "必备": MUTED}
         gap = 0.14
+        arrow_gap = 0.12
         budget = LAYOUT_REGISTRY["content_cards"]
         layout = fit_bullet_card_layout(
             bullets,
@@ -655,6 +648,23 @@ class SlideBuilderV2:
         if stack_h < height * 0.72:
             y = top + (height - stack_h) * 0.35
         for i, bullet in enumerate(bullets):
+            if is_arrow_separator(bullet):
+                arrow_box = slide.shapes.add_textbox(
+                    Inches(left),
+                    Inches(y),
+                    Inches(width),
+                    Inches(ARROW_SEP_HEIGHT),
+                )
+                _configure_text_frame(arrow_box.text_frame, anchor=MSO_ANCHOR.MIDDLE)
+                ap = arrow_box.text_frame.paragraphs[0]
+                ap.text = bullet.strip()
+                ap.font.name = FONT_UI
+                ap.font.size = Pt(28)
+                ap.font.color.rgb = MUTED
+                ap.alignment = PP_ALIGN.CENTER
+                y += ARROW_SEP_HEIGHT + arrow_gap
+                continue
+
             card_h = layout.heights[i]
             accent = INDIGO
             if bullet.startswith("★"):
@@ -806,42 +816,27 @@ class SlideBuilderV2:
         else:
             paragraphs = [p.strip() for p in essay_text.split("\n\n") if p.strip()]
             ann_text = (annotation or "").strip()
-        body_for_layout = [
-            re.sub(r"\s*Word count:\s*\d+\s*$", "", p, flags=re.IGNORECASE).strip()
-            for p in paragraphs
-        ]
-        line_spacing, para_space_pt, indent_spaces = essay_layout_for_length(body_for_layout)
-
-        ann_h = 0.0
-        ann_fit = None
-        if ann_text:
-            ann_fit = fit_typography(
-                ann_text,
-                float(CONTENT_W.inches) - 0.2,
-                2.5,
-                max_pt=26,
-                min_pt=26,
-            )
-            ann_h = max(0.72, ann_fit.block_height + 0.16)
-
-        content_top = top + 0.08
-        content_h = BOTTOM_Y - content_top - ann_h - 0.06
-        text_w = float(CONTENT_W.inches) - 0.2
-        body_fit = fit_paragraphs(
-            body_for_layout,
-            text_w,
-            content_h,
-            space_after_pt=6 if line_spacing >= 1.0 else 4,
-            max_pt=28,
-            min_pt=26,
-            min_spacing=0.9,
-            pad_h_pt=10,
-            pad_v_pt=6,
+        line_spacing, para_space_pt, indent_spaces = essay_layout_for_length(
+            [
+                re.sub(r"\s*Word count:\s*\d+\s*$", "", p, flags=re.IGNORECASE).strip()
+                for p in paragraphs
+            ]
         )
+
+        stack = plan_essay_stack(
+            paragraphs,
+            ann_text,
+            header_bottom=top,
+            bottom_y=BOTTOM_Y,
+            content_width=float(CONTENT_W.inches),
+        )
+        body_fit = stack.body_fit
         font_pt = body_fit.font_pt
         line_spacing = body_fit.line_spacing
-        text_box_h = min(content_h, max(1.2, body_fit.block_height + 0.18))
-        essay_top = content_top + max(0.0, (content_h - text_box_h) * 0.18)
+        text_box_h = stack.body_height
+        essay_top = stack.body_top
+        ann_fit = stack.ann_fit
+        ann_h = stack.annotation_height
 
         panel = slide.shapes.add_shape(
             MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
@@ -879,9 +874,9 @@ class SlideBuilderV2:
         if ann_text:
             note = slide.shapes.add_textbox(
                 MARGIN_L,
-                Inches(essay_top + text_box_h + 0.08),
+                Inches(stack.annotation_top),
                 CONTENT_W,
-                Inches(ann_h - 0.04),
+                Inches(max(0.35, ann_h - 0.04)),
             )
             _configure_text_frame(note.text_frame, anchor=MSO_ANCHOR.TOP, pad_h=6, pad_v=4)
             np = note.text_frame.paragraphs[0]

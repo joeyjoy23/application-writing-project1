@@ -25,6 +25,48 @@ FIT_HEIGHT_FACTOR = 0.94
 FIT_FILL_RATIO = 0.98
 WPS_SAFETY_FACTOR = 0.85
 MAX_CONTENT_BULLETS = 3
+ARROW_SEP_HEIGHT = 0.12
+_ARROW_SEP_RE = re.compile(r"^[↓→↔⬇]$")
+
+
+def is_arrow_separator(text: str) -> bool:
+    """True for chain arrows (↓) that sit between substantive bullet cards."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if _ARROW_SEP_RE.match(t):
+        return True
+    return len(t) <= 2 and all(c in "↓→↔" for c in t)
+
+
+def substantive_bullet_count(bullets: list[str]) -> int:
+    return sum(1 for b in bullets if b.strip() and not is_arrow_separator(b))
+
+
+def _chunk_bullets_preserving_arrows(bullets: list[str], max_substantive: int) -> list[list[str]]:
+    """Split bullet lists on substantive count; keep ↓ attached to adjacent steps."""
+    if max_substantive < 1:
+        max_substantive = 1
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    substantive = 0
+    for bullet in bullets:
+        if is_arrow_separator(bullet):
+            current.append(bullet)
+            continue
+        if substantive >= max_substantive and current:
+            chunks.append(current)
+            current = []
+            substantive = 0
+        current.append(bullet)
+        substantive += 1
+    if current:
+        if chunks and current and is_arrow_separator(current[0]):
+            chunks[-1].extend(current)
+        else:
+            chunks.append(current)
+    return chunks or [[]]
+
 
 ColKind = Literal["primary", "secondary", "label"]
 
@@ -656,18 +698,15 @@ def expand_content_slides(slides: list[dict]) -> list[dict]:
             budget,
             content_height=max(2.0, content_h),
         )
-        needs_split = layout.needs_split or len(body_bullets) > MAX_CONTENT_BULLETS
+        needs_split = (
+            layout.needs_split or substantive_bullet_count(body_bullets) > MAX_CONTENT_BULLETS
+        )
         if not needs_split:
             expanded.append(spec)
             continue
-        chunk_size = MAX_CONTENT_BULLETS
-        chunks: list[list[str]] = []
-        for i in range(0, len(body_bullets), chunk_size):
-            chunk = body_bullets[i : i + chunk_size]
-            if i == 0 and key_lines:
-                chunks.append(key_lines + chunk)
-            else:
-                chunks.append(chunk)
+        chunks = _chunk_bullets_preserving_arrows(body_bullets, MAX_CONTENT_BULLETS)
+        if key_lines:
+            chunks[0] = key_lines + chunks[0]
         for idx, chunk in enumerate(chunks):
             new_spec = dict(spec)
             new_spec["bullets"] = chunk
@@ -811,6 +850,10 @@ def fit_bullet_card_layout(
     natural: list[float] = []
     fits: list[FitResult] = []
     for bullet in bullets:
+        if is_arrow_separator(bullet):
+            natural.append(ARROW_SEP_HEIGHT)
+            fits.append(FitResult(budget.max_primary_pt, 1.0, ARROW_SEP_HEIGHT, needs_split=False))
+            continue
         fit = fit_typography(
             bullet,
             text_w,
@@ -826,11 +869,21 @@ def fit_bullet_card_layout(
         return BulletCardLayout(natural, fits, needs_split=False)
 
     inner = max(0.5, avail_h - gap * max(n - 1, 0))
-    scale = inner / sum(natural)
-    scaled = [max(card_min_h, h * scale) for h in natural]
+    scale = inner / sum(h for h, b in zip(natural, bullets) if not is_arrow_separator(b)) if any(
+        not is_arrow_separator(b) for b in bullets
+    ) else 1.0
+    scaled = [
+        ARROW_SEP_HEIGHT
+        if is_arrow_separator(bullet)
+        else max(card_min_h, h * scale)
+        for h, bullet in zip(natural, bullets)
+    ]
     refit: list[FitResult] = []
     needs_split = False
     for bullet, card_h in zip(bullets, scaled):
+        if is_arrow_separator(bullet):
+            refit.append(FitResult(budget.max_primary_pt, 1.0, ARROW_SEP_HEIGHT, needs_split=False))
+            continue
         fit = fit_typography(
             bullet,
             text_w,
@@ -967,6 +1020,111 @@ def estimate_essay_panel_height(
     top = 1.62 + 0.08
     ann_h = 0.72 if has_annotation else 0.0
     return max(SLIDE_CONTENT_BOTTOM - top - ann_h - 0.06, 2.0)
+
+
+@dataclass(frozen=True)
+class TitleCoverLayout:
+    stem_panel_h: float
+    poster_panel_h: float
+    stem_fit: FitResult
+    poster_fit: FitResult | None
+
+
+def plan_title_cover_layout(
+    body_lines: list[str],
+    poster_lines: list[str] | None,
+    *,
+    panel_top: float = 2.55,
+    bottom_y: float = SLIDE_CONTENT_BOTTOM,
+    text_w: float = 11.2,
+    poster_text_w: float | None = None,
+) -> TitleCoverLayout:
+    """Top-down stem + poster stack; poster box shrink-wraps fitted text."""
+    budget = LAYOUT_REGISTRY["title_body"]
+    poster_clean = [ln for ln in (poster_lines or []) if ln.strip()]
+    body_clean = [ln for ln in body_lines if ln.strip()]
+    max_panel_h = bottom_y - panel_top - 0.08
+    poster_gap = 0.1
+    poster_pad = 0.42
+    poster_text_w = poster_text_w if poster_text_w is not None else text_w - 1.15
+
+    poster_panel_h = 0.0
+    poster_fit: FitResult | None = None
+    if poster_clean:
+        min_stem_h = 0.8
+        poster_inner_budget = max(0.35, max_panel_h - min_stem_h - poster_gap - poster_pad)
+        poster_fit = fit_typography(
+            "\n".join(poster_clean),
+            poster_text_w,
+            poster_inner_budget,
+            max_pt=budget.max_secondary_pt,
+            min_pt=budget.min_pt,
+            pad_h_pt=6,
+            pad_v_pt=4,
+        )
+        poster_panel_h = poster_fit.block_height + poster_pad
+
+    stem_budget = max_panel_h - poster_panel_h - (poster_gap if poster_clean else 0.0)
+    stem_fit = fit_paragraphs(
+        body_clean,
+        text_w,
+        max(0.5, stem_budget - 0.32),
+        space_after_pt=10,
+        max_pt=budget.max_primary_pt,
+        min_pt=budget.min_pt,
+        pad_h_pt=10,
+        pad_v_pt=8,
+    )
+    stem_panel_h = max(0.8, stem_fit.block_height + 0.48)
+    return TitleCoverLayout(stem_panel_h, poster_panel_h, stem_fit, poster_fit)
+
+
+@dataclass(frozen=True)
+class EssayStackLayout:
+    body_top: float
+    body_height: float
+    annotation_top: float
+    annotation_height: float
+    body_fit: FitResult
+    ann_fit: FitResult | None
+
+
+def plan_essay_stack(
+    paragraphs: list[str],
+    annotation: str,
+    *,
+    header_bottom: float = 1.70,
+    bottom_y: float = SLIDE_CONTENT_BOTTOM,
+    content_width: float = 11.6,
+) -> EssayStackLayout:
+    """Vertical stack: body from content_top, annotation strictly below body."""
+    content_top = header_bottom + 0.08
+    text_w = content_width - 0.2
+    ann_gap = 0.08
+    ann_text = (annotation or "").strip()
+    ann_h = 0.0
+    ann_fit: FitResult | None = None
+    if ann_text:
+        ann_fit = fit_typography(ann_text, text_w, 2.5, max_pt=26, min_pt=26)
+        ann_h = ann_fit.block_height + 0.16
+
+    body_max_h = bottom_y - content_top - ann_h - ann_gap - (0.06 if ann_text else 0.0)
+    lines = [p for p in paragraphs if p.strip()]
+    body_fit = fit_paragraphs(
+        lines,
+        text_w,
+        max(1.0, body_max_h),
+        space_after_pt=6,
+        max_pt=28,
+        min_pt=26,
+        min_spacing=0.9,
+        pad_h_pt=10,
+        pad_v_pt=6,
+    )
+    body_height = min(body_max_h, max(1.2, body_fit.block_height + 0.18))
+    body_top = content_top
+    annotation_top = body_top + body_height + ann_gap
+    return EssayStackLayout(body_top, body_height, annotation_top, ann_h, body_fit, ann_fit)
 
 
 def essay_text_fits(
