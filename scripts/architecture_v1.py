@@ -38,6 +38,7 @@ ARCHITECTURE_V1_SLOTS: tuple[PageSlot, ...] = (
     PageSlot("A1", "A", "导入 · 真题展示", "title", frozenset({"40min", "70min", "80min"})),
     PageSlot("A2", "A", "导入 · 情境代入", "content", frozenset({"40min", "70min", "80min"})),
     PageSlot("A3", "A", "导入 · 快速思考", "content", frozenset({"70min", "80min"}), optional=True),
+    PageSlot("B0", "B", "审题 · 动笔自检五问", "content", frozenset({"40min", "70min", "80min"})),
     PageSlot("B1", "B", "审题 · 三元审题", "content", frozenset({"40min", "70min", "80min"})),
     PageSlot("B2", "B", "审题 · 任务拆解", "content", frozenset({"40min", "70min", "80min"})),
     PageSlot("B3", "B", "审题 · 易错对比", "content", frozenset({"40min", "70min", "80min"})),
@@ -204,13 +205,117 @@ def _topic_subtitle(data: dict[str, Any]) -> str:
     return f"{qtype} · 选海报写理由"
 
 
+_DEFAULT_SELF_CHECK_FIVE: tuple[str, ...] = (
+    "语气 — 我读/写起来更像朋友间的建议，还是正式报告？",
+    "结构 — 主体段有具体理由，还是只有「我觉得好」？",
+    "逻辑 — 是否既说明「为什么选这个」，也解释「为什么不选另一个」？",
+    "立意 — 是否写出主题的深层意义，而不只停留在表面选择？",
+    "语言 — 是否用了本题关键表达，并避开 very good / nice 等空泛词？",
+)
+
+
+def _stage1_self_check_five(stage1: str) -> list[str]:
+    """Extract「动笔前自检五问」from Stage1 markdown/HTML export text."""
+    if not stage1.strip():
+        return list(_DEFAULT_SELF_CHECK_FIVE)
+
+    block = stage1
+    section = re.search(
+        r"动笔[前]?自检五问[：:\s]*\n?(.*?)(?=\n(?:💡|#####\s*💡|一句大实话|##\s|\Z))",
+        stage1,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if section:
+        block = section.group(1)
+
+    out: list[str] = []
+    for dm in re.finditer(
+        r"(?:^|\n)\*{0,2}\s*(\d+)\.\s*([^*\n—\-]+?)\*{0,2}\s*[—\-：:]\s*(.+?)(?=\n(?:\*{0,2}\s*\d+\.|💡|#####|##|\Z))",
+        block,
+        re.DOTALL,
+    ):
+        label = _trim(dm.group(2))
+        detail = _trim(re.sub(r"\s+", " ", dm.group(3).replace("\n", " ")), 130)
+        out.append(f"{label} — {detail}")
+
+    if len(out) < 5:
+        for line in block.splitlines():
+            raw = line.strip()
+            m = re.match(r"^\*{0,2}\s*(\d+)\.\s*(.+?)\*{0,2}\s*[—\-：:]\s*(.+)$", raw)
+            if m:
+                label = _trim(m.group(2))
+                detail = _trim(m.group(3), 130)
+                item = f"{label} — {detail}"
+                if item not in out:
+                    out.append(item)
+                continue
+            if re.match(r"^\d+\.", raw):
+                cleaned = re.sub(r"^\d+\.\s*", "", raw)
+                cleaned = re.sub(r"\*+", "", cleaned).strip()
+                if cleaned and cleaned not in out:
+                    out.append(_trim(cleaned, 130))
+
+    if len(out) >= 3:
+        return out[:5]
+    return list(_DEFAULT_SELF_CHECK_FIVE)
+
+
+def _self_check_five_slide_specs(stage1: str, module: str) -> list[dict[str, Any]]:
+    """Single content slide for all five self-check questions."""
+    bullets = _stage1_self_check_five(stage1)
+    return [
+        {
+            "type": "content",
+            "title": "审题 · 动笔自检五问",
+            "bullets": bullets,
+            "panel": True,
+            "_module": module,
+        }
+    ]
+
+
+def _stage1_triplet_block(stage1: str) -> str:
+    """Isolate 三元审题 subsection to avoid pulling unrelated bullets."""
+    m = re.search(
+        r"(?:2\.1\s*三元审题|三元审题)(.*?)(?=\n(?:#{1,4}\s|####|\Z))",
+        stage1,
+        re.DOTALL | re.IGNORECASE,
+    )
+    return m.group(1) if m else stage1
+
+
+def _triplet_item_key(text: str) -> str:
+    t = re.sub(r"^[①②③]\s*", "", text.strip())
+    if "：" in t:
+        t = t.split("：", 1)[1].strip()
+    elif ":" in t:
+        t = t.split(":", 1)[1].strip()
+    return re.sub(r"\s+", "", t.lower())
+
+
 def _stage1_triplet(stage1: str) -> list[str]:
+    block = _stage1_triplet_block(stage1)
+    labels = ("我是谁", "写给谁", "为了什么", "为什么写")
+    out: list[str] = []
+    for label in labels:
+        dm = re.search(
+            rf"\*\*{re.escape(label)}\*\*\s*[：:]\s*(.+)",
+            block,
+            re.IGNORECASE,
+        )
+        if not dm:
+            dm = re.search(rf"{re.escape(label)}\s*[：:]\s*(.+)", block, re.IGNORECASE)
+        if dm:
+            out.append(f"{label}：{_trim(dm.group(1), 120)}")
+    if len(out) >= 3:
+        return out[:3]
+
     defaults = [
         "我是谁：（从 Stage1 提炼）",
         "写给谁：（从 Stage1 提炼）",
         "为什么写：（从 Stage1 提炼）",
     ]
-    pts = _bullets(stage1, 5)
+    pts = _bullets(block, 5)
     if len(pts) >= 3:
         return pts[:3]
     for kw, label in (
@@ -223,14 +328,93 @@ def _stage1_triplet(stage1: str) -> list[str]:
     return (pts + defaults)[:3]
 
 
+def _stage1_one_truth(stage1: str) -> str:
+    """Extract「一句大实话」body (no heading / emoji prefix)."""
+    for pat in (
+        r"💡\s*一句大实话\s*\n+(.+?)(?=\n(?:\d+\.\s|#{1,4}\s|##\s|\Z))",
+        r"一句大实话[：:\s]*\n+(.+?)(?=\n(?:\d+\.\s|#{1,4}\s|##\s|\Z))",
+    ):
+        m = re.search(pat, stage1, re.DOTALL | re.IGNORECASE)
+        if m:
+            text = re.sub(r"\s+", " ", m.group(1).strip())
+            return _trim(text, 220)
+    return ""
+
+
+def _stage1_section_function(block: str, section_label: str) -> str:
+    m = re.search(
+        rf"{re.escape(section_label)}\s*\n(.*?)(?=\n(?:开头段|主体段|结尾段)\s*\n|\Z)",
+        block,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if not m:
+        return ""
+    section = m.group(1)
+    fm = re.search(r"-\s*功能[：:]\s*(.+)", section, re.IGNORECASE)
+    if fm:
+        return _trim(fm.group(1), 100)
+    if section_label == "主体段":
+        pm = re.search(r"-\s*要点\[?1\]?\s*[：:]\s*(.+)", section, re.IGNORECASE)
+        if pm:
+            return _trim(pm.group(1), 100)
+    return ""
+
+
 def _stage1_tasks(stage1: str) -> list[str]:
-    pts = _bullets(stage1, 5)
-    if pts:
-        return [f"① {pts[0]}", *[f"② {p}" if i == 1 else f"③ {p}" for i, p in enumerate(pts[1:3])]]
+    triplet_keys = {_triplet_item_key(t) for t in _stage1_triplet(stage1)}
+    out: list[str] = []
+
+    plan = re.search(
+        r"(?:^|\n)\d+\.\s*要点与结构规划\s*\n(.*?)(?=\n\d+\.\s|\Z)",
+        stage1,
+        re.DOTALL | re.IGNORECASE,
+    )
+    block = plan.group(1) if plan else ""
+    for label, num in (
+        ("开头段", "①"),
+        ("主体段", "②"),
+        ("结尾段", "③"),
+    ):
+        fn = _stage1_section_function(block, label)
+        if fn:
+            out.append(f"{num} {label}：{fn}")
+
+    if len(out) < 3:
+        purpose = re.search(
+            r"(?:2\.4\s*交际目的拆解|交际目的拆解)(.*?)(?=\n(?:\d+\.\s|#{1,4}\s|##\s|\Z))",
+            stage1,
+            re.DOTALL | re.IGNORECASE,
+        )
+        pblock = purpose.group(1) if purpose else ""
+        for label, num in (
+            ("核心交际目的", "①"),
+            ("达成标准", "②"),
+            ("信息层", "③"),
+        ):
+            dm = re.search(
+                rf"\*\*{re.escape(label)}\*\*\s*[：:]\s*(.+)",
+                pblock,
+                re.IGNORECASE,
+            )
+            if not dm:
+                dm = re.search(rf"{re.escape(label)}\s*[：:]\s*(.+)", pblock, re.IGNORECASE)
+            if dm:
+                out.append(f"{num} {_trim(dm.group(1), 100)}")
+
+    filtered: list[str] = []
+    for item in out:
+        if _triplet_item_key(item) in triplet_keys:
+            continue
+        if item not in filtered:
+            filtered.append(item)
+
+    if len(filtered) >= 2:
+        return filtered[:3]
+
     return [
-        "① 做出选择",
-        "② 说明理由（结合画面/细节）",
-        "③ 表达祝愿 / 收束",
+        "① 做出选择（明确 Poster 1 或 Poster 2）",
+        "② 说明理由（结合海报设计元素与心理健康主题）",
+        "③ 收束祝愿（鼓励参赛 / 祝福收束）",
     ]
 
 
@@ -424,7 +608,7 @@ def _plain_peel_field(block: str, start_keywords: tuple[str, ...], stop_keywords
         return ""
     for ln in m.group(1).splitlines():
         ln = ln.strip()
-        if not ln or ln.startswith("- 句子连接") or ln.startswith("- 隐性融入"):
+        if not ln:
             continue
         if ln.startswith("- "):
             val = _peel_bullet_value(ln)
@@ -470,7 +654,7 @@ def _parse_peel_point_block(block: str, label: str) -> dict | None:
     l = _plain_peel_field(
         block,
         ("连至下一点（L）", "连至下一点(L)", "连至下一点"),
-        ("★", "二、", "核心句"),
+        ("★", "支撑要点", "核心要点"),
     )
     if not l:
         l = _peel_section_text(block, ("连至下一点", "L（", "总结句"))
@@ -483,14 +667,15 @@ def _parse_structured_peel(stage2: str) -> list[dict]:
     peel_body = _peel_section_body(stage2)
     if not peel_body.strip():
         return []
+    point_head = r"(?:核心要点|支撑要点)"
     chunks = re.split(
-        r"(?=★核心要点\s*Point\s*[12])",
+        rf"(?=(?:★)?{point_head}\s*Point\s*[12])",
         peel_body,
         flags=re.IGNORECASE,
     )
     if len(chunks) <= 1:
         chunks = re.split(
-            r"(?=^#{3,5}\s+[★·※]?[^\n]*Point\s*[12])",
+            rf"(?=^#{{3,5}}\s+[★·※]?[^\n]*{point_head}[^\n]*Point\s*[12])",
             peel_body,
             flags=re.MULTILINE | re.IGNORECASE,
         )
@@ -500,8 +685,15 @@ def _parse_structured_peel(stage2: str) -> list[dict]:
             continue
         label_m = re.search(r"Point\s*([12])", chunk, flags=re.IGNORECASE)
         label = f"Point {label_m.group(1)}" if label_m else "Point"
+        heading_m = re.search(
+            rf"((?:★)?{point_head}[^\n]*Point\s*[12][^\n]*)",
+            chunk,
+            flags=re.IGNORECASE,
+        )
         point = _parse_peel_point_block(chunk, label)
         if point:
+            if heading_m:
+                point["heading"] = _trim(heading_m.group(1).strip(), 100)
             points.append(point)
     return points[:2]
 
@@ -608,12 +800,7 @@ def _scenario_bullets(question: str, stage1: str) -> list[str]:
     bullets = []
     if lead:
         bullets.append(f"情境：{lead}")
-    bullets.extend(
-        [
-            "你会怎么回复？（选择 + 理由）",
-            "先想：写给谁？语气？必须写哪两点？",
-        ]
-    )
+    bullets.append("你会怎么回复？（选择 + 理由）")
     return bullets
 
 
@@ -731,8 +918,19 @@ def build_slot_spec(slot: PageSlot, data: dict[str, Any]) -> dict | None:
             "bullets": ["你最先想到什么？", "允许：投票 / 讨论 / 判断"],
             "_module": slot.module,
         }
+    if slot.slot_id == "B0":
+        return _self_check_five_slide_specs(stage1, slot.module)
     if slot.slot_id == "B1":
-        return {"type": "content", "title": slot.title, "bullets": _stage1_triplet(stage1), "_module": slot.module}
+        spec: dict[str, Any] = {
+            "type": "content",
+            "title": slot.title,
+            "bullets": _stage1_triplet(stage1),
+            "_module": slot.module,
+        }
+        truth = _stage1_one_truth(stage1)
+        if truth:
+            spec["callout"] = truth
+        return spec
     if slot.slot_id == "B2":
         return {"type": "content", "title": slot.title, "bullets": _stage1_tasks(stage1), "_module": slot.module}
     if slot.slot_id == "B3":
@@ -874,9 +1072,15 @@ def build_architecture_deck(
             if slot.optional:
                 continue
             raise ValueError(f"unhandled slot {slot.slot_id}")
-        if "_module" not in spec:
-            spec["_module"] = slot.module
-        slides.append(spec)
+        if isinstance(spec, list):
+            for item in spec:
+                if "_module" not in item:
+                    item["_module"] = slot.module
+                slides.append(item)
+        else:
+            if "_module" not in spec:
+                spec["_module"] = slot.module
+            slides.append(spec)
     return slides
 
 

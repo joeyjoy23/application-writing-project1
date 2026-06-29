@@ -27,11 +27,12 @@ def test_80min_has_more_slots_than_40min():
 
 
 def test_70min_slot_count():
-    """70min = 80min minus B4/C3/D8/D10 (18 architecture slots + Stage3)."""
+    """70min = 80min minus B4/C3/D8/D10 (19 architecture slots + Stage3)."""
     slots = slots_for_preset("70min")
-    assert len(slots) == 18
+    assert len(slots) == 19
     ids = {s.slot_id for s in slots}
     assert "A3" in ids
+    assert "B0" in ids
     assert ids.isdisjoint({"B4", "C3", "D8", "D10"})
     assert len(slots_for_preset("40min")) < len(slots) < len(slots_for_preset("80min"))
 
@@ -163,3 +164,95 @@ def test_title_spec_has_poster_lines_when_present():
     assert spec is not None
     assert "poster_lines" in spec
     assert spec["body"] == ["题干第一行"]
+
+
+def test_stage1_tasks_not_duplicate_triplet():
+    from scripts.architecture_v1 import _stage1_tasks, _stage1_triplet
+
+    stage1 = (
+        "### 2.1 三元审题\n"
+        "- **我是谁**：交换生朋友李华\n"
+        "- **写给谁**：交换生朋友James\n"
+        "- **为了什么**：给他在心理健康周海报设计大赛中选择一个版本并说明理由\n"
+        "### 要点与结构规划\n"
+        "开头段\n- 功能：问候 + 表明写作目的\n"
+        "主体段\n- 要点[1]：选择 Poster 1（核心）\n"
+        "结尾段\n- 功能：鼓励收束\n"
+    )
+    triplet = _stage1_triplet(stage1)
+    tasks = _stage1_tasks(stage1)
+    assert "李华" in triplet[0]
+    assert not any("李华" in t for t in tasks)
+    assert tasks[0].startswith("①")
+
+
+def test_stage1_one_truth_on_triplet_spec():
+    from scripts.architecture_v1 import ARCHITECTURE_V1_SLOTS, build_slot_spec
+
+    stage1 = (
+        "动笔前自检五问：\n1. 语气 — a\n"
+        "💡 一句大实话\n"
+        "本题最危险的陷阱是理由空泛。\n"
+        "### 2.1 三元审题\n"
+        "- **我是谁**：李华\n- **写给谁**：James\n- **为了什么**：选海报\n"
+    )
+    slot = next(s for s in ARCHITECTURE_V1_SLOTS if s.slot_id == "B1")
+    spec = build_slot_spec(slot, {"stage1": stage1, "stage2": "", "stage4": "", "question": ""})
+    assert spec is not None
+    assert "callout" in spec
+    assert "陷阱" in spec["callout"]
+    assert "我是谁" in spec["bullets"][0]
+
+
+def test_stage1_self_check_five_parsed_from_export_style():
+    from scripts.architecture_v1 import _stage1_self_check_five, build_slot_spec
+
+    stage1 = (
+        "动笔前自检五问：\n"
+        "**1. 语气** — 朋友间建议还是正式报告？\n"
+        "**2. 结构** — 有具体理由还是只有我觉得好？\n"
+        "**3. 逻辑** — 是否说明为什么选这个？\n"
+        "**4. 立意** — 是否写出深层意义？\n"
+        "**5. 语言** — 是否用了关键表达？\n"
+        "💡 一句大实话\n"
+        "陷阱是理由空泛。"
+    )
+    bullets = _stage1_self_check_five(stage1)
+    assert len(bullets) == 5
+    assert bullets[0].startswith("语气")
+
+    slot = next(s for s in ARCHITECTURE_V1_SLOTS if s.slot_id == "B0")
+    specs = build_slot_spec(slot, {"stage1": stage1, "stage2": "", "stage4": "", "question": ""})
+    assert isinstance(specs, list)
+    assert len(specs) == 1
+    assert specs[0]["title"] == "审题 · 动笔自检五问"
+    assert len(specs[0]["bullets"]) == 5
+
+
+def test_peel_parses_supporting_points_heading():
+    from scripts.architecture_v1 import _peel_from_stage2
+
+    stage2 = (
+        "一、PEEL 写作策略\n"
+        "支撑要点 Point 1（先选 Poster 1/2）\n"
+        "核心句（P）\n"
+        '"I\'d go with Poster 1."\n'
+        "拓展策略（E）\n"
+        "- 具象化：把「选择」绑定到画面元素\n"
+        "连至下一点（L）\n"
+        '- 过渡连接："Here\'s why I think so."\n'
+        "支撑要点 Point 2（说明理由）\n"
+        "核心句（P）\n"
+        '"The cracked heart captures the theme."\n'
+        "拓展策略（E）\n"
+        "- 元素含义：crack represents struggles\n"
+        "连至下一点（L）\n"
+        '- 隐性融入："Overall, Poster 1 feels authentic."\n'
+    )
+    points = _peel_from_stage2(stage2)
+    assert len(points) == 2
+    assert "支撑要点" in points[0].get("heading", "")
+    assert points[0]["p"]
+    assert points[0]["e_items"]
+    assert points[0]["l"]
+    assert "Poster 1" in points[0]["l"] or "why" in points[0]["l"].lower()

@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.architecture_v1 import build_full_deck_from_export
-from scripts.classroom_content_filter import is_teacher_only_line
+from scripts.classroom_content_filter import is_teacher_only_line, sanitize_student_text
 from scripts.essay_format import classroom_essay_plain_text, prepare_classroom_essay_display
 from scripts.humanize_classroom_ast import (
     classroom_ast_header,
@@ -33,6 +33,19 @@ from scripts.humanize_classroom_ast import (
 
 MAX_BULLETS_PER_SLIDE = 6
 _VOCAB_COL_LABELS = {"english": "英文", "chinese": "中文", "example": "例句"}
+
+
+class _RevealSeq:
+    """Assign monotonic data-reveal indices within one slide."""
+
+    def __init__(self) -> None:
+        self._n = 0
+
+    def mark(self, extra_class: str = "") -> str:
+        i = self._n
+        self._n += 1
+        cls = f"{extra_class} reveal".strip()
+        return f' class="{cls}" data-reveal="{i}"'
 
 
 def _esc(text: str) -> str:
@@ -315,7 +328,11 @@ def v2_spec_to_html_slides(spec: dict[str, Any]) -> list[dict[str, Any]]:
         ]
 
     if kind == "content":
-        bullets = list(spec.get("bullets") or [])
+        bullets = [
+            sanitize_student_text(b)
+            for b in (spec.get("bullets") or [])
+            if sanitize_student_text(b)
+        ]
         slides: list[dict[str, Any]] = []
         chunks = _split_bullets(bullets) or [[]]
         for i, chunk in enumerate(chunks):
@@ -361,7 +378,8 @@ def v2_spec_to_html_slides(spec: dict[str, Any]) -> list[dict[str, Any]]:
                 }
                 for t in tiers
             ]
-            slides.append({**base, "phrase_body": rows, "table_name": table.get("name", "")})
+            if rows:
+                slides.append({**base, "phrase_body": rows, "table_name": table.get("name", "")})
 
         if part in ("full", "footer", "footer_note"):
             note = (table.get("topic_note") or "").strip()
@@ -397,6 +415,8 @@ def v2_spec_to_html_slides(spec: dict[str, Any]) -> list[dict[str, Any]]:
         columns = spec.get("columns") or ["english", "chinese", "example"]
         rows = spec.get("rows") or []
         tier = spec.get("tier") or ""
+        if not rows:
+            return []
         headers = [_VOCAB_COL_LABELS.get(c, c) for c in columns]
         table_rows = [[str(row.get(c, "")) for c in columns] for row in rows]
         return [
@@ -480,8 +500,9 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
         ast_attrs += f' data-audience-out="{_esc(slide["audience_out"])}"'
     if slide.get("ast_role"):
         ast_attrs += f' data-ast-role="{_esc(slide["ast_role"])}"'
+    rv = _RevealSeq()
     parts = [
-        f'<section class="slide{hero}{warn}" data-index="{index}" aria-label="{title}"{intent_attr}{ast_attrs}>',
+        f'<section class="slide"{hero}{warn} data-index="{index}" aria-label="{title}"{intent_attr}{ast_attrs}>',
         '<header class="slide-chrome">',
         f'<span class="tag">{tag}</span>',
     ]
@@ -492,55 +513,62 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
     parts.append(f'<h2 class="slide-title">{title}</h2>')
 
     if slide.get("tier"):
-        parts.append(f'<p class="tier-pill reveal">{_esc(slide["tier"])}</p>')
+        parts.append(f"<p{rv.mark('tier-pill')}>{_esc(slide['tier'])}</p>")
 
     if slide.get("subtitle"):
-        parts.append(f'<p class="subtitle reveal">{_esc(slide["subtitle"])}</p>')
+        parts.append(f"<p{rv.mark('subtitle')}>{_esc(slide['subtitle'])}</p>")
 
     if slide.get("body"):
-        parts.append(f'<p class="lead reveal">{_esc(slide["body"])}</p>')
+        parts.append(f"<p{rv.mark('lead')}>{_esc(slide['body'])}</p>")
 
     if slide.get("banner"):
-        parts.append(f'<p class="banner reveal">{_esc(slide["banner"])}</p>')
+        parts.append(f"<p{rv.mark('banner')}>{_esc(slide['banner'])}</p>")
 
     bullets = slide.get("bullets") or []
     if bullets:
         parts.append('<ul class="bullets">')
-        for i, b in enumerate(bullets):
-            parts.append(f'<li class="reveal" data-reveal="{i}">{_esc(b)}</li>')
+        for b in bullets:
+            parts.append(f"<li{rv.mark()}>{_esc(b)}</li>")
         parts.append("</ul>")
 
     peel = slide.get("peel") or []
     if peel:
         single = slide.get("peel_single")
         grid_cls = "peel-grid peel-single" if single else "peel-grid"
-        parts.append(f'<div class="{grid_cls} reveal">')
+        parts.append(f'<div class="{grid_cls}">')
         labels = ("① 选择", "② 理由")
         for j, pt in enumerate(peel):
             label = labels[j] if j < len(labels) else pt.get("label", "")
             parts.append(f'<div class="peel-card peel-{j}">')
-            parts.append(f'<h3 class="peel-label">{_esc(label)}</h3>')
+            parts.append(f"<h3{rv.mark('peel-label')}>{_esc(label)}</h3>")
             parts.append("<ul>")
             for line in _peel_point_lines(pt):
-                parts.append(f"<li>{_esc(line)}</li>")
+                parts.append(f"<li{rv.mark()}>{_esc(line)}</li>")
             parts.append("</ul></div>")
         parts.append("</div>")
 
     if slide.get("essay"):
-        parts.append(f'<pre class="essay reveal">{_esc(slide["essay"])}</pre>')
+        paras = [p.strip() for p in slide["essay"].split("\n\n") if p.strip()]
+        if len(paras) <= 1:
+            parts.append(f"<pre{rv.mark('essay')}>{_esc(slide['essay'])}</pre>")
+        else:
+            parts.append('<div class="essay-block">')
+            for para in paras:
+                parts.append(f"<p{rv.mark('essay-para')}>{_esc(para)}</p>")
+            parts.append("</div>")
         if slide.get("annotation"):
-            parts.append(f'<p class="annotation reveal">{_esc(slide["annotation"])}</p>')
+            parts.append(f"<p{rv.mark('annotation')}>{_esc(slide['annotation'])}</p>")
 
     phrase_body = slide.get("phrase_body") or []
     if phrase_body:
         parts.append('<table class="data-table"><thead><tr>')
         parts.append("<th>层级</th><th>英文句型</th><th>说明</th></tr></thead><tbody>")
-        for ri, row in enumerate(phrase_body):
+        for row in phrase_body:
             zh = row.get("zh", "")
             if row.get("note"):
                 zh = f"{zh} · {row['note']}" if zh else row["note"]
             parts.append(
-                f'<tr class="reveal-row" data-reveal="{ri}">'
+                f"<tr{rv.mark('reveal-row')}>"
                 f"<td>{_esc(row.get('tier', ''))}</td>"
                 f"<td class=\"en\">{_esc(row.get('en', ''))}</td>"
                 f"<td>{_esc(zh)}</td>"
@@ -555,8 +583,8 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
         for h in headers:
             parts.append(f"<th>{_esc(str(h))}</th>")
         parts.append("</tr></thead><tbody>")
-        for ri, row in enumerate(rows):
-            parts.append(f'<tr class="reveal-row" data-reveal="{ri}">')
+        for row in rows:
+            parts.append(f"<tr{rv.mark('reveal-row')}>")
             for ci, cell in enumerate(row):
                 cell_cls = ' class="en"' if ci == 0 or str(headers[ci]) == "英文" else ""
                 parts.append(f"<td{cell_cls}>{_esc(str(cell))}</td>")
@@ -564,12 +592,18 @@ def _render_slide(slide: dict[str, Any], index: int, total: int) -> str:
         parts.append("</tbody></table>")
 
     if slide.get("fix_bad") or slide.get("fix_good"):
-        parts.append('<div class="fix-grid reveal">')
+        parts.append('<div class="fix-grid">')
         if slide.get("fix_bad"):
-            parts.append(f'<div class="fix-card fix-bad"><span class="fix-tag">别这样写</span><p>{_esc(slide["fix_bad"])}</p></div>')
+            parts.append(
+                f"<div{rv.mark('fix-card fix-bad')}>"
+                f'<span class="fix-tag">别这样写</span><p>{_esc(slide["fix_bad"])}</p></div>'
+            )
         if slide.get("fix_good"):
             good = slide["fix_good"].lstrip("→").strip()
-            parts.append(f'<div class="fix-card fix-good"><span class="fix-tag">改成</span><p>{_esc(good)}</p></div>')
+            parts.append(
+                f"<div{rv.mark('fix-card fix-good')}>"
+                f'<span class="fix-tag">改成</span><p>{_esc(good)}</p></div>'
+            )
         parts.append("</div>")
 
     parts.append('<footer class="slide-foot">应用文 AI 备课 · Plan B HTML · 26–32pt</footer>')
@@ -703,6 +737,16 @@ html, body {{
   border-radius: 12px; padding: clamp(0.7rem, 1.8vh, 1.1rem);
   flex: 1; min-height: 0; overflow: hidden;
 }}
+.essay-block {{
+  flex: 1; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: clamp(0.35rem, 1vh, 0.55rem);
+}}
+.essay-para {{
+  white-space: pre-wrap; font-family: var(--en);
+  font-size: clamp(var(--body-min), 2.3vw, 30px); line-height: 1.45;
+  background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px; padding: clamp(0.55rem, 1.4vh, 0.85rem);
+}}
 .annotation {{
   font-size: clamp(var(--body-min), 2.2vw, 28px); color: rgba(244,241,234,.75);
   margin-top: 0.5rem; flex-shrink: 0;
@@ -762,10 +806,11 @@ html, body {{
 <main id="deck" aria-live="polite">
 {slides_html}
 </main>
-<div id="hint">空格/点击 逐条呈现 · ← → 翻页 · F11 全屏 · S 讲稿</div>
+<div id="hint">空格/点击 逐条呈现 · ← 上页 · →/空格 下一条 · F11 全屏 · S 讲稿</div>
 <script>
 (function() {{
   const deck = document.getElementById('deck');
+  const hint = document.getElementById('hint');
   const slides = Array.from(deck.querySelectorAll('.slide'));
   let idx = 0;
   let notesWin = null;
@@ -790,8 +835,25 @@ html, body {{
     return false;
   }}
 
+  function revealPrev(slide) {{
+    const items = revealItems(slide).filter(el => el.classList.contains('is-shown'));
+    if (!items.length) return false;
+    items[items.length - 1].classList.remove('is-shown');
+    return true;
+  }}
+
   function revealAll(slide) {{
     revealItems(slide).forEach(el => el.classList.add('is-shown'));
+  }}
+
+  function updateHint() {{
+    const slide = slides[idx];
+    const total = revealItems(slide).length;
+    const shown = shownCount(slide);
+    const left = total - shown;
+    hint.textContent = left > 0
+      ? '空格/点击 逐条呈现（还剩 ' + left + ' 条）· ← 回退 · → 下一条/翻页 · F11 全屏 · S 讲稿'
+      : '← → 翻页 · F11 全屏 · S 讲稿';
   }}
 
   function go(n) {{
@@ -800,11 +862,19 @@ html, body {{
     slides.forEach((s, i) => s.classList.toggle('is-active', i === idx));
     resetReveal(slides[idx]);
     revealNext(slides[idx]);
+    updateHint();
   }}
 
   function advanceOrNext() {{
     const slide = slides[idx];
     if (!revealNext(slide)) go(idx + 1);
+    else updateHint();
+  }}
+
+  function retreatOrPrev() {{
+    const slide = slides[idx];
+    if (!revealPrev(slide)) go(idx - 1);
+    else updateHint();
   }}
 
   function openNotes() {{
@@ -815,13 +885,13 @@ html, body {{
 
   function onKey(e) {{
     if (e.key === 's' || e.key === 'S') {{ e.preventDefault(); openNotes(); return; }}
-    if (['ArrowRight','ArrowDown','PageDown'].includes(e.key)) {{
-      e.preventDefault(); go(idx + 1); return;
+    if (['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)) {{
+      e.preventDefault(); advanceOrNext(); return;
     }}
+    if (e.key === 'Enter') {{ e.preventDefault(); advanceOrNext(); return; }}
     if (['ArrowLeft','ArrowUp','PageUp','Backspace'].includes(e.key)) {{
-      e.preventDefault(); go(idx - 1); return;
+      e.preventDefault(); retreatOrPrev(); return;
     }}
-    if (e.key === ' ' || e.key === 'Enter') {{ e.preventDefault(); advanceOrNext(); return; }}
     if (e.key === 'Home') go(0);
     if (e.key === 'End') go(slides.length - 1);
   }}
@@ -840,7 +910,8 @@ html, body {{
   deck.addEventListener('wheel', e => {{
     if (Math.abs(e.deltaY) < 8) return;
     e.preventDefault();
-    go(idx + (e.deltaY > 0 ? 1 : -1));
+    if (e.deltaY > 0) advanceOrNext();
+    else retreatOrPrev();
   }}, {{passive:false}});
   go(0);
 }})();
@@ -937,8 +1008,8 @@ def main() -> int:
     ap.add_argument(
         "--preset",
         choices=("40min", "70min", "80min"),
-        default="70min",
-        help="Architecture V1 lesson preset (default 70min)",
+        default="80min",
+        help="Architecture V1 lesson preset (80min = full 3 essays + 高分版 B)",
     )
     ap.add_argument(
         "--out",

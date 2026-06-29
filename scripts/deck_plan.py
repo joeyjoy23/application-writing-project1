@@ -228,15 +228,40 @@ def deck_plan_from_stage3(data: dict[str, Any], *, vocab_max_rows: int = 6) -> d
                 "anim": "row",
             }
         )
-        slides.append(
-            {
-                "id": f"phrase_{i}_footer",
-                "layout": "phrase_table_footer",
-                "title": f"{base} · 用法与改错",
-                "source": f"phrase_tables[{i}]",
-                "anim": "row",
-            }
-        )
+        has_fix = bool(table.get("fix_bad") or table.get("fix_good"))
+        has_note = bool(table.get("topic_note"))
+        if has_fix:
+            slides.append(
+                {
+                    "id": f"phrase_{i}_fix",
+                    "layout": "phrase_table_footer",
+                    "title": f"{base} · 改一句",
+                    "source": f"phrase_tables[{i}]",
+                    "footer_part": "fix",
+                    "anim": "row",
+                }
+            )
+        if has_note:
+            slides.append(
+                {
+                    "id": f"phrase_{i}_note",
+                    "layout": "phrase_table_footer",
+                    "title": f"{base} · 本题",
+                    "source": f"phrase_tables[{i}]",
+                    "footer_part": "note",
+                    "anim": "row",
+                }
+            )
+        if not has_fix and not has_note:
+            slides.append(
+                {
+                    "id": f"phrase_{i}_footer",
+                    "layout": "phrase_table_footer",
+                    "title": f"{base} · 用法与改错",
+                    "source": f"phrase_tables[{i}]",
+                    "anim": "row",
+                }
+            )
     for fi, field in enumerate(data.get("vocab_fields", [])):
         short, slug = _short_field(field["name"])
         for ti, tier in enumerate(field.get("tiers", [])):

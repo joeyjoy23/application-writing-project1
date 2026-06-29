@@ -13,6 +13,9 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from docx import Document
+from docx.oxml.ns import qn
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 from scripts.parse_classroom_html import (
     is_classroom_html,
@@ -84,6 +87,48 @@ def html_module_unescape(text: str) -> str:
     return html_module.unescape(text)
 
 
+def _iter_doc_blocks(doc: Document):
+    """Walk document body in order — paragraphs and tables (Stage3 句型/词块在表格里)."""
+    for child in doc.element.body:
+        if child.tag == qn("w:p"):
+            yield Paragraph(child, doc)
+        elif child.tag == qn("w:tbl"):
+            yield Table(child, doc)
+
+
+def _table_to_tsv(table: Table) -> str:
+    lines: list[str] = []
+    for row in table.rows:
+        cells = [re.sub(r"\s+", " ", c.text.strip()) for c in row.cells]
+        if any(cells):
+            lines.append("\t".join(cells))
+    return "\n".join(lines)
+
+
+def _handle_export_line(
+    text: str,
+    para: Paragraph,
+    *,
+    sections: dict[str, list[str]],
+    current: str | None,
+    meta: str,
+    question_type_label: str,
+) -> tuple[str | None, str, str]:
+    if text == _EXPORT_DOC_TITLE:
+        return current, meta, question_type_label
+    if text.startswith("生成时间："):
+        return None, text, question_type_label
+    m = _QTYPE_RE.match(text)
+    if m:
+        return current, meta, m.group(1).strip()
+    if _is_stage_heading(para, text):
+        sections.setdefault(text, [])
+        return text, meta, question_type_label
+    if current:
+        sections.setdefault(current, []).append(text)
+    return current, meta, question_type_label
+
+
 def parse_export_docx(path: Path) -> dict[str, str | None]:
     doc = Document(str(path))
     sections: dict[str, list[str]] = {}
@@ -91,28 +136,25 @@ def parse_export_docx(path: Path) -> dict[str, str | None]:
     meta = ""
     question_type_label = ""
 
-    for para in doc.paragraphs:
-        text = para.text.strip()
-        if not text:
-            if current:
-                sections.setdefault(current, []).append("")
-            continue
-        if text == _EXPORT_DOC_TITLE:
-            continue
-        if text.startswith("生成时间："):
-            meta = text
-            current = None
-            continue
-        m = _QTYPE_RE.match(text)
-        if m:
-            question_type_label = m.group(1).strip()
-            continue
-        if _is_stage_heading(para, text):
-            current = text
-            sections.setdefault(current, [])
-            continue
-        if current:
-            sections[current].append(text)
+    for block in _iter_doc_blocks(doc):
+        if isinstance(block, Paragraph):
+            text = block.text.strip()
+            if not text:
+                if current:
+                    sections.setdefault(current, []).append("")
+                continue
+            current, meta, question_type_label = _handle_export_line(
+                text,
+                block,
+                sections=sections,
+                current=current,
+                meta=meta,
+                question_type_label=question_type_label,
+            )
+        elif isinstance(block, Table):
+            tsv = _table_to_tsv(block)
+            if tsv and current:
+                sections.setdefault(current, []).append(tsv)
 
     flat = {k: "\n".join(v).strip() for k, v in sections.items()}
     return _normalize_sections(flat, meta, question_type_label)

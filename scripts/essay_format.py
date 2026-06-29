@@ -41,6 +41,8 @@ def _is_closing_paragraph(text: str) -> bool:
         return False
     if _CLOSING_RE.search(t):
         return True
+    if re.match(r"^Yours(?:,\s*|\s+(?:sincerely|faithfully))", t, re.IGNORECASE):
+        return True
     lower = t.lower()
     return any(
         phrase in lower
@@ -272,6 +274,14 @@ def prepare_classroom_essay_body(raw: str) -> tuple[list[str], int, str]:
         paragraphs = [english.strip()]
     wc = word_count if word_count is not None else count_english_words(" ".join(paragraphs))
     return paragraphs, wc, embedded_ann.strip()
+
+
+def recount_body_word_count(raw: str) -> int:
+    """Count English words in three body paragraphs only (excludes Dear / Yours / sign-off)."""
+    paragraphs, wc, _ = prepare_classroom_essay_body(raw or "")
+    if paragraphs:
+        return count_english_words(" ".join(paragraphs))
+    return wc or 0
 
 
 def prepare_classroom_essay_display(

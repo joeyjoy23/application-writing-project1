@@ -44,6 +44,19 @@ def test_clean_stage1_summary_strips_json_fence():
     assert "json" not in clean_stage1_summary(text).lower() or "要点" in text
 
 
+def test_strip_prompt_instruction_leaks():
+    from utils.parsers import strip_prompt_instruction_leaks
+
+    body = (
+        "正文\n\n"
+        "（单独小标题；**下一段起**写 2–3 行正文）收束五问；用备课组长口吻点出本题最危险的陷阱。"
+        "勿与标题写在同一行，勿在标题后用冒号接正文。实质内容在这里。"
+    )
+    out = strip_prompt_instruction_leaks(body)
+    assert "收束五问" not in out
+    assert "实质内容在这里" in out
+
+
 def test_strip_reader_self_check():
     body = "正文\n\n### 输出前自检\n- [x] ok"
     assert "输出前自检" not in strip_reader_self_check(body)

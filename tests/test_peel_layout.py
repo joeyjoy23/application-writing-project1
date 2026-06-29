@@ -67,6 +67,20 @@ def test_normalize_peel_point_caps_e_items():
     assert len(norm["e_items"]) == 2
 
 
+def test_normalize_peel_point_preserves_heading():
+    norm = normalize_peel_point(
+        {
+            "label": "Point 1",
+            "heading": "支撑要点 Point 1（先选）",
+            "p": "Hello",
+            "e_items": ["detail"],
+            "l": "Link",
+        }
+    )
+    assert norm["heading"] == "支撑要点 Point 1（先选）"
+    assert norm["l"] == "Link"
+
+
 def test_peel_point_body_lines_match_renderer_prefix():
     lines = peel_point_body_lines({"p": "Hello", "e_items": ["detail"], "l": "Link"})
     assert lines[0].startswith("P  ")

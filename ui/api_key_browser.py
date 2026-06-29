@@ -87,8 +87,9 @@ def hydrate_session_from_browser() -> None:
     if raw is None:
         attempts = int(st.session_state.get("_browser_ls_attempts") or 0) + 1
         st.session_state._browser_ls_attempts = attempts
-        if attempts < 4:
-            return
+        st.session_state._browser_ls_hydrate_mounted = False
+        if attempts < 5:
+            st.rerun()
         raw = ""
 
     st.session_state._browser_keys_hydrated = True
@@ -98,26 +99,30 @@ def hydrate_session_from_browser() -> None:
     if prefs.keys:
         st.session_state._stored_api_keys = dict(prefs.keys)
         st.session_state.remember_api_key = prefs.remember
-    if prefs.keys and not (st.session_state.get("api_key") or "").strip():
-        stored = key_for_provider(prefs.keys, st.session_state.provider)
-        if stored:
-            st.session_state.api_key = stored
+    stored = key_for_provider(prefs.keys, st.session_state.provider) if prefs.keys else ""
+    if stored and not (st.session_state.get("api_key") or "").strip():
+        st.session_state.api_key = stored
     if prefs.guest_id:
         st.session_state.guest_id = prefs.guest_id
     # 每次打开会话默认勾选 LLM 结果缓存（本页内仍可手动关闭）
     st.session_state.use_llm_cache = True
 
 
-def persist_session_to_browser() -> None:
+def persist_session_to_browser(*, force: bool = False) -> None:
     """同步 provider / model / Key 到 localStorage。"""
-    if not st.session_state.get("_browser_keys_hydrated"):
-        return
-
     remember = bool(st.session_state.get("remember_api_key"))
     keys = dict(st.session_state.get("_stored_api_keys") or {})
     provider = st.session_state.provider
     model = st.session_state.model
-    api_key = st.session_state.get("api_key") or ""
+    api_key = (st.session_state.get("api_key") or "").strip()
+
+    hydrated = bool(st.session_state.get("_browser_keys_hydrated"))
+    if not hydrated and not force:
+        # 读取完成前：仅在有 Key 且勾选记住时乐观写入，避免空数据覆盖 localStorage
+        if not (remember and api_key):
+            return
+    elif not hydrated and force and not api_key:
+        return
 
     from db.identity import ensure_guest_id
 
@@ -135,7 +140,8 @@ def persist_session_to_browser() -> None:
         use_llm_cache=bool(st.session_state.get("use_llm_cache", True)),
     )
     if not prefs_has_content(prefs):
-        remove_local_storage(STORAGE_KEY, component_key="awp_ls_remove")
+        if hydrated:
+            remove_local_storage(STORAGE_KEY, component_key="awp_ls_remove")
         return
 
     _safe_set_local_storage(

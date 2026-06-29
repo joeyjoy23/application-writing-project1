@@ -37,14 +37,13 @@ def test_build_slide_specs_minimal_export():
     assert "26px" in html_out or "--body-min: 26px" in html_out
 
 
-def test_render_html_uses_classroom_font_minimum():
-    specs = [{"tag": "测试", "title": "标题", "bullets": ["一点"]}]
+def test_render_html_click_reveal_controls():
+    specs = [{"tag": "测试", "title": "标题", "bullets": ["一点", "二点"]}]
     html_out = render_html(specs, "字体测试")
-    assert "clamp(var(--body-min), 2.5vw, var(--body-max))" in html_out
-    assert "--body-min: 26px" in html_out
-    assert "--title-min: 36px" in html_out
-    assert "Times New Roman" in html_out
-    assert "data-reveal" in html_out
+    assert "advanceOrNext" in html_out
+    assert "retreatOrPrev" in html_out
+    assert 'class="slide"' in html_out
+    assert "essay-para" in html_out
 
 
 def test_speaker_notes_html():

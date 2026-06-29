@@ -1391,6 +1391,82 @@ div[data-testid="stSidebar"] [data-testid="stExpander"] summary {
   pointer-events: none;
 }
 
+/* ── 题目图片上传（拖拽 + 点击） ── */
+.question-image-upload-label {
+  font-family: var(--font-base);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--c-ink-muted);
+  margin: 0.55rem 0 0.35rem;
+}
+
+.main [data-testid="stFileUploader"] {
+  margin-top: 0 !important;
+}
+
+.main [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] {
+  min-height: 5.5rem;
+  padding: 0.85rem 1rem !important;
+  border: 2px dashed var(--c-border) !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--c-card) !important;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.main [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"]:hover,
+.main [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"]:focus-within {
+  border-color: var(--c-primary-soft) !important;
+  background: var(--c-primary-light) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.main [data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+  visibility: hidden;
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.main [data-testid="stFileUploaderDropzoneInstructions"] > div::before {
+  content: "拖拽图片到此处";
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--c-ink);
+  line-height: 1.45;
+}
+
+.main [data-testid="stFileUploaderDropzoneInstructions"] > div > small {
+  visibility: hidden;
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.main [data-testid="stFileUploaderDropzoneInstructions"] > div::after {
+  content: "jpg / png，单张，原图 ≤4MB";
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--c-ink-light);
+  line-height: 1.4;
+}
+
+.main [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] {
+  margin-top: 0.55rem;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  min-height: 2.1rem !important;
+}
+
+.main [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"]::after {
+  content: "选择图片";
+  font-size: 0.875rem !important;
+  line-height: 1.35 !important;
+}
+
 /* ── Main inputs & buttons ── */
 .main textarea,
 .main input[type="text"],

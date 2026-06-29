@@ -5,12 +5,12 @@ alwaysApply: false
 
 # 应用文导出 → 课件
 
-1. **读取 skill**：`.cursor/skills/yingyongwen-export-to-ppt/SKILL.md` + `SLIDE_BLUEPRINT.md`（含 **教室字号 ≥26pt**、**范文三段式 + 首行缩进**）。
+1. **读取 skill**：`.cursor/skills/yingyongwen-export-to-ppt/SKILL.md` + `known-issues.md`（WPS 动画踩坑）。
 
-2. **默认 V1**：`one_click_classroom_ppt.py` → `generate_classroom_pptx.py` + `pptx_click_reveal.py`（WPS on-click fade）。Stage3 来自 `stage3.json` 表格页。默认 **`--preset 70min`**（`40min`/`80min` 可选）。
+2. **默认 V2**：`one_click_classroom_ppt.py --v2` → `generate_classroom_pptx_v2.py` + `classroom_script` + `pptx_click_reveal.py`（**禁止** `cNvPr hidden="1"`）。Stage3 来自 `stage3.json`；句型页序 body→改一句→本题。默认 **`--preset 70min`**。
 
 3. **固定页型 + Stage4 融入主流程**（非附录）；范文 **Dear James + 开篇/主体/结尾** 三段，正文 **首行缩进**。
 
-4. 先 `prepare_ppt_source.py`；**默认 Architecture V1**（分析报告为唯一结构源）。`-课件.html` 仅作输入别名（自动解析 sibling 分析 HTML）；旧 16 页骨架需 `one_click --classroom-html`。可选 Agent 撰写 `classroom_deck.json`（Stage3 页序 + layout）。
+4. 先 `prepare_ppt_source.py`；**Architecture V1** + `classroom_script` 模板。用户改流程后让其更新 skill 快照。
 
 勿提交 `exports/`、临时 `ppt-work/` 到应用文 git 仓库。

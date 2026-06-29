@@ -31,6 +31,17 @@ MAX_CONTENT_BULLETS = 3
 ARROW_SEP_HEIGHT = 0.12
 _ARROW_SEP_RE = re.compile(r"^[↓→↔⬇]$")
 
+# Renderer dynamic layout (display-layer fixes; content unchanged)
+DYNAMIC_HEIGHT_MODE = True
+RENDER_LINE_HEIGHT_INCH = 0.18
+TEXT_BOX_PADDING_RATIO = 0.05
+BULLET_LINE_SPACING_MULT = 1.20
+BULLET_PARAGRAPH_SPACING_MULT = 1.15
+TABLE_MAX_ROWS_PER_PAGE = 6
+_PHRASE_COL_FRACS = [0.14, 0.52, 0.34]
+_VERIFY_PAD_V_PT = 8.0
+_VERIFY_PAD_H_PT = 6.0
+
 
 def is_arrow_separator(text: str) -> bool:
     """True for chain arrows (↓) that sit between substantive bullet cards."""
@@ -411,6 +422,70 @@ def split_banner_text(text: str, budget: LayoutBudget | None = None) -> list[str
     return [clean]
 
 
+def split_callout_lines(
+    text: str,
+    width_inches: float,
+    *,
+    budget: LayoutBudget | None = None,
+    max_segments: int = 4,
+) -> tuple[list[str], FitResult, float]:
+    """Wrap B1 一句大实话 callout; return display lines, typography, card height."""
+    budget = budget or LAYOUT_REGISTRY["content_key"]
+    clean = text.replace("💡", "").strip()
+    if not clean:
+        return [], FitResult(budget.min_pt, 1.12, 0.35, False), 0.92
+    banner_fit = fit_paragraphs(
+        [clean],
+        width_inches,
+        1.65,
+        max_pt=budget.max_secondary_pt,
+        min_pt=budget.min_pt,
+    )
+    pt, sp = banner_fit.font_pt, banner_fit.line_spacing
+    one_line_h = text_block_height("测", width_inches, pt, sp)
+    max_seg_h = max(0.48, one_line_h * 1.25)
+
+    def _split_segment(seg: str) -> list[str]:
+        if text_block_height(seg, width_inches, pt, sp) <= max_seg_h and len(seg) <= 42:
+            return [seg]
+        mid = len(seg) // 2
+        best = mid
+        for sep in ("；", "，", "。", "、", " ", ","):
+            pos = seg.rfind(sep, max(0, mid - 28), min(len(seg), mid + 28))
+            if pos > 10:
+                best = pos + len(sep)
+                break
+        a, b = seg[:best].strip(), seg[best:].strip()
+        return [a, b] if a and b else [seg]
+
+    if "；" in clean:
+        raw_parts = [p.strip() for p in clean.split("；") if p.strip()]
+        segments = [
+            (p + "；") if i < len(raw_parts) - 1 else p for i, p in enumerate(raw_parts)
+        ]
+    else:
+        segments = [clean]
+
+    expanded: list[str] = []
+    for seg in segments:
+        expanded.extend(_split_segment(seg))
+    segments = expanded[:max_segments]
+    while len(segments) < max_segments:
+        long_idx = max(range(len(segments)), key=lambda i: len(segments[i]))
+        if len(segments[long_idx]) <= 42 and text_block_height(
+            segments[long_idx], width_inches, pt, sp
+        ) <= max_seg_h:
+            break
+        parts = _split_segment(segments[long_idx])
+        if len(parts) == 1:
+            break
+        segments = segments[:long_idx] + parts + segments[long_idx + 1 :]
+        segments = segments[:max_segments]
+    content_h = text_block_height_paragraphs(segments, width_inches, pt, sp, space_after_pt=5)
+    card_h = max(0.92, content_h + 0.34)
+    return segments, FitResult(pt, sp, content_h, False), card_h
+
+
 def fit_table_rows(
     values: list[str],
     col_fracs: list[float],
@@ -536,8 +611,10 @@ def normalize_peel_point(point: dict, *, max_e: int = MAX_PEEL_E_ITEMS) -> dict:
     e_raw = point.get("e_items") or ([point["e"]] if point.get("e") else [])
     e_items = [_project_peel_e_item(str(e)) for e in e_raw if str(e).strip()][:max_e]
     l = _trim_peel(str(point.get("l") or ""))
+    heading = _trim_peel(str(point.get("heading") or ""), max_len=100)
     return {
         "label": (point.get("label") or "").strip() or "Point",
+        "heading": heading,
         "p": p,
         "e_items": e_items,
         "l": l,
@@ -642,7 +719,7 @@ def peel_dual_needs_split(points: list[dict]) -> bool:
 
 
 def expand_peel_slides(slides: list[dict]) -> list[dict]:
-    """Split PEEL specs into one Point per slide when dual would overflow."""
+    """Keep PEEL on one slide; renderer expands cards instead of splitting pages."""
     expanded: list[dict] = []
     for spec in slides:
         if spec.get("type") != "peel":
@@ -653,72 +730,480 @@ def expand_peel_slides(slides: list[dict]) -> list[dict]:
         if not points:
             expanded.append(spec)
             continue
-        if len(points) == 1:
-            new_spec = dict(spec)
-            new_spec["points"] = points
-            new_spec["layout"] = "single"
-            expanded.append(new_spec)
-            continue
-        if peel_dual_needs_split(points):
-            for idx, point in enumerate(points):
-                new_spec = dict(spec)
-                new_spec["points"] = [point]
-                new_spec["layout"] = "single"
-                suffix = f" · Point {idx + 1}" if len(points) > 1 else ""
-                new_spec["title"] = f"{spec['title']}{suffix}"
-                expanded.append(new_spec)
-        else:
-            new_spec = dict(spec)
-            new_spec["points"] = points
-            new_spec["layout"] = "dual"
-            expanded.append(new_spec)
+        new_spec = dict(spec)
+        new_spec["points"] = points
+        new_spec["layout"] = "single" if len(points) == 1 else "dual"
+        expanded.append(new_spec)
     return expanded
+
+
+# --- Slide packing layer (merge first, split last) ---
+
+PAGE_CAPACITY = 1.0
+PAGE_SAFE_THRESHOLD = 0.92
+DENSITY_MERGE_THRESHOLD = 0.35
+DENSITY_SPLIT_THRESHOLD = 0.80
+_PACK_PART_SUFFIX = re.compile(r"（\d+/\d+）|\(\d+/\d+\)| · Part \d+")
+
+
+def _normalize_pack_title(title: str) -> str:
+    t = _PACK_PART_SUFFIX.sub("", title or "")
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def pack_group(spec: dict) -> str | None:
+    """Merge group key; None means never merge this slide."""
+    kind = spec.get("type")
+    title = _normalize_pack_title(spec.get("title") or "")
+
+    if kind == "content":
+        if "批注" in title:
+            base = title.replace(" · 批注", "").strip()
+            return f"essay_annotation:{base}"
+        if title.startswith("思维 ·") or "审题与路径" in title:
+            return "thinking_core"
+        if title == "海报示意":
+            return "visual_poster"
+        if "任务拆解" in title:
+            return "task_checklist"
+        return None
+
+    if kind == "phrase_table":
+        part = spec.get("part") or "full"
+        if part not in ("body", "full"):
+            return None
+        if part == "full" and (
+            (spec.get("table") or {}).get("topic_note")
+            or (spec.get("table") or {}).get("fix_bad")
+        ):
+            return None
+        parts = [p.strip() for p in title.split("·")]
+        skill = parts[1] if len(parts) > 1 else title
+        return f"phrase_body:{skill}"
+
+    if kind == "vocab_table":
+        tier = (spec.get("tier") or "").strip()
+        if not tier and "·" in title:
+            tier = title.split("·")[-1].strip()
+        cols = tuple(spec.get("columns") or ())
+        return f"vocab:{tier}:{cols}"
+
+    if kind == "essay":
+        base = _normalize_pack_title(spec.get("title") or "范文")
+        return f"essay:{base}"
+
+    return None
+
+
+def slide_density_ratio(spec: dict) -> float:
+    """Normalized page fill ratio (1.0 ≈ full usable body area)."""
+    return estimate_slide_height(spec)
+
+
+def _is_low_density(spec: dict) -> bool:
+    return slide_density_ratio(spec) < DENSITY_MERGE_THRESHOLD
+
+
+def _is_high_density(spec: dict) -> bool:
+    return slide_density_ratio(spec) > DENSITY_SPLIT_THRESHOLD
+
+
+def estimate_slide_height(spec: dict) -> float:
+    """Normalized page fill ratio (1.0 ≈ full usable body area)."""
+    kind = spec.get("type")
+    budget_content = LAYOUT_REGISTRY["content_cards"]
+    body_avail = budget_content.content_height(with_pill=True)
+
+    if kind == "content":
+        bullets = [str(b) for b in (spec.get("bullets") or []) if str(b).strip()]
+        if not bullets:
+            return 0.22
+        key_lines = [b for b in bullets if b.startswith("💡") or "高分关键" in b or "最危险" in b]
+        body_bullets = [b for b in bullets if b not in key_lines]
+        reserve = 0.62 if spec.get("badge") else 0.0
+        reserve += 1.05 if key_lines else 0.0
+        chrome = 0.35 + reserve
+        layout = fit_bullet_card_layout(
+            body_bullets,
+            budget_content,
+            content_height=max(2.0, body_avail - reserve),
+        )
+        stack = sum(layout.heights) + 0.14 * max(len(body_bullets) - 1, 0)
+        return min(1.5, (chrome + stack) / max(body_avail, 1.0))
+
+    if kind == "phrase_table":
+        part = spec.get("part") or "full"
+        budget = LAYOUT_REGISTRY["phrase_table_footer" if part.startswith("footer") else "phrase_table_body"]
+        avail = budget.content_height(with_pill=True)
+        if part.startswith("footer") or (
+            part == "full"
+            and (
+                (spec.get("table") or {}).get("topic_note")
+                or (spec.get("table") or {}).get("fix_bad")
+            )
+        ):
+            table = spec.get("table") or {}
+            h = 0.35
+            if table.get("topic_note"):
+                h += 0.18
+            if table.get("fix_bad") or table.get("fix_good"):
+                h += 0.28
+            return min(1.5, h / max(avail, 1.0))
+        tiers = (spec.get("table") or {}).get("tiers") or []
+        if not tiers:
+            return 0.3
+        row_heights, _, _, _ = phrase_table_body_heights(tiers, _PHRASE_COL_FRACS, budget)
+        return min(1.5, (0.35 + sum(row_heights)) / max(avail, 1.0))
+
+    if kind == "vocab_table":
+        rows = spec.get("rows") or []
+        columns = spec.get("columns") or []
+        budget = LAYOUT_REGISTRY["vocab_table"]
+        avail = budget.content_height(with_pill=True)
+        if not rows:
+            return 0.3
+        row_heights, _, _, _ = fit_vocab_chunk(rows, columns, budget)
+        return min(1.5, (0.35 + sum(row_heights)) / max(avail, 1.0))
+
+    if kind == "essay":
+        from scripts.essay_format import classroom_essay_plain_text, prepare_classroom_essay_body
+
+        paragraphs, _wc, ann = prepare_classroom_essay_body(spec.get("essay_text", ""))
+        plain = classroom_essay_plain_text(paragraphs) if paragraphs else (spec.get("essay_text") or "").strip()
+        if not ann.strip():
+            ann = (spec.get("annotation") or "").strip()
+        budget = LAYOUT_REGISTRY["essay_body"]
+        avail = budget.content_height(with_pill=True)
+        body_fit = fit_essay_block(plain, budget, panel_height=avail * 0.72)
+        h = 0.35 + body_fit.block_height
+        if ann.strip():
+            h += 0.18
+        return min(1.5, h / max(avail, 1.0))
+
+    if kind in ("peel", "title", "title_poster"):
+        return 0.88
+    return 0.35
+
+
+def _pack_merge_specs(left: dict, right: dict) -> dict:
+    kind = left.get("type")
+    merged = dict(left)
+
+    if kind == "content":
+        merged["bullets"] = list(left.get("bullets") or []) + list(right.get("bullets") or [])
+        merged["title"] = _normalize_pack_title(left.get("title") or "")
+        if left.get("badge"):
+            merged["badge"] = left["badge"]
+        return merged
+
+    if kind == "phrase_table":
+        table = dict(left.get("table") or {})
+        table["tiers"] = list(table.get("tiers") or []) + list((right.get("table") or {}).get("tiers") or [])
+        merged["table"] = table
+        merged["part"] = left.get("part") or "body"
+        merged["title"] = _normalize_pack_title(left.get("title") or "")
+        return merged
+
+    if kind == "vocab_table":
+        merged["rows"] = list(left.get("rows") or []) + list(right.get("rows") or [])
+        merged["title"] = _normalize_pack_title(left.get("title") or "")
+        merged["columns"] = left.get("columns") or right.get("columns")
+        merged["tier"] = left.get("tier") or right.get("tier")
+        return merged
+
+    if kind == "essay":
+        merged["essay_text"] = (left.get("essay_text") or "").rstrip() + "\n\n" + (right.get("essay_text") or "").lstrip()
+        merged["annotation"] = (right.get("annotation") or left.get("annotation") or "")
+        merged["badge"] = left.get("badge") or right.get("badge")
+        merged["title"] = _normalize_pack_title(left.get("title") or "")
+        return merged
+
+    return merged
+
+
+def _content_slide_fits(spec: dict) -> bool:
+    """True when content bullets fit one slide at min font (capacity-driven)."""
+    bullets = [str(b) for b in (spec.get("bullets") or []) if str(b).strip()]
+    if not bullets:
+        return True
+    budget = LAYOUT_REGISTRY["content_cards"]
+    key_lines = [b for b in bullets if b.startswith("💡") or "高分关键" in b or "最危险" in b]
+    body_bullets = [b for b in bullets if b not in key_lines]
+    reserve = 0.62 if spec.get("badge") else 0.0
+    reserve += 1.05 if key_lines else 0.0
+    avail = budget.content_height(with_pill=bool(spec.get("badge"))) - reserve
+    layout = fit_bullet_card_layout(body_bullets, budget, content_height=max(2.0, avail))
+    return not layout.needs_split
+
+
+def _table_slide_fits(spec: dict) -> bool:
+    return estimate_slide_height(spec) <= PAGE_SAFE_THRESHOLD
+
+
+def _pack_can_merge(left: dict, right: dict) -> bool:
+    gl, gr = pack_group(left), pack_group(right)
+    low_density_pair = (
+        _is_low_density(left)
+        and _is_low_density(right)
+        and left.get("type") == right.get("type")
+        and left.get("type") in ("content", "phrase_table", "vocab_table")
+    )
+    if gl and gl == gr:
+        group_key = gl
+    elif low_density_pair:
+        if left.get("type") == "phrase_table":
+            if (left.get("part") or "") == "full" or (right.get("part") or "") == "full":
+                return False
+            if _pack_phrase_skill(left.get("title") or "") != _pack_phrase_skill(
+                right.get("title") or ""
+            ):
+                return False
+        group_key = f"low_density:{left.get('type')}"
+    else:
+        return False
+
+    if group_key.startswith("phrase_body:") or (
+        low_density_pair and left.get("type") == "phrase_table"
+    ):
+        la = len((left.get("table") or {}).get("tiers") or [])
+        lb = len((right.get("table") or {}).get("tiers") or [])
+        if la + lb > TABLE_MAX_ROWS_PER_PAGE:
+            return False
+
+    if group_key.startswith("vocab:") or (low_density_pair and left.get("type") == "vocab_table"):
+        la = len(left.get("rows") or [])
+        lb = len(right.get("rows") or [])
+        if la + lb > TABLE_MAX_ROWS_PER_PAGE:
+            return False
+
+    candidate = _pack_merge_specs(left, right)
+    kind = candidate.get("type")
+    if kind == "content":
+        return _content_slide_fits(candidate)
+    if kind in ("phrase_table", "vocab_table"):
+        return _table_slide_fits(candidate)
+    if kind == "essay":
+        return estimate_slide_height(candidate) <= PAGE_SAFE_THRESHOLD
+    return estimate_slide_height(candidate) <= PAGE_SAFE_THRESHOLD
+
+
+def _pack_split_phrase_table(spec: dict) -> list[dict]:
+    part = spec.get("part") or "full"
+    if part not in ("body", "full"):
+        return [spec]
+    tiers = list((spec.get("table") or {}).get("tiers") or [])
+    if len(tiers) <= TABLE_MAX_ROWS_PER_PAGE and estimate_slide_height(spec) <= PAGE_CAPACITY:
+        return [spec]
+    out: list[dict] = []
+    base_title = _normalize_pack_title(spec.get("title", "功能句型"))
+    chunks: list[list] = []
+    current: list = []
+    for tier in tiers:
+        trial = current + [tier]
+        trial_spec = dict(spec)
+        trial_spec["table"] = {**(spec.get("table") or {}), "tiers": trial}
+        if len(trial) > TABLE_MAX_ROWS_PER_PAGE or estimate_slide_height(trial_spec) > PAGE_CAPACITY:
+            if current:
+                chunks.append(current)
+            current = [tier]
+        else:
+            current = trial
+    if current:
+        chunks.append(current)
+    n_parts = max(len(chunks), 1)
+    for ci, chunk in enumerate(chunks):
+        part_spec = dict(spec)
+        part_spec["table"] = {**(spec.get("table") or {}), "tiers": chunk}
+        part_spec["part"] = "body"
+        if n_parts > 1:
+            part_spec["title"] = f"{base_title} ({ci + 1}/{n_parts})"
+        out.append(part_spec)
+    return out or [spec]
+
+
+def _pack_split_vocab_table(spec: dict) -> list[dict]:
+    rows = list(spec.get("rows") or [])
+    if len(rows) <= TABLE_MAX_ROWS_PER_PAGE and estimate_slide_height(spec) <= PAGE_CAPACITY:
+        return [spec]
+    out: list[dict] = []
+    base_title = _normalize_pack_title(spec.get("title", "话题词块"))
+    chunks: list[list] = []
+    current: list = []
+    for row in rows:
+        trial = current + [row]
+        trial_spec = dict(spec)
+        trial_spec["rows"] = trial
+        if len(trial) > TABLE_MAX_ROWS_PER_PAGE or estimate_slide_height(trial_spec) > PAGE_CAPACITY:
+            if current:
+                chunks.append(current)
+            current = [row]
+        else:
+            current = trial
+    if current:
+        chunks.append(current)
+    n_parts = max(len(chunks), 1)
+    for ci, chunk in enumerate(chunks):
+        part_spec = dict(spec)
+        part_spec["rows"] = chunk
+        if n_parts > 1:
+            part_spec["title"] = f"{base_title} ({ci + 1}/{n_parts})"
+        out.append(part_spec)
+    return out or [spec]
+
+
+def _pack_split_content(spec: dict) -> list[dict]:
+    """Do not split content slides for overflow; renderer uses WPS-safe card heights."""
+    return [spec]
+
+
+def _pack_split_essay(spec: dict) -> list[dict]:
+    if estimate_slide_height(spec) <= PAGE_CAPACITY:
+        return [spec]
+    from scripts.essay_format import classroom_essay_plain_text, prepare_classroom_essay_body
+
+    paragraphs, _wc, ann = prepare_classroom_essay_body(spec.get("essay_text", ""))
+    if not ann.strip():
+        ann = (spec.get("annotation") or "").strip()
+    plain = classroom_essay_plain_text(paragraphs) if paragraphs else (spec.get("essay_text") or "").strip()
+    if essay_text_fits(plain, has_badge=bool(spec.get("badge")), has_annotation=bool(ann)):
+        return [spec]
+    chunks = split_essay_text(
+        plain,
+        has_badge=bool(spec.get("badge")),
+        has_annotation=bool(ann),
+    )
+    if len(chunks) <= 1:
+        return [spec]
+    out: list[dict] = []
+    base_title = _normalize_pack_title(spec.get("title") or "范文")
+    for idx, chunk in enumerate(chunks):
+        part = dict(spec)
+        part["essay_text"] = chunk
+        part["badge"] = spec.get("badge") if idx == 0 else None
+        part["annotation"] = ann if idx == len(chunks) - 1 else ""
+        if len(chunks) > 1:
+            part["title"] = f"{base_title}（{idx + 1}/{len(chunks)}）"
+        out.append(part)
+    return out
+
+
+def _pack_split_if_needed(spec: dict) -> list[dict]:
+    kind = spec.get("type")
+    if kind == "phrase_table":
+        return _pack_split_phrase_table(spec)
+    if kind == "vocab_table":
+        return _pack_split_vocab_table(spec)
+    if kind == "content":
+        return _pack_split_content(spec)
+    if kind == "essay":
+        return _pack_split_essay(spec)
+    if _is_high_density(spec) and kind not in ("essay",):
+        return [spec]
+    if estimate_slide_height(spec) > PAGE_CAPACITY:
+        return [spec]
+    return [spec]
+
+
+def _pack_phrase_skill(title: str) -> str:
+    parts = [p.strip() for p in (title or "").split("·")]
+    return parts[1] if len(parts) > 1 else _normalize_pack_title(title)
+
+
+def _pack_merge_cover_stem(slides: list[dict]) -> list[dict]:
+    """Merge bare title cover + adjacent 真题/导入 content into one title spec."""
+    if not slides:
+        return []
+    out: list[dict] = []
+    i = 0
+    while i < len(slides):
+        spec = slides[i]
+        if (
+            spec.get("type") == "title"
+            and not (spec.get("body") or [])
+            and not (spec.get("poster_lines") or [])
+            and i + 1 < len(slides)
+        ):
+            nxt = slides[i + 1]
+            nxt_title = nxt.get("title") or ""
+            if nxt.get("type") == "content" and ("真题" in nxt_title or "导入" in nxt_title):
+                merged = dict(spec)
+                merged["body"] = list(nxt.get("bullets") or [])
+                if nxt.get("poster_lines"):
+                    merged["poster_lines"] = list(nxt.get("poster_lines") or [])
+                merged["_merged_cover_stem"] = True
+                out.append(merged)
+                i += 2
+                continue
+        out.append(dict(spec))
+        i += 1
+    return out
+
+
+def _pack_merge_poster_into_cover(slides: list[dict]) -> list[dict]:
+    """Inline all consecutive visual_poster slides into the cover/title page."""
+    if not slides:
+        return []
+    out: list[dict] = []
+    i = 0
+    while i < len(slides):
+        spec = slides[i]
+        if spec.get("type") != "title":
+            out.append(dict(spec))
+            i += 1
+            continue
+        merged = dict(spec)
+        i += 1
+        while i < len(slides):
+            nxt = slides[i]
+            if nxt.get("type") == "content" and pack_group(nxt) == "visual_poster":
+                bullets = list(nxt.get("bullets") or [])
+                existing = list(merged.get("poster_lines") or [])
+                merged["poster_lines"] = existing + bullets
+                merged["_merged_cover_stem"] = True
+                i += 1
+            else:
+                break
+        out.append(merged)
+    return out
+
+
+def _pack_prepass_merges(slides: list[dict]) -> list[dict]:
+    """Structural merges before group-based packing (cover, poster only; phrase body/footer stay split)."""
+    s = _pack_merge_cover_stem(slides)
+    s = _pack_merge_poster_into_cover(s)
+    return s
+
+
+def pack_slides(slides: list[dict]) -> list[dict]:
+    """Merge adjacent compatible slides, then split only when capacity requires it."""
+    if not slides:
+        return []
+
+    slides = _pack_prepass_merges(slides)
+
+    merged: list[dict] = []
+    for spec in slides:
+        if merged and _pack_can_merge(merged[-1], spec):
+            merged[-1] = _pack_merge_specs(merged[-1], spec)
+        else:
+            merged.append(dict(spec))
+
+    packed: list[dict] = []
+    for spec in merged:
+        packed.append(dict(spec))
+
+    from scripts.teaching_flow_orchestrator import orchestrate_teaching_flow
+
+    flow = orchestrate_teaching_flow(packed)
+    final: list[dict] = []
+    for spec in flow:
+        final.extend(_pack_split_if_needed(spec))
+    return final
 
 
 def expand_content_slides(slides: list[dict]) -> list[dict]:
-    """Split content slides when bullet cards overflow (WPS-safe: max 3 bullets/page)."""
-    expanded: list[dict] = []
-    budget = LAYOUT_REGISTRY["content_cards"]
-    for spec in slides:
-        if spec.get("type") != "content":
-            expanded.append(spec)
-            continue
-        bullets = [b for b in (spec.get("bullets") or []) if b.strip()]
-        if not bullets:
-            expanded.append(spec)
-            continue
-        key_lines = [
-            b for b in bullets if b.startswith("💡") or "高分关键" in b or "最危险" in b
-        ]
-        body_bullets = [b for b in bullets if b not in key_lines]
-        has_banner = bool(key_lines)
-        has_badge = bool(spec.get("badge"))
-        reserve = 0.62 if has_badge else 0.0
-        reserve += 1.05 if has_banner else 0.0
-        content_h = budget.content_height(with_pill=has_badge) - reserve
-        layout = fit_bullet_card_layout(
-            body_bullets,
-            budget,
-            content_height=max(2.0, content_h),
-        )
-        needs_split = (
-            layout.needs_split or substantive_bullet_count(body_bullets) > MAX_CONTENT_BULLETS
-        )
-        if not needs_split:
-            expanded.append(spec)
-            continue
-        chunks = _chunk_bullets_preserving_arrows(body_bullets, MAX_CONTENT_BULLETS)
-        if key_lines:
-            chunks[0] = key_lines + chunks[0]
-        for idx, chunk in enumerate(chunks):
-            new_spec = dict(spec)
-            new_spec["bullets"] = chunk
-            if len(chunks) > 1:
-                new_spec["title"] = f"{spec['title']}（{idx + 1}/{len(chunks)}）"
-            if idx > 0:
-                new_spec.pop("badge", None)
-            expanded.append(new_spec)
-    return expanded
+    """Pass-through: renderer expands card heights instead of splitting content pages."""
+    return list(slides)
 
 
 def fit_dual_cards(
@@ -832,6 +1317,62 @@ class BulletCardLayout:
     needs_split: bool = False
 
 
+def apply_content_line_spacing(fit: FitResult) -> FitResult:
+    """Bump line spacing for content bullets (display layer only)."""
+    sp = min(1.35, fit.line_spacing * BULLET_LINE_SPACING_MULT)
+    return FitResult(fit.font_pt, sp, fit.block_height, fit.needs_split)
+
+
+def content_block_height(
+    text: str,
+    width_inches: float,
+    font_pt: int,
+    line_spacing: float,
+) -> float:
+    """Text block height with paragraph spacing bump."""
+    base = text_block_height(text, width_inches, font_pt, line_spacing)
+    return base * BULLET_PARAGRAPH_SPACING_MULT
+
+
+def verify_safe_textbox_height(
+    content_height_inches: float,
+    *,
+    pad_v_pt: float = _VERIFY_PAD_V_PT,
+    extra_chrome: float = 0.10,
+) -> float:
+    """Textbox height that clears verify_text_fit (WPS safety + padding)."""
+    padded = content_height_inches * (1.0 + 2.0 * TEXT_BOX_PADDING_RATIO)
+    return padded / WPS_SAFETY_FACTOR + 2.0 * pad_v_pt / 72.0 + extra_chrome
+
+
+def verify_safe_row_height(content_block_h: float, *, extra: float = 0.36) -> float:
+    """Table row height that clears cell overflow verify."""
+    padded = content_block_h * (1.0 + 2.0 * TEXT_BOX_PADDING_RATIO)
+    return max(0.52, padded / (WPS_SAFETY_FACTOR * 0.92) + extra)
+
+
+def auto_fit_slide_height(
+    bullets: list[str],
+    budget: LayoutBudget,
+    *,
+    content_width: float = 12.0,
+    content_height: float | None = None,
+    gap: float = 0.14,
+    card_pad_v: float = 0.32,
+    card_min_h: float = 0.56,
+) -> BulletCardLayout:
+    """Dynamic card heights: expand for long bullets, never shrink below min font."""
+    return fit_bullet_card_layout(
+        bullets,
+        budget,
+        content_width=content_width,
+        content_height=content_height,
+        gap=gap,
+        card_pad_v=card_pad_v,
+        card_min_h=card_min_h,
+    )
+
+
 def fit_bullet_card_layout(
     bullets: list[str],
     budget: LayoutBudget,
@@ -842,13 +1383,12 @@ def fit_bullet_card_layout(
     card_pad_v: float = 0.32,
     card_min_h: float = 0.56,
 ) -> BulletCardLayout:
-    """Variable-height stacked cards: shrink-wrap short bullets, scale if over budget."""
+    """Variable-height stacked cards; dynamic mode expands height instead of scaling font."""
     if not bullets:
         return BulletCardLayout([], [], needs_split=False)
 
     avail_h = content_height if content_height is not None else budget.content_height(with_pill=True)
     text_w = max(4.0, content_width - 0.34)
-    n = len(bullets)
 
     natural: list[float] = []
     fits: list[FitResult] = []
@@ -864,14 +1404,36 @@ def fit_bullet_card_layout(
             max_pt=budget.max_primary_pt,
             min_pt=budget.min_pt,
         )
-        natural.append(max(card_min_h, fit.block_height + card_pad_v))
-        fits.append(fit)
+        fit = apply_content_line_spacing(fit)
+        block_h = content_block_height(bullet, text_w, fit.font_pt, fit.line_spacing)
+        from scripts.wps_layout_verify import compute_card_height
 
-    total = sum(natural) + gap * max(n - 1, 0)
+        box_h = compute_card_height(
+            bullet, fit.font_pt, text_w, bullet=True, min_h=card_min_h
+        )
+        card_h = max(card_min_h, box_h)
+        natural.append(card_h)
+        fits.append(FitResult(fit.font_pt, fit.line_spacing, block_h, fit.needs_split))
+
+    total = sum(natural) + gap * max(len(bullets) - 1, 0)
     if total <= avail_h * 1.01:
         return BulletCardLayout(natural, fits, needs_split=False)
 
-    inner = max(0.5, avail_h - gap * max(n - 1, 0))
+    if DYNAMIC_HEIGHT_MODE:
+        expanded: list[float] = []
+        for card_h, bullet, fit in zip(natural, bullets, fits):
+            if is_arrow_separator(bullet):
+                expanded.append(card_h)
+                continue
+            lines = line_count(bullet, text_w, fit.font_pt)
+            cap_lines = max(1.0, (card_h - card_pad_v) / RENDER_LINE_HEIGHT_INCH)
+            if lines > cap_lines:
+                card_h = card_h + (lines - cap_lines) * RENDER_LINE_HEIGHT_INCH
+            expanded.append(card_h)
+        total_exp = sum(expanded) + gap * max(len(bullets) - 1, 0)
+        return BulletCardLayout(expanded, fits, needs_split=total_exp > avail_h * 1.02)
+
+    inner = max(0.5, avail_h - gap * max(len(bullets) - 1, 0))
     scale = inner / sum(h for h, b in zip(natural, bullets) if not is_arrow_separator(b)) if any(
         not is_arrow_separator(b) for b in bullets
     ) else 1.0
@@ -883,11 +1445,9 @@ def fit_bullet_card_layout(
     ]
     refit: list[FitResult] = []
     needs_split = False
-    final_heights: list[float] = []
     for bullet, card_h in zip(bullets, scaled):
         if is_arrow_separator(bullet):
             refit.append(FitResult(budget.max_primary_pt, 1.0, ARROW_SEP_HEIGHT, needs_split=False))
-            final_heights.append(ARROW_SEP_HEIGHT)
             continue
         fit = fit_typography(
             bullet,
@@ -896,12 +1456,10 @@ def fit_bullet_card_layout(
             max_pt=budget.max_primary_pt,
             min_pt=budget.min_pt,
         )
-        refit.append(fit)
-        needed = max(card_min_h, fit.block_height + card_pad_v)
-        final_heights.append(max(card_h, needed))
+        refit.append(apply_content_line_spacing(fit))
         if fit.needs_split:
             needs_split = True
-    return BulletCardLayout(final_heights, refit, needs_split=needs_split)
+    return BulletCardLayout(scaled, refit, needs_split=needs_split)
 
 
 def phrase_table_body_heights(
@@ -912,7 +1470,7 @@ def phrase_table_body_heights(
     """Header + tier row heights/fonts/spacings; never scale row height without typography."""
     budget = budget or LAYOUT_REGISTRY["phrase_table_body"]
     avail = budget.content_height(with_pill=True)
-    header_h = 0.56
+    header_h = 0.68
     row_heights: list[float] = [header_h]
     all_fonts: list[list[int]] = [[26, 26, 26]]
     all_spacings: list[list[float]] = [[1.12, 1.12, 1.12]]
@@ -944,6 +1502,9 @@ def phrase_table_body_heights(
         if split:
             needs_split = True
 
+    for ri in range(1, len(row_heights)):
+        row_heights[ri] = verify_safe_row_height(row_heights[ri] - 0.20, extra=0.24)
+
     total = sum(row_heights)
     if total > avail * 1.02:
         needs_split = True
@@ -971,7 +1532,7 @@ def fit_vocab_chunk(
         else:
             kinds.append("secondary")
 
-    header_h = 0.56
+    header_h = 0.68
     row_heights: list[float] = [header_h]
     all_fonts: list[list[int]] = [[26] * n_cols]
     all_spacings: list[list[float]] = [[1.12] * n_cols]
@@ -993,6 +1554,9 @@ def fit_vocab_chunk(
         all_spacings.append(sps)
         if split:
             needs_split = True
+
+    for ri in range(1, len(row_heights)):
+        row_heights[ri] = verify_safe_row_height(row_heights[ri] - 0.20, extra=0.24)
 
     total = sum(row_heights)
     if total > avail * 1.02:
@@ -1074,8 +1638,6 @@ def plan_title_cover_layout(
         poster_panel_h = poster_fit.block_height * WPS_PANEL_FUDGE + poster_pad
 
     stem_budget = max_panel_h - poster_panel_h - (poster_gap if poster_clean else 0.0)
-    if not poster_clean:
-        stem_budget = max_panel_h
     stem_fit = fit_paragraphs(
         body_clean,
         text_w,
@@ -1086,10 +1648,13 @@ def plan_title_cover_layout(
         pad_h_pt=10,
         pad_v_pt=8,
     )
-    stem_panel_h = min(
-        stem_budget,
-        max(0.9, stem_fit.block_height * WPS_PANEL_FUDGE + stem_pad),
-    )
+    stem_panel_h = max(0.9, stem_fit.block_height * WPS_PANEL_FUDGE + stem_pad)
+    stem_panel_h = max(stem_panel_h, verify_safe_textbox_height(stem_fit.block_height, extra_chrome=stem_pad))
+    if poster_clean and poster_panel_h:
+        poster_panel_h = max(
+            poster_panel_h,
+            verify_safe_textbox_height(poster_fit.block_height if poster_fit else 0.45, extra_chrome=poster_pad),
+        )
     return TitleCoverLayout(stem_panel_h, poster_panel_h, stem_fit, poster_fit)
 
 
@@ -1112,75 +1677,9 @@ def title_cover_needs_poster_slide(
     return total > bottom_y - panel_top - 0.06
 
 
-def _poster_slide_chunks(poster_lines: list[str], *, max_lines: int = 2) -> list[list[str]]:
-    """Pack poster descriptions: all on one slide when possible, else ≤max_lines per slide."""
-    posters = [ln for ln in poster_lines if ln.strip()]
-    if not posters:
-        return []
-    budget = LAYOUT_REGISTRY["title_body"]
-    text_w = 11.2 - 0.4
-    avail_h = SLIDE_CONTENT_BOTTOM - 1.70 - 0.20
-    all_fit = fit_paragraphs(
-        posters,
-        text_w,
-        avail_h - 0.36,
-        space_after_pt=10,
-        max_pt=budget.max_secondary_pt,
-        min_pt=budget.min_pt,
-        pad_h_pt=10,
-        pad_v_pt=8,
-    )
-    if not all_fit.needs_split:
-        return [posters]
-
-    chunks: list[list[str]] = []
-    current: list[str] = []
-    for line in posters:
-        trial = current + [line]
-        trial_fit = fit_paragraphs(
-            trial,
-            text_w,
-            avail_h - 0.36,
-            space_after_pt=10,
-            max_pt=budget.max_secondary_pt,
-            min_pt=budget.min_pt,
-            pad_h_pt=10,
-            pad_v_pt=8,
-        )
-        if current and (len(current) >= max_lines or trial_fit.needs_split):
-            chunks.append(current)
-            current = [line]
-        else:
-            current.append(line)
-    if current:
-        chunks.append(current)
-    return chunks or [posters]
-
-
 def expand_title_slides(slides: list[dict]) -> list[dict]:
-    """Stem on cover; poster descriptions on one follow-up slide (split only when needed)."""
-    expanded: list[dict] = []
-    for spec in slides:
-        if spec.get("type") != "title":
-            expanded.append(spec)
-            continue
-        posters = spec.get("poster_lines") or []
-        if posters:
-            stem = dict(spec)
-            stem.pop("poster_lines", None)
-            expanded.append(stem)
-            for chunk in _poster_slide_chunks(posters):
-                expanded.append(
-                    {
-                        "type": "title_poster",
-                        "title": "海报示意",
-                        "poster_lines": chunk,
-                        "_module": spec.get("_module"),
-                    }
-                )
-        else:
-            expanded.append(spec)
-    return expanded
+    """Keep poster_lines inline on cover — no standalone title_poster pages."""
+    return list(slides)
 
 
 @dataclass(frozen=True)
@@ -1191,96 +1690,6 @@ class EssayStackLayout:
     annotation_height: float
     body_fit: FitResult
     ann_fit: FitResult | None
-    para_space_pt: int = 10
-    indent_spaces: int = 4
-
-
-def _essay_display_paragraphs(
-    paragraphs: list[str],
-) -> tuple[list[str], float, int, int]:
-    """Display lines + typography matching ``essay_slide`` rendering."""
-    import re
-
-    from scripts.essay_format import essay_layout_for_length
-
-    clean = [
-        re.sub(r"\s*Word count:\s*\d+\s*$", "", p, flags=re.IGNORECASE).strip()
-        for p in paragraphs
-        if p.strip()
-    ]
-    line_spacing, para_space_pt, indent_spaces = essay_layout_for_length(clean)
-    display = [(" " * indent_spaces) + p for p in clean]
-    return display, line_spacing, para_space_pt, indent_spaces
-
-
-def _essay_body_block_height(
-    display_paragraphs: list[str],
-    width_inches: float,
-    font_pt: int,
-    line_spacing: float,
-    *,
-    space_after_pt: float = 4,
-    space_before_pt: int = 10,
-) -> float:
-    """Measure essay body height including indent, space_after, and space_before."""
-    if not display_paragraphs:
-        return 0.35
-    eff_w, _ = effective_text_area(width_inches, 10.0, pad_h_pt=10, pad_v_pt=6)
-    total = 0.0
-    for i, para in enumerate(display_paragraphs):
-        if i > 0:
-            sb = space_before_pt if line_spacing >= 1.0 else 4
-            total += sb / 72.0
-        total += text_block_height(para, eff_w, font_pt, line_spacing)
-        if i < len(display_paragraphs) - 1:
-            total += space_after_pt / 72.0
-    return total
-
-
-def _fit_essay_body(
-    display_paragraphs: list[str],
-    width_inches: float,
-    max_height_inches: float,
-    *,
-    line_spacing_hint: float,
-    space_after_pt: float = 4,
-    space_before_pt: int = 10,
-) -> FitResult:
-    """Fit essay body using the same spacing rules as the V2 renderer."""
-    eff_w, eff_h = effective_text_area(width_inches, max_height_inches, pad_h_pt=10, pad_v_pt=6)
-    cap = eff_h * FIT_FILL_RATIO
-    if not display_paragraphs:
-        return FitResult(26, 1.12, 0.35, needs_split=False)
-    spacing_steps = [s for s in LINE_SPACING_STEPS if s <= line_spacing_hint + 0.02]
-    if not spacing_steps:
-        spacing_steps = list(LINE_SPACING_STEPS)
-    for pt in FONT_STEPS:
-        if pt > 28:
-            continue
-        if pt < 26:
-            break
-        for spacing in spacing_steps:
-            if spacing < MIN_LINE_SPACING - 1e-6:
-                break
-            h = _essay_body_block_height(
-                display_paragraphs,
-                width_inches,
-                pt,
-                spacing,
-                space_after_pt=space_after_pt,
-                space_before_pt=space_before_pt,
-            )
-            if h <= cap:
-                return FitResult(pt, spacing, h, needs_split=False)
-    h = _essay_body_block_height(
-        display_paragraphs,
-        width_inches,
-        26,
-        MIN_LINE_SPACING,
-        space_after_pt=space_after_pt,
-        space_before_pt=space_before_pt,
-    )
-    return FitResult(26, MIN_LINE_SPACING, h, needs_split=True)
 
 
 def plan_essay_stack(
@@ -1291,7 +1700,7 @@ def plan_essay_stack(
     bottom_y: float = SLIDE_CONTENT_BOTTOM,
     content_width: float = 11.6,
 ) -> EssayStackLayout:
-    """Vertical stack: body from content_top, annotation strictly below rendered body."""
+    """Vertical stack: body from content_top, annotation strictly below body."""
     content_top = header_bottom + 0.08
     text_w = content_width - 0.2
     ann_gap = 0.08
@@ -1300,55 +1709,25 @@ def plan_essay_stack(
     ann_fit: FitResult | None = None
     if ann_text:
         ann_fit = fit_typography(ann_text, text_w, 2.5, max_pt=26, min_pt=26)
-        ann_h = ann_fit.block_height * WPS_PANEL_FUDGE + 0.16
+        ann_h = ann_fit.block_height + 0.16
 
     body_max_h = bottom_y - content_top - ann_h - ann_gap - (0.06 if ann_text else 0.0)
-    display, layout_ls, para_space_pt, indent_spaces = _essay_display_paragraphs(paragraphs)
-    body_fit = _fit_essay_body(
-        display,
+    lines = [p for p in paragraphs if p.strip()]
+    body_fit = fit_paragraphs(
+        lines,
         text_w,
         max(1.0, body_max_h),
-        line_spacing_hint=layout_ls,
-        space_after_pt=4,
-        space_before_pt=para_space_pt,
+        space_after_pt=6,
+        max_pt=28,
+        min_pt=26,
+        min_spacing=0.9,
+        pad_h_pt=10,
+        pad_v_pt=6,
     )
-    rendered_h = body_fit.block_height
-    body_height = min(body_max_h, max(1.2, rendered_h * WPS_PANEL_FUDGE + 0.12))
+    body_height = min(body_max_h, max(1.2, verify_safe_textbox_height(body_fit.block_height, extra_chrome=0.18)))
     body_top = content_top
     annotation_top = body_top + body_height + ann_gap
-    return EssayStackLayout(
-        body_top,
-        body_height,
-        annotation_top,
-        ann_h,
-        body_fit,
-        ann_fit,
-        para_space_pt=para_space_pt,
-        indent_spaces=indent_spaces,
-    )
-
-
-def essay_stack_fits(
-    paragraphs: list[str],
-    annotation: str,
-    *,
-    header_bottom: float = 1.70,
-    bottom_y: float = SLIDE_CONTENT_BOTTOM,
-    content_width: float = 11.6,
-) -> bool:
-    """True when essay body + annotation fit one slide without overlap."""
-    stack = plan_essay_stack(
-        paragraphs,
-        annotation,
-        header_bottom=header_bottom,
-        bottom_y=bottom_y,
-        content_width=content_width,
-    )
-    if stack.body_fit.needs_split:
-        return False
-    if stack.ann_fit and stack.ann_fit.needs_split:
-        return False
-    return stack.annotation_top + stack.annotation_height <= bottom_y + 0.05
+    return EssayStackLayout(body_top, body_height, annotation_top, ann_h, body_fit, ann_fit)
 
 
 def essay_text_fits(
@@ -1358,18 +1737,12 @@ def essay_text_fits(
     has_annotation: bool = True,
     content_width: float = 11.6,
 ) -> bool:
-    from scripts.essay_format import prepare_classroom_essay_body
-
-    paragraphs, wc, embedded_ann = prepare_classroom_essay_body(essay_text)
-    if not paragraphs and essay_text.strip():
-        paragraphs = [p.strip() for p in essay_text.split("\n\n") if p.strip()]
-    if wc and paragraphs:
-        import re
-
-        last = re.sub(r"\s*Word count:\s*\d+\s*$", "", paragraphs[-1], flags=re.IGNORECASE).rstrip()
-        paragraphs = paragraphs[:-1] + [f"{last}  Word count: {wc}"]
-    ann = embedded_ann if has_annotation else ""
-    return essay_stack_fits(paragraphs, ann, content_width=content_width)
+    panel_h = estimate_essay_panel_height(has_badge=has_badge, has_annotation=has_annotation)
+    return not fit_essay_block(
+        essay_text,
+        content_width=content_width,
+        panel_height=panel_h,
+    ).needs_split
 
 
 def _split_sentences(text: str) -> list[str]:

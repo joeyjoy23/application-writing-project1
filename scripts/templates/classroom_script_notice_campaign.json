@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "lesson": {
+    "duration": "40min",
+    "template_id": "notice_campaign",
+    "title": "高考英语应用文 · 通知倡议类",
+    "task_tag": "写通知 · 发倡议"
+  },
+  "sequence": [
+    {
+      "id": "s01",
+      "archetype": "cover_meta",
+      "bind": {
+        "static": {
+          "title": "$lesson.title",
+          "task_tag": "$lesson.task_tag"
+        }
+      }
+    },
+    {
+      "id": "s02",
+      "archetype": "question_stem",
+      "bind": { "source": "question.stem" }
+    },
+    {
+      "id": "s03",
+      "archetype": "thinking_core",
+      "bind": { "source": "stage1.thinking_core" }
+    },
+    {
+      "id": "s04",
+      "archetype": "pitfall_contrast",
+      "bind": { "source": "stage1.mistakes" }
+    },
+    {
+      "id": "s05",
+      "archetype": "peel_skeleton",
+      "bind": { "source": "stage2.peel" }
+    },
+    {
+      "id": "s06",
+      "archetype": "essay_display",
+      "bind": { "source": "stage2.essay_advanced_a" },
+      "options": { "title": "高分版 A", "badge": "高分版 A" }
+    },
+    {
+      "id": "s07",
+      "archetype": "phrase_table"
+    },
+    {
+      "id": "s08",
+      "archetype": "phrase_footer"
+    },
+    {
+      "id": "s09",
+      "archetype": "practice_migration",
+      "bind": { "source": "stage4.migration" }
+    },
+    {
+      "id": "s10",
+      "archetype": "summary_formula",
+      "bind": {
+        "static": {
+          "bullets": ["本课高分公式：观点 + 细节 + 分析 + 升华"]
+        }
+      }
+    }
+  ]
+}

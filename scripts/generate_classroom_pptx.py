@@ -25,18 +25,24 @@ from deck_plan import load_deck_plan, replace_stage3_in_deck, stage3_specs_from_
 from pptx_click_reveal import apply_click_reveal
 from scripts.ppt_layout_fit import effective_text_area, line_count
 
-PRIMARY = RGBColor(0x63, 0x66, 0xF1)
-ACCENT = RGBColor(0x14, 0xB8, 0xA6)
-AMBER = RGBColor(0xF5, 0x9E, 0x0B)
-BODY = RGBColor(0x1E, 0x29, 0x3B)
-SECONDARY = RGBColor(0x64, 0x74, 0x8B)
-WARNING = RGBColor(0xEF, 0x44, 0x44)
-PANEL_BG = RGBColor(0xF5, 0xF3, 0xFF)
-PANEL_SOFT = RGBColor(0xF8, 0xFA, 0xFC)
-PANEL_ALT = RGBColor(0xEC, 0xFE, 0xFF)
-WARNING_PANEL = RGBColor(0xFE, 0xF2, 0xF2)
-WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-PANEL_BORDER = RGBColor(0xE2, 0xE8, 0xF0)
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from styles.design_tokens import Theme as G
+
+PRIMARY = G.PRIMARY
+ACCENT = G.SECONDARY
+AMBER = G.HIGHLIGHT_BG
+BODY = G.TEXT_PRIMARY
+SECONDARY = G.TEXT_SECONDARY
+WARNING = G.DANGER
+PANEL_BG = G.HIGHLIGHT_BG
+PANEL_SOFT = G.SURFACE
+PANEL_ALT = G.TAG_BG
+WARNING_PANEL = G.HIGHLIGHT_BG
+WHITE = G.SURFACE
+PANEL_BORDER = G.BORDER
 
 SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
@@ -433,7 +439,7 @@ class SlideBuilder:
             subtitle_box.text_frame.paragraphs[0],
             subtitle,
             font_size=FONT_SECTION,
-            color=RGBColor(0xE0, 0xE7, 0xFF),
+            color=G.TEXT_SECONDARY,
         )
         panel_top = 2.28
         panel_h = BOTTOM_Y - panel_top - 0.06
@@ -619,7 +625,7 @@ class SlideBuilder:
             cell = table.cell(0, c)
             cell.text = h
             cell.fill.solid()
-            cell.fill.fore_color.rgb = PRIMARY
+            cell.fill.fore_color.rgb = G.TABLE_HEADER
             _configure_text_frame(cell.text_frame, anchor=MSO_ANCHOR.MIDDLE)
             for p in cell.text_frame.paragraphs:
                 p.font.name = FONT_UI
@@ -644,7 +650,7 @@ class SlideBuilder:
             cell = table.cell(0, c)
             cell.text = h
             cell.fill.solid()
-            cell.fill.fore_color.rgb = PRIMARY
+            cell.fill.fore_color.rgb = G.TABLE_HEADER
             _configure_text_frame(cell.text_frame, anchor=MSO_ANCHOR.MIDDLE)
             for p in cell.text_frame.paragraphs:
                 p.font.name = FONT_UI

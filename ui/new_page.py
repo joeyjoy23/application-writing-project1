@@ -542,6 +542,24 @@ def render_new_analysis(api_ready: bool) -> None:
 
     st.markdown('<p class="section-label">题目输入</p>', unsafe_allow_html=True)
 
+    # 须在 text_area 实例化前写入 question_editor（历史载入 / workflow 回填）
+    _pending_q = st.session_state.pop("_pending_question_editor", None)
+    if _pending_q is not None:
+        st.session_state["question_editor"] = _pending_q
+        st.session_state.question = _pending_q
+    elif not (st.session_state.get("question_editor") or "").strip():
+        _ws_q = st.session_state.get("workflow_state")
+        _has_image = bool(st.session_state.get("question_image"))
+        if (
+            not _has_image
+            and _ws_q
+            and _ws_q.stage1
+            and (_ws_q.question or "").strip()
+        ):
+            _wq = _ws_q.question.strip()
+            st.session_state["question_editor"] = _wq
+            st.session_state.question = _wq
+
     question = st.text_area(
         "题目内容",
         value=st.session_state.question,
@@ -550,29 +568,25 @@ def render_new_analysis(api_ready: bool) -> None:
         key="question_editor",
         label_visibility="collapsed",
     )
-    # 图片题或程序回填后，空编辑器勿覆盖 workflow 中的题目文本
-    _ws_q = st.session_state.get("workflow_state")
-    _has_image = bool(st.session_state.get("question_image"))
     if question.strip():
         st.session_state.question = question
-    elif (
-        not _has_image
-        and _ws_q
-        and _ws_q.stage1
-        and (_ws_q.question or "").strip()
-    ):
-        question = _ws_q.question.strip()
-        st.session_state.question = question
-        st.session_state["question_editor"] = question
     else:
         st.session_state.question = question
 
-    uploaded = st.file_uploader(
-        "或上传题目图片（jpg/png，单张）",
-        type=["jpg", "jpeg", "png"],
-        key="question_image_uploader",
-        label_visibility="collapsed",
-    )
+    uploaded = None
+    if not st.session_state.get("question_image"):
+        st.markdown(
+            '<p class="question-image-upload-label">或上传题目图片'
+            '<span class="section-hint"> · 拖拽到下方框内，或点击选择</span></p>',
+            unsafe_allow_html=True,
+        )
+        uploaded = st.file_uploader(
+            "题目图片",
+            type=["jpg", "jpeg", "png"],
+            key="question_image_uploader",
+            help="jpg / png，单张，原图 ≤4MB；与文字题目二选一",
+            label_visibility="collapsed",
+        )
     if uploaded is not None:
         try:
             from utils.question_input import compress_uploaded_image
@@ -772,8 +786,13 @@ def render_new_analysis(api_ready: bool) -> None:
             use_container_width=True,
             key="btn_clear_rerun_full",
         ):
+            rerun_question = question.strip() or (st.session_state.get("last_question") or "").strip()
+            if not rerun_question and not st.session_state.get("question_image"):
+                rerun_question = (
+                    (_cached.question or "").strip() if _cached else ""
+                )
             clear_checkpoint()
-            if _maybe_start_run("full", question):
+            if _maybe_start_run("full", rerun_question):
                 st.rerun()
 
     if _next_stage is not None and not running and not st.session_state.run_job and not _model_mismatch:

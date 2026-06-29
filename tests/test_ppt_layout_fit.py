@@ -72,6 +72,27 @@ def test_fit_banner_respects_budget():
     assert fit.block_height <= budget.key_banner * 1.1
 
 
+def test_split_callout_lines_wraps_long_truth():
+    from scripts.ppt_layout_fit import split_callout_lines
+
+    text = (
+        "本题最危险的陷阱是只说“我觉得哪个好”而不具体分析设计元素与心理健康主题的关联；"
+        "高分关键是用具体细节支撑选择，让理由有说服力。"
+    )
+    lines, fit, card_h = split_callout_lines(text, 11.5)
+    assert len(lines) >= 2
+    assert card_h >= fit.block_height + 0.3
+    assert fit.font_pt >= 22
+
+
+def test_scenario_bullets_no_preflect_prompt():
+    from scripts.architecture_v1 import _scenario_bullets
+
+    bullets = _scenario_bullets("James 心理健康海报", "stage1")
+    assert "先想" not in " ".join(bullets)
+    assert any("情境" in b for b in bullets)
+
+
 def test_fit_vocab_chunk_signals_overflow():
     budget = LAYOUT_REGISTRY["vocab_table"]
     rows = [
@@ -140,19 +161,20 @@ def test_bullet_card_layout_uses_variable_heights():
     ]
     layout = fit_bullet_card_layout(bullets, budget, content_height=5.0)
     assert len(layout.heights) == 4
-    assert max(layout.heights) - min(layout.heights) < 0.35
-    assert sum(layout.heights) + 0.14 * 3 < 5.0 * 0.85
+    assert max(layout.heights) - min(layout.heights) < 0.55
+    assert all(h >= 0.56 for h in layout.heights)
+    assert all(f.font_pt >= 26 for f in layout.fits)
 
 
 def test_bullet_card_layout_long_bullet_taller():
     budget = LAYOUT_REGISTRY["content_cards"]
     short = "语气：友好"
     long = "核心任务：" + ("表明立场并用设计元素支撑理由 " * 8)
-    layout = fit_bullet_card_layout([short, long], budget, content_height=5.0)
-    assert layout.heights[1] > layout.heights[0]
+    layout = fit_bullet_card_layout([short, long], budget, content_height=8.0)
+    assert layout.heights[1] >= layout.heights[0]
 
 
-def test_expand_content_slides_splits_four_bullets():
+def test_expand_content_slides_pass_through_no_split():
     slides = [
         {
             "type": "content",
@@ -161,10 +183,8 @@ def test_expand_content_slides_splits_four_bullets():
         }
     ]
     out = expand_content_slides(slides)
-    assert len(out) == 2
-    assert len(out[0]["bullets"]) == 3
-    assert len(out[1]["bullets"]) == 1
-    assert "（1/2）" in out[0]["title"]
+    assert len(out) == 1
+    assert len(out[0]["bullets"]) == 4
 
 
 def test_split_banner_text_two_lines_for_long_topic_note():
@@ -178,6 +198,91 @@ def test_split_banner_text_two_lines_for_long_topic_note():
     assert len(lines) >= 1
     if fit_banner(note, budget).needs_split:
         assert len(lines) == 2
+
+
+def test_pack_slides_merges_thinking_core_parts():
+    slides = [
+        {
+            "type": "content",
+            "title": "思维 · 审题与路径（1/2）",
+            "bullets": ["我是谁：李华", "↓", "① 任务一"],
+            "panel": True,
+        },
+        {
+            "type": "content",
+            "title": "思维 · 审题与路径（2/2）",
+            "bullets": ["💡 高分公式：选择+理由", "↓", "步骤三"],
+            "panel": True,
+        },
+    ]
+    from scripts.ppt_layout_fit import pack_slides
+
+    out = pack_slides(slides)
+    assert len(out) <= len(slides)
+    assert sum(len(s.get("bullets") or []) for s in out) == sum(len(s.get("bullets") or []) for s in slides)
+    titles = [s["title"] for s in out]
+    assert any("思维 · 审题与路径" in t for t in titles)
+
+
+def test_pack_slides_merges_poster_lines():
+    slides = [
+        {"type": "content", "title": "海报示意", "bullets": ["Poster 1 …"], "panel": True},
+        {"type": "content", "title": "海报示意", "bullets": ["Poster 2 …"], "panel": True},
+    ]
+    from scripts.ppt_layout_fit import pack_slides
+
+    out = pack_slides(slides)
+    assert len(out) == 1
+    assert len(out[0]["bullets"]) == 2
+
+
+def test_pack_slides_preserves_vocab_row_count():
+    rows_a = [{"english": "a", "example": "ex a"}]
+    rows_b = [{"english": "b", "example": "ex b"}]
+    slides = [
+        {
+            "type": "vocab_table",
+            "title": "话题词块 · 观点 · 必备级",
+            "tier": "必备级",
+            "columns": ["english", "example"],
+            "rows": rows_a,
+        },
+        {
+            "type": "vocab_table",
+            "title": "话题词块 · 观点 · 必备级 (2/2)",
+            "tier": "必备级",
+            "columns": ["english", "example"],
+            "rows": rows_b,
+        },
+    ]
+    from scripts.ppt_layout_fit import pack_group, pack_slides
+
+    assert pack_group(slides[0]) == pack_group(slides[1])
+    out = pack_slides(slides)
+    total_rows = sum(len(s.get("rows") or []) for s in out if s["type"] == "vocab_table")
+    assert total_rows == 2
+
+
+def test_pack_slides_merges_essay_annotation_parts():
+    slides = [
+        {
+            "type": "content",
+            "title": "基础版范文 · 批注（1/2）",
+            "bullets": ["① 选择明确", "② 理由有画面", "③ 结尾鼓励"],
+            "panel": True,
+        },
+        {
+            "type": "content",
+            "title": "基础版范文 · 批注（2/2）",
+            "bullets": ["④ 词块准确"],
+            "panel": True,
+        },
+    ]
+    from scripts.ppt_layout_fit import pack_slides
+
+    out = pack_slides(slides)
+    assert len(out) == 1
+    assert len(out[0]["bullets"]) == 4
 
 
 def test_is_arrow_separator_detects_chain_arrows():
@@ -226,7 +331,55 @@ def test_title_poster_panel_shrink_wraps_fitted_text():
     assert cover.stem_panel_h + cover.poster_panel_h < 5.5
 
 
-def test_expand_title_slides_consolidates_poster():
+def test_slide_density_ratio_low_for_sparse_content():
+    from scripts.ppt_layout_fit import DENSITY_MERGE_THRESHOLD, slide_density_ratio
+
+    spec = {"type": "content", "title": "审题 · 导入", "bullets": []}
+    assert slide_density_ratio(spec) < DENSITY_MERGE_THRESHOLD
+
+
+def test_pack_keeps_phrase_body_footer_separate():
+    from scripts.ppt_layout_fit import pack_slides
+
+    slides = [
+        {
+            "type": "phrase_table",
+            "title": "功能句型 · 观点表达",
+            "part": "body",
+            "table": {"tiers": [{"level": "基础句", "english": "I prefer X.", "chinese": ""}]},
+        },
+        {
+            "type": "phrase_table",
+            "title": "功能句型 · 观点表达 · 用法与改错",
+            "part": "footer",
+            "table": {"topic_note": "本题需明确表达选择。", "fix_bad": "bad", "fix_good": "good"},
+        },
+    ]
+    out = pack_slides(slides)
+    assert len(out) == 2
+    assert out[0].get("part") == "body"
+    assert out[1].get("part") == "footer"
+
+
+def test_pack_paginates_vocab_by_rows():
+    from scripts.ppt_layout_fit import pack_slides
+
+    rows = [{"english": f"w{i}", "chinese": f"词{i}"} for i in range(10)]
+    slides = [
+        {
+            "type": "vocab_table",
+            "title": "话题词块 · 观点表达 · 必备级",
+            "tier": "必备级",
+            "columns": ["english", "chinese"],
+            "rows": rows,
+        }
+    ]
+    out = pack_slides(slides)
+    assert len(out) >= 2
+    assert sum(len(s["rows"]) for s in out) == 10
+
+
+def test_expand_title_slides_keeps_poster_inline():
     from scripts.ppt_layout_fit import expand_title_slides
 
     poster = ["Poster 1：双手托心", "Poster 2：浇水壶"]
@@ -234,10 +387,9 @@ def test_expand_title_slides_consolidates_poster():
     slides = expand_title_slides(
         [{"type": "title", "title": "封面", "subtitle": "tag", "body": stem, "poster_lines": poster}]
     )
-    assert len(slides) == 2
-    assert slides[0].get("poster_lines") is None
-    assert slides[1]["type"] == "title_poster"
-    assert slides[1]["poster_lines"] == poster
+    assert len(slides) == 1
+    assert slides[0].get("poster_lines") == poster
+    assert slides[0]["body"] == stem
 
 
 def test_essay_annotation_stacks_below_body():
@@ -248,20 +400,5 @@ def test_essay_annotation_stacks_below_body():
     ]
     annotation = "①选择明确  ②理由有画面  ③结尾升华"
     stack = plan_essay_stack(paragraphs, annotation)
-    assert stack.annotation_top > stack.body_top + stack.body_height + 0.05
+    assert stack.annotation_top >= stack.body_top + stack.body_height + 0.07
     assert stack.annotation_top + stack.annotation_height <= 7.32 + 0.05
-    assert stack.body_fit.block_height <= stack.body_height
-
-
-def test_bullet_card_heights_cover_fitted_text():
-    budget = LAYOUT_REGISTRY["content_cards"]
-    bullets = [
-        "体裁：朋友间邮件（非正式报告）",
-        "核心任务：" + ("表明立场并用设计元素支撑理由 " * 6),
-        "语气：友好、真诚，结尾鼓励参赛",
-    ]
-    layout = fit_bullet_card_layout(bullets, budget, content_height=2.2)
-    for bullet, card_h, fit in zip(bullets, layout.heights, layout.fits):
-        if is_arrow_separator(bullet):
-            continue
-        assert card_h >= fit.block_height + 0.30

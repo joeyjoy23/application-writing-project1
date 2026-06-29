@@ -108,18 +108,33 @@ def clear_checkpoint() -> None:
     from services.run_recovery import clear_run_checkpoint_for_owner
     from db.identity import ensure_guest_id
 
+    ws = st.session_state.get("workflow_state")
+    saved_question = (
+        (st.session_state.get("question_editor") or "").strip()
+        or (st.session_state.get("question") or "").strip()
+        or ((ws.question or "").strip() if ws else "")
+        or (st.session_state.get("last_question") or "").strip()
+    )
+    saved_image = st.session_state.get("question_image")
+
     clear_run_checkpoint_for_owner(ensure_guest_id())
     from services.workflow_origin import clear_workflow_origin
 
     st.session_state.workflow_state = None
     st.session_state.history_nav_state = None
-    st.session_state.last_question = ""
     st.session_state.failed_stage = None
     st.session_state.stopped_stage = None
     st.session_state._confirm_clear = False
     st.session_state.stage4_student_level = None
-    st.session_state.question_image = None
     clear_workflow_origin()
+
+    if saved_question:
+        st.session_state.question = saved_question
+        st.session_state.last_question = saved_question
+        # 勿写 question_editor：本 run 内 text_area 已实例化，Streamlit 禁止再改 widget key
+    if saved_image:
+        st.session_state.question_image = saved_image
+
     st.toast("已清空当前结果；历史记录已保留，可在「历史」中查看", icon="🔄")
 
 
@@ -372,11 +387,17 @@ def render_sidebar() -> bool:
         with st.expander("⚙️ 高级", expanded=not api_ready):
             st.caption("API Key 与运维选项；日常备课只需在外层选择模型。")
 
-            st.session_state.api_key = st.text_input(
+            def _persist_api_key_from_widget() -> None:
+                from ui.api_key_browser import persist_session_to_browser
+
+                persist_session_to_browser(force=True)
+
+            st.text_input(
                 _provider_key_label(st.session_state.provider),
-                value=st.session_state.api_key,
                 type="password",
                 help="也可在部署环境的 Secrets / .env 中配置",
+                key="api_key",
+                on_change=_persist_api_key_from_widget,
             )
 
             st.checkbox(
@@ -390,6 +411,7 @@ def render_sidebar() -> bool:
                 "在本浏览器记住 Key",
                 help="默认开启；公共或共享电脑请取消勾选。",
                 key="remember_api_key",
+                on_change=_persist_api_key_from_widget,
             )
             if st.session_state.get("remember_api_key"):
                 st.caption("⚠️ Key 仅存于本机浏览器，不会写入历史或导出。")
@@ -416,7 +438,7 @@ def render_sidebar() -> bool:
             unsafe_allow_html=True,
         )
 
-        persist_session_to_browser()
+        persist_session_to_browser(force=True)
 
         if not api_ready:
             return False

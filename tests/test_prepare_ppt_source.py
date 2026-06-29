@@ -107,3 +107,28 @@ def test_prepare_classroom_html_uses_analysis_not_classroom_skeleton():
         assert "Stage 3" in md
         assert not (out_dir / "classroom-data.json").exists()
         assert (out_dir / "stage3.json").is_file()
+
+
+def test_prepare_college_life_docx_parses_stage3_tables():
+    """Word 导出 Stage3 句型/词块在表格里，须完整进入 stage3.json。"""
+    docx_path = Path(r"d:\Downloads\应用文分析_2026-06-14_deepseek-v4-pro.docx")
+    if not docx_path.is_file():
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp) / "out"
+        prepare_ppt_source(docx_path, out_dir)
+        stage3 = json.loads((out_dir / "stage3.json").read_text(encoding="utf-8"))
+        assert stage3["phrase_tables"][0]["tiers"], "phrase tiers missing from Word tables"
+        assert "When it comes to" in stage3["phrase_tables"][0]["tiers"][0]["english"]
+        vocab_rows = sum(
+            len(t.get("rows") or [])
+            for f in stage3.get("vocab_fields", [])
+            for t in f.get("tiers", [])
+        )
+        assert vocab_rows >= 15, f"expected vocab rows from docx tables, got {vocab_rows}"
+        assert any(
+            r.get("english") == "lay a solid foundation"
+            for f in stage3["vocab_fields"]
+            for t in f["tiers"]
+            for r in t.get("rows", [])
+        )

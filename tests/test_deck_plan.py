@@ -63,6 +63,19 @@ def test_vocab_chunks_by_measurement_not_only_six():
         assert len(slide.get("rows", [])) <= 6
 
 
+def test_deck_plan_phrase_fix_before_note():
+    data = parse_stage3_file(FIXTURE)
+    plan = deck_plan_from_stage3(data)
+    layouts = [s["layout"] for s in plan["slides"]]
+    first_phrase = layouts.index("phrase_table_body")
+    chunk = plan["slides"][first_phrase : first_phrase + 3]
+    assert chunk[0]["layout"] == "phrase_table_body"
+    assert chunk[1].get("footer_part") == "fix"
+    assert "改一句" in chunk[1]["title"]
+    assert chunk[2].get("footer_part") == "note"
+    assert "本题" in chunk[2]["title"]
+
+
 def test_refine_deck_plan_idempotent():
     data = parse_stage3_file(FIXTURE)
     plan = deck_plan_from_stage3(data)

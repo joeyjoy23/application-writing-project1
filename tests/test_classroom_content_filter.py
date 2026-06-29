@@ -5,6 +5,7 @@ from scripts.classroom_content_filter import (
     is_teacher_only_line,
     normalize_activity_line,
     parse_stage4_student_from_export,
+    sanitize_student_text,
     student_bullets_from_slide,
 )
 
@@ -55,6 +56,21 @@ def test_parse_stage4_extracts_student_tasks():
     assert parsed["migration"] and "Lucy" in parsed["migration"][0]
 
 
-def test_teacher_only_line_detection():
-    assert is_teacher_only_line("教师操作：展示两张海报")
-    assert not is_teacher_only_line("理由空泛 — 只写 about mental health")
+def test_sanitize_student_text_strips_mandatory_point():
+    raw = '要点指定：mandatory_point "论证逻辑"（即避免空泛） 基础片段：I put study first.'
+    clean = sanitize_student_text(raw)
+    assert "mandatory_point" not in clean.lower()
+    assert "要点指定" not in clean
+    assert "I put study first" in clean
+
+
+def test_parse_stage4_warn_without_bold_markers():
+    stage4 = """
+二、典型错误预警
+1. “投稿体”误判为“私人信”：开头写成问候寒暄
+2. “正确废话”陷阱：用义务腔替代个人化理由
+"""
+    parsed = parse_stage4_student_from_export(stage4)
+    assert len(parsed["warn"]) >= 2
+    assert all("mental health" not in w for w in parsed["warn"])
+    assert "投稿体" in parsed["warn"][0]

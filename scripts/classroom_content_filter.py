@@ -24,6 +24,26 @@ _TIMING_PREFIX_RE = re.compile(
 
 _STUDENT_INSIGHT_MARKERS = ("陷阱", "高分关键", "最危险", "一句大实话")
 
+# Prompt / teacher-schema tokens that must not appear on student slides.
+_TEACHER_META_RE = re.compile(
+    r"mandatory_point\s*"
+    r"|要点指定[：:]\s*"
+    r"|(?:考查|设计)能力[：:][^\n]*"
+    r"|设计意图[：:][^\n]*"
+    r"|升级提示[：:][^\n]*"
+    r"|示范答案[：:][^\n]*"
+    r"|思考提示[：:][^\n]*"
+    r"|(?:适合|面向)(?:基础|中等|进阶)[^\n]*",
+    re.IGNORECASE,
+)
+
+
+def sanitize_student_text(text: str) -> str:
+    """Remove teacher-only schema tokens from text shown to students."""
+    t = _TEACHER_META_RE.sub("", str(text))
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
 
 def is_teacher_only_line(text: str) -> bool:
     t = text.strip()
@@ -117,19 +137,37 @@ def parse_stage4_student_from_export(stage4: str) -> dict[str, list[str]]:
         return {"warn": [], "activities": [], "migration": []}
 
     warn: list[str] = []
-    for m in re.finditer(
-        r"^\d+\.\s*\*\*(.+?)\*\*[：:]\s*(.+)$",
+    err_block = re.search(
+        r"二、典型错误预警\s*(.*?)(?=---|\n三、|$)",
         stage4,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    err_text = err_block.group(1) if err_block else stage4
+    for m in re.finditer(
+        r"^\d+\.\s*(.+?)[：:]\s*(.+)$",
+        err_text,
         flags=re.MULTILINE,
     ):
-        title = m.group(1).strip()
-        example = m.group(2).strip()
-        if "教师" in title:
+        title = re.sub(r"\*\*", "", m.group(1)).strip().strip('"\'""''')
+        example = sanitize_student_text(m.group(2).strip())
+        if not title or "教师" in title or title.startswith("高发"):
             continue
         if example and not example.startswith("教师"):
             warn.append(f"❌ {title} — {example[:90]}")
-        if len(warn) >= 3:
+        if len(warn) >= 5:
             break
+    if not warn:
+        for m in re.finditer(
+            r"^\d+\.\s*\*\*(.+?)\*\*[：:]\s*(.+)$",
+            err_text,
+            flags=re.MULTILINE,
+        ):
+            title = m.group(1).strip()
+            example = sanitize_student_text(m.group(2).strip())
+            if "教师" not in title and example:
+                warn.append(f"❌ {title} — {example[:90]}")
+            if len(warn) >= 5:
+                break
 
     activities: list[str] = []
     for m in re.finditer(
@@ -157,33 +195,38 @@ def parse_stage4_student_from_export(stage4: str) -> dict[str, list[str]]:
 
     migration: list[str] = []
     for m in re.finditer(
-        r"(?:写作题|要点指定)[：:]\s*(.+?)(?=\n[-*]考查|设计意图|思考提示|$)",
+        r"写作题[：:]\s*(.+?)(?=\n[-*]考查|设计意图|思考提示|练习\d|$)",
         stage4,
         flags=re.DOTALL | re.IGNORECASE,
     ):
-        item = re.sub(r"\s+", " ", m.group(1).strip())[:140]
-        if item:
+        item = sanitize_student_text(m.group(1).strip())[:160]
+        if item and "mandatory_point" not in item.lower():
             migration.append(item)
         if len(migration) >= 2:
             break
 
     mig_fallback = _extract_li_blocks(stage4, r"三、课后练习题\s*(.*)", 4)
     for item in mig_fallback:
-        if "写作题" in item or "Lucy" in item or "迁移" in item or "环保" in item:
-            migration.append(item[:140])
+        clean = sanitize_student_text(item)
+        if not clean or "mandatory_point" in clean.lower():
+            continue
+        if "写作题" in item or "迁移" in item or "Personal Growth" in item:
+            migration.append(clean[:160])
     migration = migration[:3]
 
     if not warn:
         warn = [
-            "❌ 理由空泛 — 只写 about mental health，不绑设计元素",
-            "❌ 语气不当 — I suggest that…（过于正式）",
+            "❌ 理由空泛 — 只写 important / necessary，缺少个人化情境",
+            "❌ 排序变流水账 — 三件事各说一段，没有真正权衡",
+            "❌ 语气不当 — Dear editor 或 I suggest that…（体裁不符）",
         ]
 
     if not activities:
         activities = [
-            "元素 → 主题：用 Stage3 词块造句，绑定画面细节",
-            "逻辑链：用 Firstly / Secondly 写两个理由",
-            "风格：情感共鸣 A vs 逻辑思辨 B，改自己的段落",
+            "排序理由三层过滤：哪个版本更像「真实的我」？",
+            "画因果鱼骨图：Study 第一 → Sleep 第二 → Socialize 第三",
+            "给睡眠/社交写一个画面，替代定义式空话",
+            "限时完稿 + 同桌「可信度温度计」互评",
         ]
 
     return {"warn": warn[:3], "activities": activities[:4], "migration": migration[:3]}
@@ -199,13 +242,13 @@ def stage1_thinking_slides_from_export(stage1: str) -> list[dict[str, Any]]:
             path_pts.append(m.group(1).strip())
     if len(path_pts) < 2:
         path_pts = [
-            "海报画面 → 象征意义",
+            "明确排序立场",
             "↓",
-            "心理健康主题",
+            "因果链 / 价值权衡",
             "↓",
-            "形成理由",
+            "个人化收束",
         ]
-    formula = "选择 + 画面细节 + 主题分析 + 鼓励收束"
+    formula = "排序立场 + 具体理由 + 权衡取舍 + 个人体悟"
     return [
         {
             "type": "content",

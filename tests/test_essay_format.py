@@ -127,3 +127,34 @@ def test_extract_essay_block_does_not_bleed_into_next_version():
     assert basic.startswith("Dear James")
     advanced = _extract_essay_block(stage2, "高分版 A")
     assert "Body one" not in advanced
+
+
+def test_recount_body_word_count_excludes_yours_signoff():
+    from scripts.essay_format import recount_body_word_count
+
+    text = (
+        "Dear Editor,\n\n"
+        "Glad to hear about your designs and the summer theme today.\n\n"
+        "I'd go with Poster 1 because the cracked heart stands out clearly.\n\n"
+        "Overall the poem suggests that slow moments matter most in life.\n\n"
+        "Word count: 999\n\n"
+        "Yours,\nLi Hua"
+    )
+    wc = recount_body_word_count(text)
+    assert wc < 50
+    assert wc > 20
+
+
+def test_yours_comma_signoff_excluded_from_body():
+    text = (
+        "Dear Editor,\n\n"
+        "Opening with purpose.\n\n"
+        "Middle with details and examples here.\n\n"
+        "Closing with summary.\n\n"
+        "Yours,\nLi Hua"
+    )
+    body = classroom_body_paragraphs(text)
+    joined = " ".join(body)
+    assert "Yours" not in joined
+    assert "Li Hua" not in joined
+    assert len(body) == 3

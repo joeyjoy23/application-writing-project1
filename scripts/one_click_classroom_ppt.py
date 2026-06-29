@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -21,12 +22,14 @@ from deck_plan import deck_plan_from_stage3, refine_deck_plan, replace_stage3_in
 from generate_classroom_pptx import (
     build_mental_health_deck,
     expand_slide_specs,
-    verify_text_fit,
 )
+from wps_layout_verify import verify_deck_layout
 from generate_classroom_pptx_v2 import _inject_v2_structure, render_v2_deck
 from prepare_ppt_source import prepare_ppt_source
 from ppt_work_cleanup import cleanup_ppt_work_dir
-from pptx_click_reveal import apply_click_reveal
+from pptx_click_reveal import apply_click_reveal, count_click_reveal_stats
+
+log = logging.getLogger(__name__)
 
 
 def _console_print(text: str) -> None:
@@ -55,11 +58,21 @@ def _build_v2_slides(
     preset: str = "70min",
     use_classroom_html: bool = False,
     module_dividers: bool = False,
+    script_path: Path | None = None,
+    template_id: str | None = None,
 ) -> list[dict]:
     from scripts.architecture_v1 import (
-        build_full_deck_from_export,
+        build_architecture_deck,
+        inject_module_dividers,
         load_export_data,
+        merge_stage3_into_architecture_deck,
         parse_source_markdown_sections,
+    )
+    from scripts.classroom_script import (
+        ClassroomScriptError,
+        compile_classroom_script,
+        load_classroom_script,
+        load_script_template,
     )
 
     stage3_data = json.loads(stage3_path.read_text(encoding="utf-8"))
@@ -100,11 +113,27 @@ def _build_v2_slides(
             file=sys.stderr,
         )
 
-    from scripts.architecture_v1 import (
-        build_architecture_deck,
-        inject_module_dividers,
-        merge_stage3_into_architecture_deck,
-    )
+    script: dict | None = None
+    if script_path and script_path.is_file():
+        script = load_classroom_script(script_path)
+    elif template_id:
+        script = load_script_template(template_id)
+    else:
+        default_script = out_dir / "classroom_script.json"
+        if default_script.is_file():
+            script = load_classroom_script(default_script)
+
+    if script is not None:
+        try:
+            return compile_classroom_script(
+                script,
+                export_data,
+                stage3_data,
+                stage3_specs=stage3_specs,
+                vocab_max_rows=vocab_max_rows,
+            )
+        except ClassroomScriptError as exc:
+            print(f"警告：Classroom Script 编译失败（{exc}），回退 Architecture V1", file=sys.stderr)
 
     base = build_architecture_deck(export_data, preset=lesson)  # type: ignore[arg-type]
     merged = merge_stage3_into_architecture_deck(base, stage3_specs)
@@ -116,7 +145,7 @@ def _render_and_verify(
     output_pptx: Path,
     *,
     no_anim: bool,
-) -> tuple[list[str], int]:
+) -> tuple[dict, int]:
     from scripts.ppt_layout_fit import (
         expand_content_slides,
         expand_essay_slides,
@@ -130,9 +159,14 @@ def _render_and_verify(
     render_v2_deck(slides, output_pptx)
     if not no_anim:
         apply_click_reveal(output_pptx)
+        timing_slides, anim_shapes = count_click_reveal_stats(output_pptx)
+        log.info(
+            "click-reveal applied: %d slides with timing, %d anim shapes",
+            timing_slides,
+            anim_shapes,
+        )
     prs = Presentation(output_pptx)
-    overflow = verify_text_fit(prs)
-    return overflow, len(prs.slides)
+    return verify_deck_layout(prs), len(prs.slides)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,6 +223,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="插入 A–G 全屏模块分隔页（默认仅用页眉章节 tag）",
     )
+    parser.add_argument(
+        "--script",
+        type=Path,
+        default=None,
+        help="classroom_script.json 路径（存在则走 Script 编译，否则 fallback Architecture V1）",
+    )
+    parser.add_argument(
+        "--template",
+        choices=("dual_poster_opinion", "letter_suggestion", "notice_campaign"),
+        default=None,
+        help="使用内置 Script 模板（无 --script 时生效）",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="输出 WPS 布局校验调试信息",
+    )
     args = parser.parse_args(argv)
 
     export_path = args.export_path.expanduser().resolve()
@@ -221,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
 
     output_pptx = out_dir / "mental_health_classroom.pptx"
     export_data_path = out_dir / "export-data.json"
-    overflow: list[str] = []
+    layout_result: dict = {"ok": True, "pass1_issues": [], "pass2_issues": [], "wps_risk_count": 0}
     slide_count = 0
 
     if args.legacy_deck:
@@ -235,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
         slides = _inject_v2_structure(
             expand_slide_specs(replace_stage3_in_deck(build_mental_health_deck(), stage3_specs))
         )
-        overflow, slide_count = _render_and_verify(slides, output_pptx, no_anim=args.no_anim)
+        layout_result, slide_count = _render_and_verify(slides, output_pptx, no_anim=args.no_anim)
     elif args.v1:
         from generate_classroom_pptx import build_deck_with_stage3, render_deck
 
@@ -244,11 +295,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.no_anim:
             apply_click_reveal(output_pptx)
         prs = Presentation(output_pptx)
-        overflow = verify_text_fit(prs)
+        layout_result = verify_deck_layout(prs)
         slide_count = len(prs.slides)
     else:
         use_custom = deck_plan is not None
-        for attempt, max_rows in enumerate(_VOCAB_RETRY_LIMITS):
+        use_script = args.script is not None or args.template is not None
+        retry_limits = (6,) if use_script else _VOCAB_RETRY_LIMITS
+        for attempt, max_rows in enumerate(retry_limits):
             slides = _build_v2_slides(
                 stage3_path,
                 deck_plan,
@@ -258,27 +311,31 @@ def main(argv: list[str] | None = None) -> int:
                 preset=args.preset,
                 use_classroom_html=args.classroom_html,
                 module_dividers=args.module_dividers,
+                script_path=args.script.expanduser().resolve() if args.script else None,
+                template_id=args.template,
             )
-            overflow, slide_count = _render_and_verify(
+            layout_result, slide_count = _render_and_verify(
                 slides, output_pptx, no_anim=args.no_anim
             )
-            if not overflow:
+            if layout_result["ok"]:
                 if attempt > 0:
                     print(
                         f"Overflow retry succeeded on attempt {attempt + 1} "
                         f"(vocab_max_rows={max_rows})"
                     )
                 break
-            if attempt < len(_VOCAB_RETRY_LIMITS) - 1:
+            if attempt < len(retry_limits) - 1:
+                n1 = len(layout_result["pass1_issues"])
+                n2 = layout_result["wps_risk_count"]
                 print(
-                    f"Overflow detected ({len(overflow)} issues); "
-                    f"retry {attempt + 1} with vocab_max_rows={_VOCAB_RETRY_LIMITS[attempt + 1]}"
+                    f"Layout check failed (pass1={n1}, WPS_RISK={n2}); "
+                    f"retry {attempt + 1} with vocab_max_rows={retry_limits[attempt + 1]}"
                 )
                 use_custom = False
             else:
-                print(f"Overflow still failing after {len(_VOCAB_RETRY_LIMITS)} attempts", file=sys.stderr)
+                print(f"Overflow still failing after {len(retry_limits)} attempts", file=sys.stderr)
 
-    print(f"架构: {'legacy' if args.legacy_deck else ('V1 flat' if args.v1 else f'Architecture V1 ({args.preset})')}")
+    print(f"架构: {'legacy' if args.legacy_deck else ('V1 flat' if args.v1 else f'Script/Architecture V1 ({args.preset})')}")
     print(f"导出文件: {export_path}")
     print(f"输出目录: {out_dir}")
     print(f"源稿: {md_path}")
@@ -286,12 +343,37 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Slides: {slide_count}")
     print(f"PPTX: {output_pptx}")
     print(f"动画: {'跳过' if args.no_anim else '已注入 on-click fade'}")
-    print(f"Text overflow check: {'pass' if not overflow else 'FAIL'}")
-    for issue in overflow[:5]:
-        _console_print(f"  - {issue}")
+    wps_issues = layout_result["pass2_issues"]
+    pass1_issues = layout_result["pass1_issues"]
+    wps_report = layout_result.get("wps_report")
+    print(
+        f"Layout check: {'pass' if layout_result['ok'] else 'FAIL'} "
+        f"(pass1={len(pass1_issues)}, WPS_RISK_OVERFLOW={layout_result['wps_risk_count']})"
+    )
+    if wps_report:
+        print(
+            f"WPS governance: critical={len(wps_report.critical_issues)} "
+            f"warning={len(wps_report.warning_issues)} "
+            f"cosmetic_ignored={len(wps_report.cosmetic_issues)} "
+            f"teach_ready={wps_report.is_teach_ready} "
+            f"risk_score={wps_report.risk_score:.3f}"
+        )
+    for issue in wps_issues[:5]:
+        _console_print(f"  [CRITICAL] {issue}")
+    warn = layout_result.get("warning_issues") or []
+    for issue in warn[:3]:
+        _console_print(f"  [WARNING]  {issue}")
+    if len(wps_issues) > 5:
+        print(f"  ... and {len(wps_issues) - 5} more critical issues")
+    if args.verbose or wps_issues or warn:
+        print("WPS layout governance report:")
+        from wps_layout_verify import print_wps_layout_report
 
-    if len(overflow) > 5:
-        print(f"  ... and {len(overflow) - 5} more")
+        print_wps_layout_report(Presentation(output_pptx))
+    if pass1_issues and args.verbose:
+        print("Pass1 (verify_text_fit) debug:")
+        for issue in pass1_issues[:5]:
+            _console_print(f"  [pass1] {issue}")
 
     if not args.keep_intermediate:
         removed = cleanup_ppt_work_dir(out_dir)
@@ -302,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
             if len(removed) > 8:
                 print(f"  ... and {len(removed) - 8} more")
 
-    return 0 if not overflow else 1
+    return 0 if layout_result["ok"] else 1
 
 
 if __name__ == "__main__":

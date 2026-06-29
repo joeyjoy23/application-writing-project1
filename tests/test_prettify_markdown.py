@@ -1,3 +1,5 @@
+import re
+
 from utils.parsers import (
     normalize_bold_markers,
     normalize_vertical_spacing,
@@ -238,6 +240,80 @@ def test_prettify_normalizes_spaced_bold_labels():
     assert "- **切入点**：从后果入手" in out
     assert "- **适用要点**：甲、乙" in out
     assert "** 切入点" not in out
+
+
+def test_normalize_self_check_five_splits_single_line():
+    raw = (
+        "### 0. 审题起点\n\n"
+        "**动笔前自检五问**：\n"
+        "**1. 语气** — 像动员还是汇报？ **2. 结构** — 有具体内容吗？"
+        " **3. 逻辑** — 有原因也有做法？ **4. 立意** — 有深层意义吗？"
+        " **5. 语言** — 用了关键词吗？\n\n"
+        "##### 💡 一句大实话\n\n"
+        "最易写成给编辑的私人信。"
+    )
+    out = prettify_stage_markdown(raw)
+    assert out.count("- **1. 语气**") >= 1 or "**1. 语气**" in out
+    assert "**2. 结构**" in out
+    assert "**5. 语言**" in out
+    assert "**2. 结构** — 有具体内容吗？ **3." not in out
+
+
+def test_strip_prompt_leak_from_dashihua():
+    from utils.parsers import strip_prompt_instruction_leaks
+
+    raw = "收束五问；用备课组长口吻点出本题最危险的陷阱与高分关键。本题最易写成给编辑写信。"
+    out = strip_prompt_instruction_leaks(raw)
+    assert "收束五问" not in out
+    assert "给编辑写信" in out
+
+
+def test_strip_prompt_leak_colon_prefix_from_dashihua():
+    from utils.parsers import prettify_stage_markdown
+
+    raw = (
+        "##### 💡 一句大实话\n\n"
+        "收束五问；用备课组长口吻点出本题最危险的陷阱与高分关键："
+        "最危险的陷阱是「经历分享」写得像流水账；"
+        "高分关键是用具体场景把「慢时光」具象化。"
+    )
+    out = prettify_stage_markdown(raw)
+    assert "收束五问" not in out
+    assert "备课组长口吻" not in out
+    assert "流水账" in out
+    assert "慢时光" in out
+
+
+def test_split_inline_peel_headings():
+    from utils.parsers import split_inline_peel_field_headings
+
+    raw = (
+        "####### 核心句（P） The poem suggests slow moments. "
+        "####### 拓展策略（E）"
+    )
+    out = split_inline_peel_field_headings(raw)
+    assert "The poem suggests" in out
+    assert re.search(r"#{7,}", out) is None
+    assert out.count("核心句（P）") >= 1
+    assert out.count("拓展策略（E）") >= 1
+
+
+def test_normalize_stage2_essay_word_count_excludes_dear_yours():
+    raw = (
+        "#### 1. 基础版（9 分档）\n"
+        "Dear Editor,\n\n"
+        "Opening paragraph with enough words here for testing purposes today.\n\n"
+        "Middle paragraph with core points and more details about the poem theme.\n\n"
+        "Closing paragraph summarizing the main idea and call to action clearly.\n\n"
+        "Word count: 999\n\n"
+        "Yours,\nLi Hua\n"
+    )
+    out = prettify_stage_markdown(raw)
+    wc_m = re.search(r"Word count:\s*(\d+)", out, re.I)
+    assert wc_m is not None
+    assert int(wc_m.group(1)) < 100
+    assert "Dear Editor" in out
+    assert "Yours" in out
 
 
 def test_normalize_inserts_gap_between_label_lines():

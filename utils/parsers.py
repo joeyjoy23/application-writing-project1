@@ -437,8 +437,10 @@ def format_yijuhodashihua_block(text: str) -> str:
     """Stage1：「💡 一句大实话」独立为 h5 小标题，正文另起段。"""
     if "一句大实话" not in text:
         return text
-    if re.search(r"#####\s*💡?\s*一句大实话", text):
-        return text
+
+    already_h5 = bool(re.search(r"#####\s*💡?\s*一句大实话", text))
+    if already_h5:
+        return _sanitize_dashihua_body_paragraphs(text)
 
     out: list[str] = []
     for line in text.split("\n"):
@@ -449,21 +451,23 @@ def format_yijuhodashihua_block(text: str) -> str:
         indent = line[: len(line) - len(stripped)]
         m = _DASHIHUA_LINE.match(stripped)
         if m and m.group(2).strip():
+            body = strip_prompt_instruction_leaks(m.group(2).strip())
             out.append(f"{indent}##### 💡 一句大实话")
             out.append("")
-            out.append(f"{indent}{m.group(2).strip()}")
+            out.append(f"{indent}{body}")
             continue
         m_sp = _DASHIHUA_LINE_SPACE_BODY.match(stripped)
         if m_sp and m_sp.group(2).strip():
+            body = strip_prompt_instruction_leaks(m_sp.group(2).strip())
             out.append(f"{indent}##### 💡 一句大实话")
             out.append("")
-            out.append(f"{indent}{m_sp.group(2).strip()}")
+            out.append(f"{indent}{body}")
             continue
         if _DASHIHUA_LINE_TITLE_ONLY.match(stripped):
             out.append(f"{indent}##### 💡 一句大实话")
             continue
         out.append(line)
-    return "\n".join(out)
+    return _sanitize_dashihua_body_paragraphs("\n".join(out))
 
 
 def format_gaiyiju_arrow_blocks(text: str) -> str:
@@ -516,10 +520,17 @@ def normalize_benti_gaiyiju(text: str) -> str:
 
 
 _NUM_LIST_LINE = re.compile(r"^\s*\d+\.\s")
+_SELF_CHECK_NUM_ITEM = re.compile(
+    r"^[-*+]?\s*(?:\*\*)?\d+\.\s*(?:\*\*)?(?:语气|结构|逻辑|立意|语言)"
+)
 
 
 def _is_list_item_line(stripped: str) -> bool:
     return bool(_LIST_LINE.match(stripped) or _NUM_LIST_LINE.match(stripped))
+
+
+def _is_numbered_self_check_item(stripped: str) -> bool:
+    return bool(_SELF_CHECK_NUM_ITEM.match(stripped) or re.match(r"^\*\*\d+\.", stripped))
 
 
 def _line_indent(line: str) -> int:
@@ -548,7 +559,7 @@ def merge_list_item_continuations(text: str) -> str:
             out.append(line.rstrip())
             i += 1
             continue
-        if _is_list_item_line(stripped):
+        if _is_list_item_line(stripped) or _is_numbered_self_check_item(stripped):
             out.append(line.rstrip())
             i += 1
             continue
@@ -561,7 +572,7 @@ def merge_list_item_continuations(text: str) -> str:
             continue
         prev = out[prev_idx]
         prev_s = prev.strip()
-        if not _is_list_item_line(prev_s):
+        if not _is_list_item_line(prev_s) or _is_numbered_self_check_item(prev_s):
             out.append(line.rstrip())
             i += 1
             continue
@@ -651,6 +662,233 @@ def _ensure_blank_before_list_after_paragraph(text: str) -> str:
     return "\n".join(out)
 
 
+_PEEL_FIELD_HEADING_INLINE = re.compile(
+    r"(#{3,7})\s*"
+    r"(核心句（P）|P（核心句）|拓展策略（E）|连至下一点（L）)"
+)
+
+
+def split_inline_peel_field_headings(text: str) -> str:
+    """Split mid-line PEEL field headings onto separate lines; cap excessive # marks."""
+    if not text or not any(k in text for k in ("核心句", "拓展策略", "连至下一点")):
+        return text
+    field_pat = r"(?:核心句（P）|P（核心句）|拓展策略（E）|连至下一点（L）)"
+    out: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        line = re.sub(r"#{7,}", "#####", line)
+        stripped = line.strip()
+        if not _PEEL_FIELD_HEADING_INLINE.search(stripped):
+            out.append(line)
+            continue
+        indent = line[: len(line) - len(stripped)]
+        chunks = re.split(
+            rf"(?<=\S)\s+(?=(?:#{{3,7}})\s*{field_pat})|(?=(?:#{{3,7}})\s*{field_pat})",
+            stripped,
+        )
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            chunk = re.sub(r"#{7,}", "#####", chunk)
+            m = re.match(rf"^(#{{3,7}})\s*({field_pat})\s*(.*)$", chunk, re.DOTALL)
+            if m:
+                title = f"##### {m.group(2)}"
+                body = (m.group(3) or "").strip()
+                out.append(f"{indent}{title}")
+                if body:
+                    out.append(f"{indent}{body}")
+            else:
+                out.append(f"{indent}{chunk}")
+    return "\n".join(out)
+
+
+_SELF_CHECK_SECTION_START = re.compile(r"动笔[前]?自检五问", re.IGNORECASE)
+_SELF_CHECK_SECTION_END = re.compile(
+    r"(?:💡|#####\s*💡|一句大实话|###\s+2\.|##\s+2\.)",
+    re.IGNORECASE,
+)
+
+
+def normalize_self_check_five_block(text: str) -> str:
+    """Ensure each self-check question is on its own line (list item when possible)."""
+    if not _SELF_CHECK_SECTION_START.search(text):
+        return text
+    m_start = _SELF_CHECK_SECTION_START.search(text)
+    assert m_start is not None
+    start = m_start.end()
+    m_end = _SELF_CHECK_SECTION_END.search(text, start)
+    end = m_end.start() if m_end else len(text)
+
+    prefix = text[:start]
+    block = text[start:end]
+    suffix = text[end:]
+
+    block = re.sub(r"(?<!\n)(?<=\S)\s+(?=\d+\.\s*\*\*)", "\n\n", block)
+    block = re.sub(r"(?<!\n)(?<=\S)\s+(?=\*\*\d+\.)", "\n\n", block)
+    block = re.sub(
+        r"(?<!\n)(?<=\S)\s+(?=(?:\*{0,2}\s*)?\d+\.\s*(?:\*{0,2})?(?:语气|结构|逻辑|立意|语言))",
+        "\n\n",
+        block,
+    )
+
+    fixed_lines: list[str] = []
+    for line in block.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            fixed_lines.append("")
+            continue
+        if re.match(r"^\d+\.\s*\*\*", stripped) and not stripped.startswith("- "):
+            fixed_lines.append(f"- {stripped}")
+        elif re.match(r"^\*\*\d+\.", stripped) and not stripped.startswith("- "):
+            fixed_lines.append(f"- {stripped}")
+        else:
+            fixed_lines.append(line.rstrip())
+
+    return prefix + "\n".join(fixed_lines) + suffix
+
+
+_PROMPT_LEAK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"（单独小标题；[^）]*）"),
+    re.compile(r"（下一段起写[^）]*）"),
+    re.compile(r"（可将语气/结构/逻辑/立意/语言相关避坑各用半句浓缩[^）]*）"),
+    re.compile(r"勿与标题写在同一行[^。；;]*[。；;]?"),
+    re.compile(r"勿在标题后用冒号接正文[^。；;]*[。；;]?"),
+    re.compile(r"只写实质避坑内容[^。；;]*[。；;]?"),
+    re.compile(r"勿输出写作指令[^。；;]*[。；;]?"),
+    re.compile(r"^示例正文[：:]\s*"),
+)
+_DASHIHUA_META_PREFIX = re.compile(
+    r"^收束五问[；;]\s*用备课组长口吻(?:点出本题)?[^：:\n]*[：:]\s*"
+)
+_DASHIHUA_META_PREFIX_PERIOD = re.compile(
+    r"^收束五问[；;]\s*用备课组长口吻[^。\n]*。\s*"
+)
+_DASHIHUA_META_PREFIX_ALT = re.compile(
+    r"^用备课组长口吻点出本题[^：:\n]*[：:]\s*"
+)
+_DASHIHUA_META_INLINE = re.compile(
+    r"收束五问[；;]\s*用备课组长口吻[^。：:\n]*[。：:]\s*"
+)
+
+
+def strip_prompt_instruction_leaks(text: str) -> str:
+    """Remove meta-instructions that models sometimes copy from the prompt."""
+    if not text:
+        return text
+    lines: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            lines.append(line)
+            continue
+        cleaned = stripped
+        cleaned = _DASHIHUA_META_PREFIX.sub("", cleaned)
+        cleaned = _DASHIHUA_META_PREFIX_PERIOD.sub("", cleaned)
+        cleaned = _DASHIHUA_META_PREFIX_ALT.sub("", cleaned)
+        cleaned = _DASHIHUA_META_INLINE.sub("", cleaned)
+        for pat in _PROMPT_LEAK_PATTERNS:
+            cleaned = pat.sub("", cleaned)
+        cleaned = re.sub(r"^[；;、\s]+", "", cleaned)
+        if cleaned:
+            indent = line[: len(line) - len(stripped)]
+            lines.append(f"{indent}{cleaned}")
+        elif not stripped:
+            lines.append(line)
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _sanitize_dashihua_body_paragraphs(text: str) -> str:
+    """Strip prompt leaks from lines following 「💡 一句大实话」 heading."""
+    if "一句大实话" not in text:
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    in_block = False
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r"#####\s*💡?\s*一句大实话", stripped):
+            in_block = True
+            out.append(line.rstrip())
+            continue
+        if in_block and stripped and _HEADING_LINE.match(stripped):
+            in_block = False
+        if in_block and stripped and not _HEADING_LINE.match(stripped):
+            cleaned = strip_prompt_instruction_leaks(stripped)
+            if cleaned:
+                indent = line[: len(line) - len(stripped)]
+                out.append(f"{indent}{cleaned}")
+            continue
+        out.append(line.rstrip())
+    return "\n".join(out)
+
+
+_STAGE2_ESSAY_SECTION = re.compile(
+    r"(####\s*(?:1\.\s*基础版|2\.\s*高分版\s*A|3\.\s*高分版\s*B)[^\n]*\n)"
+    r"([\s\S]*?)"
+    r"(?=####\s*(?:2\.\s*高分版|3\.\s*高分版|###\s*四、)|\Z)",
+    re.IGNORECASE,
+)
+_SALUTATION_RE = re.compile(r"^(Dear\s+[^,\n]+,\s*\n*)", re.IGNORECASE)
+_SIGNOFF_RE = re.compile(
+    r"\n+(Yours(?:,\s*|\s+(?:sincerely|faithfully))[^\n]*(?:\n[^\n]+)?)\s*$",
+    re.IGNORECASE,
+)
+_ANNOTATION_TAIL_RE = re.compile(r"(中文批注[：:][\s\S]*)", re.IGNORECASE)
+
+
+def _normalize_one_essay_body(body: str) -> str:
+    from scripts.essay_format import classroom_body_paragraphs, count_english_words, split_essay_source
+
+    ann_m = _ANNOTATION_TAIL_RE.search(body)
+    annotation = ann_m.group(1).strip() if ann_m else ""
+    essay_part = body[: ann_m.start()].strip() if ann_m else body.strip()
+
+    signoff = ""
+    sign_m = _SIGNOFF_RE.search(essay_part)
+    if sign_m:
+        signoff = sign_m.group(1).strip()
+        essay_part = essay_part[: sign_m.start()].strip()
+
+    english, _, _ = split_essay_source(essay_part)
+    if not english.strip():
+        return body
+
+    sal_m = _SALUTATION_RE.match(english)
+    salutation = sal_m.group(1) if sal_m else ""
+    rest = english[sal_m.end() :] if sal_m else english
+
+    paragraphs = classroom_body_paragraphs(salutation + rest if salutation else rest)
+    if not paragraphs and rest.strip():
+        paragraphs = classroom_body_paragraphs(english)
+    if not paragraphs:
+        return body
+
+    wc = count_english_words(" ".join(paragraphs))
+    rebuilt = salutation + "\n\n".join(paragraphs) + f"\n\nWord count: {wc}"
+    if signoff:
+        rebuilt += f"\n\n{signoff}"
+    if annotation:
+        rebuilt += f"\n\n{annotation}"
+    return rebuilt + "\n"
+
+
+def normalize_stage2_essay_sections(text: str) -> str:
+    """Reformat Stage2 essays: three body paragraphs + corrected Word count."""
+    if not re.search(r"基础版|Word count:", text, re.IGNORECASE):
+        return text
+
+    def _repl(m: re.Match[str]) -> str:
+        return m.group(1) + _normalize_one_essay_body(m.group(2))
+
+    return _STAGE2_ESSAY_SECTION.sub(_repl, text)
+
+
 def prettify_stage_markdown(text: str) -> str:
     """轻量整理 Markdown 间距，便于 Streamlit 正确分段渲染。"""
     if not text or not text.strip():
@@ -658,10 +896,14 @@ def prettify_stage_markdown(text: str) -> str:
     cleaned = promote_section_headings(text.strip())
     cleaned = format_construction_dimensions(cleaned)
     cleaned = promote_stage4_block_headings(cleaned)
+    cleaned = split_inline_peel_field_headings(cleaned)
+    cleaned = normalize_self_check_five_block(cleaned)
     cleaned = tune_stage_heading_levels(cleaned)
     cleaned = normalize_benti_gaiyiju(cleaned)
     cleaned = normalize_kuozhan_strategy_heading(cleaned)
     cleaned = format_yijuhodashihua_block(cleaned)
+    cleaned = strip_prompt_instruction_leaks(cleaned)
+    cleaned = normalize_stage2_essay_sections(cleaned)
     cleaned = merge_list_item_continuations(cleaned)
     cleaned = normalize_list_spacing(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)

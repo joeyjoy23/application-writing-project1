@@ -149,10 +149,11 @@ def load_history_into_session(record_id: int) -> tuple[bool, str]:
 
         st.session_state.question_image = history_image_row_to_session(img_row)
         st.session_state.question = ""
-        st.session_state["question_editor"] = ""
+        st.session_state["_pending_question_editor"] = ""
     else:
         st.session_state.question_image = None
         st.session_state.question = raw
+        st.session_state["_pending_question_editor"] = raw
     st.session_state.workflow_state = state
     st.session_state.last_question = raw
     st.session_state.failed_stage = None
